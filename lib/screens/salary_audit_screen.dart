@@ -696,7 +696,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     final customNet = double.tryParse(netController.text.replaceAll(',', '.')) ?? parsed.netPayable;
                     final monthStr = _selectedMonth < 10 ? '0$_selectedMonth' : '$_selectedMonth';
                     final customPeriodKey = '$_selectedYear-$monthStr';
-                    final customPeriodLabel = '${_monthsFr[_selectedMonth - 1]} $_selectedYear';
+                    final customPeriodLabel = customPeriodKey;
 
                     final renderedB64 = _renderedPdfImageBytes != null ? base64Encode(_renderedPdfImageBytes!) : null;
                     final fileB64 = _customFileBytes != null ? base64Encode(_customFileBytes!) : null;
@@ -2326,7 +2326,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                         Row(
                                           children: [
                                             Text(
-                                              record.periodLabel,
+                                              record.period,
                                               style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                                             ),
                                             if (isBaseline) ...[

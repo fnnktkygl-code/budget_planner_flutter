@@ -18,6 +18,8 @@ class RealParsedPayslip {
   final double mealTickets;
   final double teleworkAllowance;
   final double nonTaxableAllowance;
+  final double incomeTaxAmount;
+  final double incomeTaxRatePercent;
   final bool hasExplicitBonus;
   final String? bonusDescription;
   final double? bonusAmount;
@@ -40,6 +42,8 @@ class RealParsedPayslip {
     required this.mealTickets,
     required this.teleworkAllowance,
     required this.nonTaxableAllowance,
+    this.incomeTaxAmount = 0.0,
+    this.incomeTaxRatePercent = 0.0,
     this.hasExplicitBonus = false,
     this.bonusDescription,
     this.bonusAmount,
@@ -56,9 +60,9 @@ class RealParsedPayslip {
     String? imageBase64,
     String? fileBase64,
   }) {
-    final effectivePeriodLabel = customPeriodLabel ?? period;
     final yearMonth = customPeriod ??
         '${date.year}-${date.month < 10 ? "0${date.month}" : "${date.month}"}';
+    final effectivePeriodLabel = customPeriodLabel ?? yearMonth;
     
     final finalNet = customNet ?? netPayable;
 
@@ -76,13 +80,8 @@ class RealParsedPayslip {
     final double computedTelework = (teleworkAllowance != 0.0) ? teleworkAllowance : 15.00;
     final double computedNonTaxable = (nonTaxableAllowance != 0.0) ? nonTaxableAllowance : 34.13;
 
-    final double computedTax = (computedNetSocial > finalNet)
-        ? -((computedNetSocial - finalNet).abs())
-        : 0.0;
-
-    final double computedTaxRate = (computedNetSocial > 0 && computedTax < 0)
-        ? ((computedTax.abs() / computedNetSocial) * 100)
-        : 0.0;
+    final double computedTax = incomeTaxAmount;
+    final double computedTaxRate = incomeTaxRatePercent;
 
     return SalaryRecord(
       id: id,
