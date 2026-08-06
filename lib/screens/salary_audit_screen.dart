@@ -17,6 +17,8 @@ import '../services/redactor_engine.dart';
 import '../services/salary_parser_service.dart';
 import '../widgets/notification_header.dart';
 import '../widgets/salary_trend_chart_widget.dart';
+import '../widgets/multi_trend_chart.dart';
+import '../widgets/annual_recap_widget.dart';
 import '../widgets/shimmer_loading.dart';
 
 class SalaryAuditScreen extends ConsumerStatefulWidget {
@@ -1340,6 +1342,14 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
 
                   if (records.isNotEmpty) ...[
+                    // Multi-Trend Superposed Evolution Chart (Salaire, Charges, Épargne, Reste)
+                    MultiTrendChartWidget(records: records),
+                    const SizedBox(height: 16),
+
+                    // Annual Global Compensation Recap Widget
+                    AnnualRecapWidget(records: records),
+                    const SizedBox(height: 16),
+
                     // Fiscal KPI Summary Bar
                     Builder(
                       builder: (context) {

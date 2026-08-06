@@ -345,6 +345,80 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 20),
+
+            // Épargne Salariale (PEE / PERCO / Intéressement & Participation) Card
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.accentGold.withValues(alpha: 0.4)),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.accentGold.withValues(alpha: 0.1),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.business_center_rounded, color: AppColors.accentGold, size: 22),
+                          SizedBox(width: 10),
+                          Text(
+                            'Épargne Salariale (PEE / PERCO)',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
+                        ),
+                        child: const Text(
+                          'Exonéré IR',
+                          style: TextStyle(color: AppColors.accentEmerald, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'L\'intéressement et la participation versés directement sur votre PEE ne transitent pas par votre compte bancaire mais constituent une réserve de valeur majeure.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.3),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: const [
+                        Text('Cumul Intéressement & Participation PEE :', style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
+                        Text('Suivi automatique via Fiches Paie', style: TextStyle(color: AppColors.accentGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 40),
           ],
         ),

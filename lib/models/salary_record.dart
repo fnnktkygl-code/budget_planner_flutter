@@ -45,6 +45,9 @@ class SalaryRecord {
   final double? bonusAmount;
   /// Date de mise à jour
   final DateTime updatedAt;
+  /// Montant d'épargne salariale placé sur PEE / PERCO (Intéressement & Participation non versés en banque)
+  final double companySavingsPEE;
+
   /// Remarques additionnelles
   final String? notes;
 
@@ -55,6 +58,9 @@ class SalaryRecord {
 
   /// Salaire net récurrent hors prime exceptionnel
   double get regularNetSalary => netSalary - (bonusAmount ?? 0.0);
+
+  /// Rémunération globale mensuelle équivalente (Net banque + Épargne Salariale PEE)
+  double get totalGlobalComp => netSalary + companySavingsPEE;
 
   SalaryRecord({
     required this.id,
@@ -79,6 +85,7 @@ class SalaryRecord {
     this.hasExplicitBonus = false,
     this.bonusDescription,
     this.bonusAmount,
+    this.companySavingsPEE = 0.0,
     required this.updatedAt,
     this.notes,
   });
@@ -106,6 +113,7 @@ class SalaryRecord {
     bool? hasExplicitBonus,
     String? bonusDescription,
     double? bonusAmount,
+    double? companySavingsPEE,
     DateTime? updatedAt,
     String? notes,
   }) {
@@ -132,6 +140,7 @@ class SalaryRecord {
       hasExplicitBonus: hasExplicitBonus ?? this.hasExplicitBonus,
       bonusDescription: bonusDescription ?? this.bonusDescription,
       bonusAmount: bonusAmount ?? this.bonusAmount,
+      companySavingsPEE: companySavingsPEE ?? this.companySavingsPEE,
       updatedAt: updatedAt ?? this.updatedAt,
       notes: notes ?? this.notes,
     );
@@ -160,6 +169,7 @@ class SalaryRecord {
         'hasExplicitBonus': hasExplicitBonus,
         'bonusDescription': bonusDescription,
         'bonusAmount': bonusAmount,
+        'companySavingsPEE': companySavingsPEE,
         'updatedAt': updatedAt.toIso8601String(),
         'notes': notes,
       };
@@ -187,6 +197,7 @@ class SalaryRecord {
         hasExplicitBonus: json['hasExplicitBonus'] ?? false,
         bonusDescription: json['bonusDescription'],
         bonusAmount: json['bonusAmount'] != null ? (json['bonusAmount'] as num).toDouble() : null,
+        companySavingsPEE: json['companySavingsPEE'] != null ? (json['companySavingsPEE'] as num).toDouble() : 0.0,
         updatedAt: DateTime.parse(json['updatedAt']),
         notes: json['notes'],
       );
