@@ -22,14 +22,14 @@ List<SalaryRecord> sortSalaryRecordsDescending(List<SalaryRecord> records) {
 
 /// RÈGLE MÉTIER PRINCIPALE :
 /// La répartition budgétaire active (base de calcul) se base EXCLUSIVEMENT
-/// sur le bulletin le plus récent en date ou désigné comme référent actif par l'utilisateur.
+/// sur le bulletin le plus récent CHRONOLOGIQUEMENT en date (format YYYY-MM décroissant).
 SalaryRecord? getActiveBaselineSalary(List<SalaryRecord> records) {
   if (records.isEmpty) return null;
-  final explicitActive = records.where((r) => r.isLatestActive).toList();
+  final sorted = sortSalaryRecordsDescending(records);
+  final explicitActive = sorted.where((r) => r.isLatestActive).toList();
   if (explicitActive.isNotEmpty) {
     return explicitActive.first;
   }
-  final sorted = sortSalaryRecordsDescending(records);
   return sorted.first;
 }
 
@@ -58,51 +58,53 @@ SalaryAnalytics computeSalaryAnalytics(List<SalaryRecord> records) {
   final double overallSavingsRate = overallAverageNet > 0 ? (overallAverageInvestable / overallAverageNet) * 100 : 0;
 
   final sortedAsc = List<SalaryRecord>.from(records)..sort((a, b) => a.period.compareTo(b.period));
-  final oldest = sortedAsc.first;
-  final newest = sortedAsc.last;
-
-  double growthTrendPercent = 0;
-  if (oldest.id != newest.id && oldest.netSalary > 0) {
-    growthTrendPercent = ((newest.netSalary - oldest.netSalary) / oldest.netSalary) * 100;
+  double growthTrend = 0;
+  if (sortedAsc.length >= 2) {
+    final firstNet = sortedAsc.first.netSalary;
+    final lastNet = sortedAsc.last.netSalary;
+    if (firstNet > 0) {
+      growthTrend = ((lastNet - firstNet) / firstNet) * 100;
+    }
   }
 
+  // Group by year
   final Map<int, List<SalaryRecord>> byYear = {};
   for (var r in records) {
-    final year = int.tryParse(r.period.split('-')[0]) ?? DateTime.now().year;
-    byYear.putIfAbsent(year, () => []).add(r);
+    final y = int.tryParse(r.period.split('-')[0]) ?? r.updatedAt.year;
+    byYear.putIfAbsent(y, () => []).add(r);
   }
 
-  final years = byYear.keys.toList()..sort((a, b) => b.compareTo(a));
-  final List<YearlySalarySummary> yearlySummaries = years.map((year) {
-    final yearRecords = byYear[year]!;
-    final yCount = yearRecords.length;
-    final yTotalNet = yearRecords.fold(0.0, (sum, r) => sum + r.netSalary);
-    final yTotalInvestable = yearRecords.fold(0.0, (sum, r) => sum + r.investableAmount);
-    final yAvgNet = yTotalNet / yCount;
-    final yAvgInvestable = yTotalInvestable / yCount;
-    final ySavingsRate = yAvgNet > 0 ? (yAvgInvestable / yAvgNet) * 100 : 0.0;
+  final List<YearlySalarySummary> yearlySummaries = [];
+  final sortedYears = byYear.keys.toList()..sort((a, b) => b.compareTo(a));
 
-    return YearlySalarySummary(
-      year: year,
-      count: yCount,
-      averageNet: yAvgNet,
-      averageInvestable: yAvgInvestable,
-      totalNet: yTotalNet,
-      totalInvestable: yTotalInvestable,
-      averageSavingsRate: ySavingsRate,
+  for (var yr in sortedYears) {
+    final listYr = byYear[yr]!;
+    final yrTotalNet = listYr.fold(0.0, (sum, r) => sum + r.netSalary);
+    final yrTotalInv = listYr.fold(0.0, (sum, r) => sum + r.investableAmount);
+    final yrAvgNet = yrTotalNet / listYr.length;
+    final yrAvgInv = yrTotalInv / listYr.length;
+    final yrAvgSavings = yrAvgNet > 0 ? (yrAvgInv / yrAvgNet) * 100 : 0.0;
+
+    yearlySummaries.add(
+      YearlySalarySummary(
+        year: yr,
+        count: listYr.length,
+        averageNet: yrAvgNet,
+        averageInvestable: yrAvgInv,
+        totalNet: yrTotalNet,
+        totalInvestable: yrTotalInv,
+        averageSavingsRate: yrAvgSavings,
+      ),
     );
-  }).toList();
+  }
 
   return SalaryAnalytics(
     activeBaseline: activeBaseline,
     overallAverageNet: overallAverageNet,
     overallAverageInvestable: overallAverageInvestable,
     overallSavingsRate: overallSavingsRate,
-    growthTrendPercent: growthTrendPercent,
+    growthTrendPercent: growthTrend,
     totalRecordsCount: count,
     yearlySummaries: yearlySummaries,
   );
 }
-
-/// AUCUNE FAUSSE DONNÉE PAR DÉFAUT : la liste initiale est vide.
-final List<SalaryRecord> defaultSalaryRecords = [];

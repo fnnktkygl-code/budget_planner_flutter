@@ -379,9 +379,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
         // Add all batch records to state notifier
         ref.read(salaryProvider.notifier).addMultipleRecords(batchRecords);
 
-        // Set latest processed file on canvas
-        final lastFile = files.last;
-        await _processUploadedFile(lastFile.bytes!, lastFile.name);
+        // Display chronologically latest record on canvas
+        final activeBaseline = ref.read(salaryProvider).activeBaseline;
+        if (activeBaseline != null) {
+          _switchDisplayedRecord(activeBaseline);
+        }
 
         if (!mounted) return;
         if (Navigator.canPop(context)) {
