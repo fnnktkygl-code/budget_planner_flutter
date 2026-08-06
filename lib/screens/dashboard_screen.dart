@@ -1,240 +1,265 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
-import '../core/providers/auth_provider.dart';
-import '../core/providers/budget_provider.dart';
 import '../core/providers/salary_provider.dart';
-import '../core/providers/settings_provider.dart';
-import '../widgets/banking_modal.dart';
+import '../widgets/donut_chart.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
-    final budget = ref.watch(budgetProvider);
     final salary = ref.watch(salaryProvider);
-    final settings = ref.watch(settingsProvider);
+    final activeBaseline = salary.activeBaseline;
 
-    final activeBaselineNet = salary.activeBaseline?.netSalary ?? 3850.0;
-    final availableBudget = activeBaselineNet - budget.totalSpent;
-    final savingsRate = activeBaselineNet > 0 ? (salary.activeBaseline?.investableAmount ?? 1200.0) / activeBaselineNet * 100 : 0.0;
+    final grossSalary = activeBaseline?.grossSalary ?? 3776.67;
+    final netSalary = activeBaseline?.netSalary ?? 2861.26;
+
+    final segments = [
+      AllocationSegment(label: 'Charges', percentage: 51, color: AppColors.chartRed),
+      AllocationSegment(label: 'Cible PEA', percentage: 35, color: AppColors.chartBlue),
+      AllocationSegment(label: 'Livret A', percentage: 7, color: AppColors.chartYellow),
+      AllocationSegment(label: 'Reste à vivre', percentage: 7, color: AppColors.chartGreen),
+    ];
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary, size: 24),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
+        title: Row(
+          children: const [
+            Text(
+              'Tableau de bord',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(width: 8),
+            Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 18),
+          ],
+        ),
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Utilisateur Gmail & Status Banque
+            // Title & Exporter PDF Action Button (Matching Screenshot 1)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: AppColors.accentCyan.withValues(alpha: 0.2),
-                      child: Text(
-                        (authState.user?.displayName ?? 'A')[0].toUpperCase(),
-                        style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          authState.user?.displayName ?? 'AuraBudget Pro',
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          authState.user?.email ?? 'Base : ${salary.activeBaseline?.periodLabel ?? 'Juin 2026'}',
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ],
+                const Text(
+                  'Tableau de bord',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                GestureDetector(
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => const BankingModalContent(),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    side: const BorderSide(color: AppColors.borderSubtle),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                  label: const Text('Exporter PDF', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Génération du rapport PDF en cours...'),
+                        backgroundColor: AppColors.accentCyan,
+                        behavior: SnackBarBehavior.floating,
+                      ),
                     );
                   },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: settings.bankConnected ? AppColors.accentEmerald.withValues(alpha: 0.15) : AppColors.accentCyan.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: settings.bankConnected ? AppColors.accentEmerald : AppColors.accentCyan),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(settings.bankConnected ? Icons.check_circle_rounded : Icons.account_balance_rounded, color: settings.bankConnected ? AppColors.accentEmerald : AppColors.accentCyan, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          settings.bankConnected ? settings.connectedBankName : 'Connecter banque',
-                          style: TextStyle(color: settings.bankConnected ? AppColors.accentEmerald : AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               ],
             ),
             const SizedBox(height: 20),
 
-            // Main KPI Card — Budget Disponible
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.surface, AppColors.cardBackground],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4), width: 1.5),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Responsive Layout: Grid on Desktop (width >= 900), Stack on Mobile
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth >= 900) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('BUDGET MENSUEL DISPONIBLE', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: AppColors.accentCyan.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                        child: const Text('⭐ Référent Actif', style: TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.bold)),
-                      ),
+                      Expanded(child: _buildAllocationCard(segments)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildNetIncomeCard(grossSalary, netSalary)),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text('${availableBudget.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.textPrimary, fontSize: 32, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Text('Sur un salaire référent net de ${activeBaselineNet.toStringAsFixed(0)} € / mois', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(
-                    value: activeBaselineNet > 0 ? (budget.totalSpent / activeBaselineNet).clamp(0.0, 1.0) : 0.0,
-                    backgroundColor: AppColors.surfaceVariant,
-                    color: AppColors.accentCyan,
-                    minHeight: 6,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Secondary KPI Cards
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: AppColors.cardBackground, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('ÉPARGNE & DCA', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Text('${(salary.activeBaseline?.investableAmount ?? 1200).toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.accentEmerald, fontSize: 20, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 2),
-                        Text('${savingsRate.toStringAsFixed(1)}% du salaire net', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: AppColors.cardBackground, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('MOYENNE LISSÉE 2025-26', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Text('${salary.analytics.overallAverageNet.toStringAsFixed(0)} € / m', style: const TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 2),
-                        const Text('Indicatif analytique', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Répartition des Catégories
-            const Text('Répartition des Dépenses', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: budget.categories.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, idx) {
-                final cat = budget.categories[idx];
-                return Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: AppColors.cardBackground, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.borderSubtle)),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  );
+                } else {
+                  return Column(
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(color: AppColors.accentCyan.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                            child: const Icon(Icons.pie_chart_rounded, color: AppColors.accentCyan, size: 20),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(cat.name, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
-                              Text('${cat.spentAmount.toStringAsFixed(0)} € engagés / ${cat.allocatedAmount.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Text('${cat.remaining.toStringAsFixed(0)} € restants', style: TextStyle(color: cat.remaining >= 0 ? AppColors.accentEmerald : AppColors.danger, fontWeight: FontWeight.bold, fontSize: 13)),
+                      _buildAllocationCard(segments),
+                      const SizedBox(height: 16),
+                      _buildNetIncomeCard(grossSalary, netSalary),
                     ],
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-
-            // Transactions Récentes
-            const Text('Transactions Récentes', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: budget.transactions.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, idx) {
-                final tx = budget.transactions[idx];
-                return ListTile(
-                  tileColor: AppColors.cardBackground,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  leading: Icon(tx.isIncome ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded, color: tx.isIncome ? AppColors.accentEmerald : AppColors.accentRose),
-                  title: Text(tx.title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-                  subtitle: Text('${tx.category} • ${tx.date.day}/${tx.date.month}/${tx.date.year}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                  trailing: Text('${tx.isIncome ? '+' : '-'}${tx.amount.toStringAsFixed(2)} €', style: TextStyle(color: tx.isIncome ? AppColors.accentEmerald : AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
-                );
+                  );
+                }
               },
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAllocationCard(List<AllocationSegment> segments) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Text(
+                'Allocation d\'actifs',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(width: 8),
+              Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 16),
+            ],
+          ),
+          const SizedBox(height: 20),
+          DonutChartWidget(segments: segments),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNetIncomeCard(double grossSalary, double netSalary) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: const [
+                  Text(
+                    'Revenu net mensuel',
+                    style: TextStyle(
+                      color: AppColors.accentEmerald,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 16),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Données Lissées (Historique)',
+                  style: TextStyle(
+                    color: AppColors.accentEmerald,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Items Table (Matching Screenshot 1)
+          _buildSalaryLine('Salaire de base (Brut)', '${grossSalary.toStringAsFixed(2)} €', isPositive: null),
+          const SizedBox(height: 14),
+          _buildSalaryLine('Cotisations sociales', '- 860.78 €', isPositive: false),
+          const SizedBox(height: 14),
+          _buildSalaryLine('Tickets resto déduits', '- 3.90 €', isPositive: false),
+          const SizedBox(height: 14),
+          _buildSalaryLine('IND. TELETRAVAIL', '+ 15.00 €', isPositive: true),
+          const SizedBox(height: 14),
+          _buildSalaryLine('INDEM. NON SOUMISES', '+ 34.13 €', isPositive: true),
+          const SizedBox(height: 20),
+          const Divider(color: AppColors.borderSubtle, height: 1),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'NET À PAYER EFFECTIF',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '${netSalary.toStringAsFixed(2)} €',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSalaryLine(String label, String amount, {bool? isPositive}) {
+    Color amountColor = AppColors.textPrimary;
+    if (isPositive == true) amountColor = AppColors.accentEmerald;
+    if (isPositive == false) amountColor = AppColors.accentRose;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          amount,
+          style: TextStyle(
+            color: amountColor,
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 }

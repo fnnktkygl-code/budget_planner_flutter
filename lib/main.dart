@@ -6,13 +6,13 @@ import 'constants/colors.dart';
 import 'core/providers/auth_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/rules_screen.dart';
+import 'screens/salary_audit_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/savings_screen.dart';
 import 'screens/crisis_screen.dart';
 import 'screens/clic_screen.dart';
-import 'screens/rules_screen.dart';
-import 'screens/redactor_screen.dart';
-import 'screens/settings_screen.dart';
-import 'screens/salary_audit_screen.dart';
+import 'widgets/app_drawer.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,59 +53,110 @@ class AuraBudgetApp extends ConsumerWidget {
               ),
             )
           : authState.isSignedIn
-              ? const MainLayoutScreen()
+              ? const ResponsiveMainLayout()
               : const LoginScreen(),
     );
   }
 }
 
-class MainLayoutScreen extends StatefulWidget {
-  const MainLayoutScreen({super.key});
+class ResponsiveMainLayout extends StatefulWidget {
+  const ResponsiveMainLayout({super.key});
 
   @override
-  State<MainLayoutScreen> createState() => _MainLayoutScreenState();
+  State<ResponsiveMainLayout> createState() => _ResponsiveMainLayoutState();
 }
 
-class _MainLayoutScreenState extends State<MainLayoutScreen> {
+class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = const [
     DashboardScreen(),
+    RulesScreen(),
     SalaryAuditScreen(),
+    SettingsScreen(),
     SavingsScreen(),
     CrisisScreen(),
     ClicScreen(),
-    RulesScreen(),
-    RedactorScreen(),
-    SettingsScreen(),
   ];
-
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        backgroundColor: AppColors.surface,
-        indicatorColor: AppColors.accentCyan.withValues(alpha: 0.2),
-        onDestinationSelected: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-          NavigationDestination(icon: Icon(Icons.description_rounded), label: 'Salaires'),
-          NavigationDestination(icon: Icon(Icons.savings_rounded), label: 'Épargne'),
-          NavigationDestination(icon: Icon(Icons.warning_amber_rounded), label: 'Crise'),
-          NavigationDestination(icon: Icon(Icons.settings_rounded), label: 'Réglages'),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 900;
+
+        if (isDesktop) {
+          // Desktop Layout: Permanent Left Sidebar + Content Area
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: Row(
+              children: [
+                SizedBox(
+                  width: 280,
+                  child: AppDrawerWidget(
+                    onSelectScreen: (index) {
+                      setState(() {
+                        _currentIndex = index;
+                      });
+                    },
+                  ),
+                ),
+                const VerticalDivider(color: AppColors.borderSubtle, width: 1),
+                Expanded(
+                  child: IndexedStack(
+                    index: _currentIndex,
+                    children: _screens,
+                  ),
+                ),
+              ],
+            ),
+          );
+        } else {
+          // Mobile Layout: Drawer + Bottom Navigation Bar (Matching Screenshots)
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            drawer: AppDrawerWidget(
+              onSelectScreen: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+            ),
+            body: IndexedStack(
+              index: _currentIndex,
+              children: _screens,
+            ),
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: _currentIndex < 4 ? _currentIndex : 0,
+              backgroundColor: AppColors.surface,
+              indicatorColor: AppColors.accentCyan.withValues(alpha: 0.2),
+              onDestinationSelected: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.grid_view_rounded),
+                  label: 'Tableau de bord',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.account_tree_outlined),
+                  label: 'Règles de Répartition',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.document_scanner_outlined),
+                  label: 'Analyseur de bulletin...',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.settings_outlined),
+                  label: 'Configuration',
+                ),
+              ],
+            ),
+          );
+        }
+      },
     );
   }
 }
