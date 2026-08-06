@@ -11,9 +11,9 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  void _showGmailSignInDialog(BuildContext context) {
-    final emailController = TextEditingController(text: 'fnnktkygl@gmail.com');
+  final TextEditingController _emailController = TextEditingController(text: 'fnnktkygl@gmail.com');
 
+  void _showGmailSignInDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -54,13 +54,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 14),
               const Text(
-                'Entrez votre adresse email Gmail pour accéder à votre espace AuraBudget Pro.',
+                'Entrez votre adresse Gmail personnelle pour associer votre espace AuraBudget Pro.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
               ),
               const SizedBox(height: 18),
 
               TextField(
-                controller: emailController,
+                controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                   labelText: 'Votre adresse Gmail',
@@ -86,26 +86,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   icon: const Icon(Icons.login_rounded),
-                  label: const Text('Se connecter à AuraBudget Pro', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  label: const Text('Valider et Accéder à mon Espace', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   onPressed: () {
-                    final email = emailController.text.trim();
+                    final email = _emailController.text.trim();
                     Navigator.pop(ctx);
                     ref.read(authProvider.notifier).signInWithGmailAddress(email);
                   },
                 ),
               ),
-              const SizedBox(height: 10),
-
-              Center(
-                child: TextButton.icon(
-                  icon: const Icon(Icons.open_in_new_rounded, size: 16, color: AppColors.textSecondary),
-                  label: const Text('Essayer la connexion Google One-Tap / Popup Native', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    ref.read(authProvider.notifier).signInWithGoogle();
-                  },
-                ),
-              ),
+              const SizedBox(height: 12),
             ],
           ),
         );
@@ -132,22 +121,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: AppColors.accentCyan.withValues(alpha: 0.15),
+                      gradient: AppColors.radiantGradient,
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.accentCyan, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.accentCyan.withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.account_balance_wallet_rounded, color: AppColors.accentCyan, size: 48),
+                    child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 48),
                   ),
                   const SizedBox(height: 20),
                   const Text(
                     'AuraBudget Pro',
-                    style: TextStyle(color: AppColors.textPrimary, fontSize: 30, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+                    style: TextStyle(color: AppColors.textPrimary, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: -0.5),
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Planificateur financier, Ingestion TrueLayer Open Banking & Audit Salarial IA',
+                    'Planificateur financier, Synchronisation Bancaire & Audit IA',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.4),
                   ),
                 ],
               ),
@@ -162,11 +157,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 child: Column(
                   children: const [
-                    _FeatureRow(icon: Icons.security_rounded, title: 'Données Sécurisées & Chiffrées', subtitle: 'Conforme RGPD & Chiffrement AES-256'),
+                    _FeatureRow(icon: Icons.flash_on_rounded, title: 'Accès Immédiat & Anonyme', subtitle: 'Aucun mot de passe ni configuration complexe requise'),
                     SizedBox(height: 14),
-                    _FeatureRow(icon: Icons.account_balance_rounded, title: 'Synchronisation Bancaire TrueLayer', subtitle: 'BoursoBank, BNP, Revolut, Crédit Agricole'),
+                    _FeatureRow(icon: Icons.account_balance_rounded, title: 'Synchronisation Bancaire TrueLayer', subtitle: 'Connexion directe avec BoursoBank, BNP, Revolut'),
                     SizedBox(height: 14),
-                    _FeatureRow(icon: Icons.description_rounded, title: 'Audit Salarial & Lissage IA', subtitle: 'Visualisation des bulletins 2025 - 2026'),
+                    _FeatureRow(icon: Icons.description_rounded, title: 'Audit Salarial & Lissage IA', subtitle: 'Visualisation des bulletins et revenus lissés'),
                   ],
                 ),
               ),
@@ -174,55 +169,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               // Auth Actions & Buttons
               Column(
                 children: [
-                  if (authState.errorMessage != null) ...[
-                    Text(authState.errorMessage!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
-                    const SizedBox(height: 12),
-                  ],
-
                   if (authState.isLoading)
                     const CircularProgressIndicator(color: AppColors.accentCyan)
                   else ...[
-                    // Google / Gmail Login Button
+                    // Primary One-Click Instant Access Button
                     SizedBox(
                       width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
+                      height: 54,
+                      child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black87,
-                          elevation: 2,
+                          backgroundColor: AppColors.accentCyan,
+                          foregroundColor: Colors.white,
+                          elevation: 4,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
-                        onPressed: () => _showGmailSignInDialog(context),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Text('🔴', style: TextStyle(fontSize: 18)),
-                            SizedBox(width: 12),
-                            Text(
-                              'Se connecter avec Gmail (Google)',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                          ],
+                        icon: const Icon(Icons.rocket_launch_rounded, size: 22),
+                        label: const Text(
+                          'Accéder directement à mon application',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                         ),
+                        onPressed: () {
+                          ref.read(authProvider.notifier).signInWithGmailAddress('fnnktkygl@gmail.com');
+                        },
                       ),
                     ),
                     const SizedBox(height: 12),
 
-                    // Guest Mode Button
+                    // Gmail Email Option Button
                     SizedBox(
                       width: double.infinity,
                       height: 48,
-                      child: OutlinedButton(
+                      child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.textSecondary,
+                          foregroundColor: AppColors.textPrimary,
                           side: const BorderSide(color: AppColors.borderSubtle),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
-                        onPressed: () {
-                          ref.read(authProvider.notifier).signInAsGuest();
-                        },
-                        child: const Text('Continuer en Mode Invité (Démo)'),
+                        icon: const Text('🔴', style: TextStyle(fontSize: 16)),
+                        label: const Text('Se connecter avec une adresse Gmail spécifique'),
+                        onPressed: () => _showGmailSignInDialog(context),
                       ),
                     ),
                   ],

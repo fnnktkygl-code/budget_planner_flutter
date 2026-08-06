@@ -1,5 +1,7 @@
 {
   "version": 2,
+  "buildCommand": "echo 'Static Flutter Build'",
+  "outputDirectory": "build/web",
   "cleanUrls": true,
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
