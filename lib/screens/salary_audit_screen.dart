@@ -26,6 +26,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   final RedactorEngine _redactor = RedactorEngine();
   RedactionTool _selectedTool = RedactionTool.rect;
 
+  final TransformationController _transformationController = TransformationController();
+
   int _canvasTab = 0; // 0 = Canevas masqué, 1 = Rendu original
   bool _isProcessing = false;
   bool _isMaskVisible = true;
@@ -50,12 +52,51 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _resetZoom() {
+    setState(() {
+      _transformationController.value = Matrix4.identity();
+    });
+  }
+
+  void _zoomIn() {
+    setState(() {
+      final Matrix4 matrix = _transformationController.value.clone();
+      matrix.scale(1.25, 1.25, 1.0);
+      _transformationController.value = matrix;
+    });
+  }
+
+  void _zoomOut() {
+    setState(() {
+      final Matrix4 matrix = _transformationController.value.clone();
+      matrix.scale(0.8, 0.8, 1.0);
+      _transformationController.value = matrix;
+    });
+  }
+
+  void _clearCanvasDocument() {
+    setState(() {
+      _customFileBytes = null;
+      _renderedPdfImageBytes = null;
+      _customFileName = null;
+      _redactor.clearAll();
+      _resetZoom();
+    });
+  }
+
   Future<void> _processUploadedFile(Uint8List bytes, String fileName) async {
     setState(() {
       _customFileBytes = bytes;
       _customFileName = fileName;
       _renderedPdfImageBytes = null;
       _redactor.clearAll();
+      _resetZoom();
     });
 
     final isPdf = fileName.toLowerCase().endsWith('.pdf');
@@ -147,11 +188,16 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
       _customFileName = record.documentName ?? record.periodLabel;
       if (record.renderedImageBase64 != null && record.renderedImageBase64!.isNotEmpty) {
         _renderedPdfImageBytes = base64Decode(record.renderedImageBase64!);
+      } else {
+        _renderedPdfImageBytes = null;
       }
       if (record.rawFileBase64 != null && record.rawFileBase64!.isNotEmpty) {
         _customFileBytes = base64Decode(record.rawFileBase64!);
+      } else {
+        _customFileBytes = null;
       }
       _redactor.clearAll();
+      _resetZoom();
     });
     ref.read(salaryProvider.notifier).setActiveBaseline(record.id);
   }
@@ -421,12 +467,12 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Aucun bulletin importé',
+                'Aucun bulletin sur le canevas',
                 style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Veuillez cliquer sur le bouton "Importer mon bulletin" ci-dessus pour charger votre fichier PDF ou Image. Il s\'affichera directement ici pour vous permettre de caviarder vos données personnelles.',
+                'Importez un bulletin de salaire ou sélectionnez-en un dans votre historique ci-dessous pour l\'afficher et caviarder vos données.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
               ),
@@ -462,30 +508,17 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
       );
     }
 
-    // 3. RENDERED PDF IMAGE PAGE (Via pdf.js renderer)
-    if (_renderedPdfImageBytes != null) {
-      return InteractiveViewer(
-        maxScale: 4.0,
-        minScale: 1.0,
-        child: Image.memory(
-          _renderedPdfImageBytes!,
-          fit: BoxFit.contain,
-          width: double.infinity,
-          height: double.infinity,
-        ),
-      );
-    }
+    final Image imageWidget = _renderedPdfImageBytes != null
+        ? Image.memory(_renderedPdfImageBytes!, fit: BoxFit.contain, width: double.infinity, height: double.infinity)
+        : Image.memory(_customFileBytes!, fit: BoxFit.contain, width: double.infinity, height: double.infinity);
 
-    // 4. RENDER DIRECT IMAGE FILE (PNG, JPG, JPEG)
+    // 3. INTERACTIVE PINCH-TO-ZOOM VIEWPORT
     return InteractiveViewer(
-      maxScale: 4.0,
-      minScale: 1.0,
-      child: Image.memory(
-        _customFileBytes!,
-        fit: BoxFit.contain,
-        width: double.infinity,
-        height: double.infinity,
-      ),
+      transformationController: _transformationController,
+      minScale: 0.5,
+      maxScale: 5.0,
+      clipBehavior: Clip.hardEdge,
+      child: imageWidget,
     );
   }
 
@@ -524,15 +557,27 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                           style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.accentCyan,
-                          side: const BorderSide(color: AppColors.accentCyan),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        icon: const Icon(Icons.folder_open_rounded, size: 16),
-                        label: Text(_customFileName ?? 'Importer mon bulletin', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        onPressed: _pickUserPayslipFile,
+                      Row(
+                        children: [
+                          if (hasFileLoaded) ...[
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, color: AppColors.accentRose, size: 22),
+                              tooltip: 'Retirer le bulletin du canevas',
+                              onPressed: _clearCanvasDocument,
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.accentCyan,
+                              side: const BorderSide(color: AppColors.accentCyan),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: const Icon(Icons.folder_open_rounded, size: 16),
+                            label: Text(_customFileName ?? 'Importer mon bulletin', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            onPressed: _pickUserPayslipFile,
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -583,60 +628,98 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Canvas Toggle Tabs
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.borderSubtle),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _canvasTab = 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: _canvasTab == 0 ? AppColors.accentCyan : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Canevas masqué (${_redactor.shapes.length} masques)',
-                          style: TextStyle(
-                            color: _canvasTab == 0 ? Colors.white : AppColors.textSecondary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+            // Canvas Toggle Tabs & Zoom Controls Header
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBackground,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _canvasTab = 0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _canvasTab == 0 ? AppColors.accentCyan : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Canevas masqué (${_redactor.shapes.length})',
+                                style: TextStyle(
+                                  color: _canvasTab == 0 ? Colors.white : AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _canvasTab = 1),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _canvasTab == 1 ? AppColors.accentCyan : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Rendu original',
+                                style: TextStyle(
+                                  color: _canvasTab == 1 ? Colors.white : AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _canvasTab = 1),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: _canvasTab == 1 ? AppColors.accentCyan : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
+                ),
+
+                // Zoom Control Buttons (+ / - / Reset)
+                if (hasFileLoaded) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBackground,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.zoom_in_rounded, color: AppColors.accentCyan, size: 20),
+                          tooltip: 'Zoomer +',
+                          onPressed: _zoomIn,
                         ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Rendu original',
-                          style: TextStyle(
-                            color: _canvasTab == 1 ? Colors.white : AppColors.textSecondary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
+                        IconButton(
+                          icon: const Icon(Icons.zoom_out_rounded, color: AppColors.accentCyan, size: 20),
+                          tooltip: 'Dézoomer -',
+                          onPressed: _zoomOut,
                         ),
-                      ),
+                        IconButton(
+                          icon: const Icon(Icons.restart_alt_rounded, color: AppColors.textSecondary, size: 18),
+                          tooltip: 'Réinitialiser Zoom (100%)',
+                          onPressed: _resetZoom,
+                        ),
+                      ],
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
             const SizedBox(height: 16),
 
@@ -662,10 +745,10 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       borderRadius: BorderRadius.circular(20),
                       child: Stack(
                         children: [
-                          // Real Converted PDF Image
+                          // Real Converted PDF Image with Zoom Support
                           Positioned.fill(child: _buildRealDocumentView()),
 
-                          // Interactive Redaction Canvas
+                          // Interactive Redaction Canvas Overlay
                           if (_canvasTab == 0 && hasFileLoaded)
                             Positioned.fill(
                               child: GestureDetector(
@@ -800,21 +883,35 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       ),
                     ),
 
-                  // Bottom-Right Floating Eye Toggle Button
+                  // Bottom-Right Action Buttons (Zoom Reset & Eye Toggle)
                   if (hasFileLoaded)
                     Positioned(
                       bottom: 20,
                       right: 20,
-                      child: FloatingActionButton(
-                        backgroundColor: AppColors.accentCyan,
-                        foregroundColor: Colors.white,
-                        elevation: 6,
-                        onPressed: () {
-                          setState(() {
-                            _isMaskVisible = !_isMaskVisible;
-                          });
-                        },
-                        child: Icon(_isMaskVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                      child: Row(
+                        children: [
+                          FloatingActionButton.small(
+                            heroTag: 'clearCanvasBtn',
+                            backgroundColor: AppColors.accentRose.withValues(alpha: 0.85),
+                            foregroundColor: Colors.white,
+                            tooltip: 'Retirer le bulletin du canevas',
+                            onPressed: _clearCanvasDocument,
+                            child: const Icon(Icons.close_rounded, size: 20),
+                          ),
+                          const SizedBox(width: 10),
+                          FloatingActionButton(
+                            heroTag: 'eyeToggleBtn',
+                            backgroundColor: AppColors.accentCyan,
+                            foregroundColor: Colors.white,
+                            elevation: 6,
+                            onPressed: () {
+                              setState(() {
+                                _isMaskVisible = !_isMaskVisible;
+                              });
+                            },
+                            child: Icon(_isMaskVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                          ),
+                        ],
                       ),
                     ),
                 ],
@@ -858,6 +955,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                           icon: const Icon(Icons.delete_sweep_rounded, size: 18),
                           label: const Text('Vider l\'historique', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                           onPressed: () {
+                            _clearCanvasDocument();
                             ref.read(salaryProvider.notifier).clearAllRecords();
                           },
                         ),
@@ -978,6 +1076,9 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                               IconButton(
                                 icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
                                 onPressed: () {
+                                  if (salaryState.activeBaseline?.id == record.id) {
+                                    _clearCanvasDocument();
+                                  }
                                   ref.read(salaryProvider.notifier).deleteRecord(record.id);
                                 },
                               ),
