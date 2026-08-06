@@ -58,22 +58,22 @@ class RealParsedPayslip {
     final yearMonth = customPeriod ??
         '${date.year}-${date.month < 10 ? "0${date.month}" : "${date.month}"}';
     
-    // Strict validation: net salary must be >= 500.0 EUR, otherwise fallback to baseline ~2713.74 EUR
-    final finalNet = customNet ?? (netPayable >= 500.0 ? netPayable : 2713.74);
+    // Strict factual value: no dummy hardcoded 2713.74 € fallback ever!
+    final finalNet = customNet ?? netPayable;
 
     return SalaryRecord(
       id: id,
       period: yearMonth,
       periodLabel: effectivePeriodLabel,
       netSalary: finalNet,
-      grossSalary: grossSalary >= 500.0 ? grossSalary : 3776.67,
+      grossSalary: grossSalary,
       socialContributions: socialContributions,
       mealTickets: mealTickets,
       teleworkAllowance: teleworkAllowance,
       nonTaxableAllowances: nonTaxableAllowance,
       investableAmount: (finalNet * 0.3).roundToDouble(),
       savingsRate: 30.0,
-      status: isParsedFromDocument ? '✓ Extrait du bulletin' : '✓ Importé & Validé',
+      status: finalNet > 0 ? '✓ Extrait du bulletin' : '⚠️ Saisie Net requise',
       documentName: customFileName ?? 'bulletin_$id.pdf',
       renderedImageBase64: imageBase64 ?? renderedImageBase64,
       rawFileBase64: fileBase64 ?? rawFileBase64,
@@ -81,7 +81,7 @@ class RealParsedPayslip {
       hasExplicitBonus: hasExplicitBonus,
       bonusDescription: bonusDescription,
       updatedAt: DateTime.now(),
-      notes: '$employerName — Net Social: ${(netSocial >= 500.0 ? netSocial : 2952.28).toStringAsFixed(2)} €',
+      notes: '$employerName — Net Social: ${netSocial > 0 ? netSocial.toStringAsFixed(2) : "N/A"} €',
     );
   }
 }
@@ -196,63 +196,72 @@ class SalaryParserService {
     // Pattern d'extraction haute précision (euros et centimes séparés par espace, virgule ou point)
     const String numPattern = r'(\d{1,6})(?:[\s,\.](\d{2}))?(?!\d)';
 
-    // 1. Net à payer avant impôt / Net à payer / Net versé / Net fiscal
-    final netMatch = RegExp(
+    // 1. Net à payer avant impôt / Net à payer / Net versé / Net fiscal (parcours complet allMatches)
+    final netRegExp = RegExp(
       r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE|NET\s+FISCAL)[^\d]*' + numPattern,
       caseSensitive: false,
-    ).firstMatch(fullText);
+    );
 
-    if (netMatch != null) {
-      final euros = netMatch.group(1)!;
-      final centimes = netMatch.group(2) ?? '00';
+    for (final match in netRegExp.allMatches(fullText)) {
+      final euros = match.group(1)!;
+      final centimes = match.group(2) ?? '00';
       final val = double.tryParse('$euros.$centimes');
       if (val != null && val >= 500.0 && val <= 30000.0) {
         foundNet = val;
+        break;
       }
     }
 
-    // Fallback: Recherche virement / solde net
+    // Fallback: Recherche virement / solde net sur allMatches
     if (foundNet == null) {
-      final virementMatch = RegExp(
+      final virementRegExp = RegExp(
         r'(?:EN\s+EUROS\s+VIREMENT|VIREMENT|SOLDE\s+DE\s+TOUT\s+COMPTE)[^\d]*' + numPattern,
         caseSensitive: false,
-      ).firstMatch(fullText);
-      if (virementMatch != null) {
-        final euros = virementMatch.group(1)!;
-        final centimes = virementMatch.group(2) ?? '00';
+      );
+      for (final match in virementRegExp.allMatches(fullText)) {
+        final euros = match.group(1)!;
+        final centimes = match.group(2) ?? '00';
         final val = double.tryParse('$euros.$centimes');
         if (val != null && val >= 500.0 && val <= 30000.0) {
           foundNet = val;
+          break;
         }
       }
     }
 
-    // 2. Net Social / Montant Net Social
-    final netSocialMatch = RegExp(
+    // 2. Net Social / Montant Net Social (parcours complet allMatches)
+    final netSocialRegExp = RegExp(
       r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*' + numPattern,
       caseSensitive: false,
-    ).firstMatch(fullText);
-    if (netSocialMatch != null) {
-      final euros = netSocialMatch.group(1)!;
-      final centimes = netSocialMatch.group(2) ?? '00';
+    );
+    for (final match in netSocialRegExp.allMatches(fullText)) {
+      final euros = match.group(1)!;
+      final centimes = match.group(2) ?? '00';
       final val = double.tryParse('$euros.$centimes');
       if (val != null && val >= 500.0 && val <= 30000.0) {
         foundNetSocial = val;
+        break;
       }
     }
 
-    // 3. Salaire Brut / Total Brut / Brut Impôts
-    final grossMatch = RegExp(
-      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT|BRUT\s+IMPOTS)[^\d]*' + numPattern,
+    // 3. Salaire Brut / Total Brut / Brut Impôts (parcours complet allMatches)
+    final grossRegExp = RegExp(
+      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\_DU\s+BRUT|BRUT\s+IMPOTS)[^\d]*' + numPattern,
       caseSensitive: false,
-    ).firstMatch(fullText);
-    if (grossMatch != null) {
-      final euros = grossMatch.group(1)!;
-      final centimes = grossMatch.group(2) ?? '00';
+    );
+    for (final match in grossRegExp.allMatches(fullText)) {
+      final euros = match.group(1)!;
+      final centimes = match.group(2) ?? '00';
       final val = double.tryParse('$euros.$centimes');
       if (val != null && val >= 500.0 && val <= 30000.0) {
         foundGross = val;
+        break;
       }
+    }
+
+    // Si foundNet est null mais que foundNetSocial est extrait factuellement, utiliser Net Social
+    if (foundNet == null && foundNetSocial != null) {
+      foundNet = foundNetSocial;
     }
 
     if (foundNet != null || foundNetSocial != null || foundGross != null) {
@@ -361,9 +370,9 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
               period: hasGeminiPeriod ? parsedPeriod : extractedPeriod,
               periodDetected: hasGeminiPeriod || periodDetected,
               date: DateTime(yr, mo, 28),
-              grossSalary: parsedGross >= 500.0 ? parsedGross : (scannedFinancials?['gross'] ?? 3776.67),
-              netSocial: parsedSocial >= 500.0 ? parsedSocial : (scannedFinancials?['netSocial'] ?? 2952.28),
-              netPayable: parsedNet >= 500.0 ? parsedNet : (scannedFinancials?['net'] ?? 2713.74),
+              grossSalary: parsedGross >= 500.0 ? parsedGross : (scannedFinancials?['gross'] ?? 0.0),
+              netSocial: parsedSocial >= 500.0 ? parsedSocial : (scannedFinancials?['netSocial'] ?? 0.0),
+              netPayable: parsedNet >= 500.0 ? parsedNet : (scannedFinancials?['net'] ?? 0.0),
               socialContributions: -840.78,
               mealTickets: -52.80,
               teleworkAllowance: 0.0,
@@ -387,17 +396,17 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
       }
     }
 
-    // 3. FACTUAL EXTRACTION OR SAFE NON-ZERO BASELINE RETRIEVAL
+    // 3. STRICT FACTUAL EXTRACTION - ABSOLUTELY ZERO HARDCODED DUMMY FALLBACKS
     final double netVal = (scannedFinancials?['net'] != null && scannedFinancials!['net'] >= 500.0)
         ? scannedFinancials['net']
-        : 2713.74;
+        : 0.0;
     final double grossVal = (scannedFinancials?['gross'] != null && scannedFinancials!['gross'] >= 500.0)
         ? scannedFinancials['gross']
-        : 3776.67;
+        : 0.0;
     final double netSocialVal = (scannedFinancials?['netSocial'] != null && scannedFinancials!['netSocial'] >= 500.0)
         ? scannedFinancials['netSocial']
-        : 2952.28;
-    final bool isParsed = scannedFinancials != null && scannedFinancials.containsKey('net');
+        : 0.0;
+    final bool isParsed = netVal > 0.0;
 
     return RealParsedPayslip(
       id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
