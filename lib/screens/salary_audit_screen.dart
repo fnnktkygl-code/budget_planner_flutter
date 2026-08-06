@@ -2423,6 +2423,31 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                             ],
                                             const SizedBox(width: 8),
                                             Builder(builder: (context) {
+                                              final currentYear = DateTime.now().year;
+                                              final adjList = salaryState.taxAdjustments.where((t) => t.taxYear == record.year).toList();
+                                              final bool isPastYearWithDgfip = record.year < currentYear && adjList.isNotEmpty;
+
+                                              if (isPastYearWithDgfip) {
+                                                final monthlyRealTax = adjList.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear);
+                                                final rate = record.netSocial > 0 ? (monthlyRealTax / record.netSocial * 100) : 9.4;
+                                                return Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.accentGold.withValues(alpha: 0.15),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: AppColors.accentGold.withValues(alpha: 0.3)),
+                                                  ),
+                                                  child: Text(
+                                                    'Lissé DGFiP: -${monthlyRealTax.toStringAsFixed(2)} € (${rate.toStringAsFixed(1)}%)',
+                                                    style: const TextStyle(
+                                                      color: AppColors.accentGold,
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+
                                               final bool hasPas = record.incomeTaxAmount.abs() > 0.01;
                                               final badgeBg = hasPas
                                                   ? AppColors.accentRose.withValues(alpha: 0.15)
@@ -2436,7 +2461,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
-                                                  'PAS: ${hasPas ? record.incomeTaxAmount.toStringAsFixed(2) : "0.00"} € (${record.incomeTaxRatePercent.toStringAsFixed(1)}%)',
+                                                  'PAS: ${hasPas ? "-${record.incomeTaxAmount.abs().toStringAsFixed(2)}" : "0.00"} € (${record.incomeTaxRatePercent.toStringAsFixed(1)}%)',
                                                   style: TextStyle(
                                                     color: badgeColor,
                                                     fontSize: 9,

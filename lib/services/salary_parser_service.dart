@@ -228,6 +228,47 @@ class SalaryParserService {
     return _parseFrenchAmount(text, r'SALAIRE\s+BRUT') ?? _parseFrenchAmount(text, r'TOTAL\s+BRUT');
   }
 
+  static double? _extractFactualIncomeTaxFromText(String? text) {
+    if (text == null || text.isEmpty) return null;
+    final upper = text.toUpperCase();
+
+    final matchPasMois = RegExp(r'PRELEVEMENT\s+A\s+LA\s+SOURCE[\s\S]*?DU\s+MOIS\s+(\d+[\s\.,]\d{2})').firstMatch(upper);
+    if (matchPasMois != null) {
+      final str = matchPasMois.group(1)!.replaceAll(' ', '').replaceAll(',', '.');
+      final val = double.tryParse(str);
+      if (val != null && val > 0) return val;
+    }
+
+    final matchImpotLine = RegExp(r'IMPOT\s+SUR\s+LE\s+REVENU\s+PRELEVE[\s\S]*?(\d+[\s\.,]\d{2})-?').firstMatch(upper);
+    if (matchImpotLine != null) {
+      final str = matchImpotLine.group(1)!.replaceAll(' ', '').replaceAll(',', '.');
+      final val = double.tryParse(str);
+      if (val != null && val > 0) return val;
+    }
+
+    final matchTaux = RegExp(r'TAUX\s+PERSONNALIS[EÉ][\s\S]*?(\d+[\s\.,]\d{2})-?').firstMatch(upper);
+    if (matchTaux != null) {
+      final str = matchTaux.group(1)!.replaceAll(' ', '').replaceAll(',', '.');
+      final val = double.tryParse(str);
+      if (val != null && val > 0) return val;
+    }
+
+    return null;
+  }
+
+  static double? _extractFactualIncomeTaxRateFromText(String? text) {
+    if (text == null || text.isEmpty) return null;
+    final upper = text.toUpperCase();
+
+    final matchRate = RegExp(r'TAUX\s+PERSONNALIS[EÉ][^\d]*?(\d+[\.,]\d{1,2})\s*%?').firstMatch(upper);
+    if (matchRate != null) {
+      final str = matchRate.group(1)!.replaceAll(',', '.');
+      final val = double.tryParse(str);
+      if (val != null && val > 0 && val < 50) return val;
+    }
+    return null;
+  }
+
   static Future<RealParsedPayslip> parseDocument({
     Uint8List? fileBytes,
     String? fileName,
@@ -293,6 +334,7 @@ CONSIGNES STRICTES DE LECTURE DU BULLETIN DE PAIE FRANÇAIS :
 2. grossSalary : Prends la valeur de la ligne "SALAIRE BRUT" ou "TOTAL BRUT" (ex: 3666.67).
 3. netSocial : Prends la valeur de la ligne "MONTANT NET SOCIAL" (ex: 2860.89).
 4. period : Période sous le format YYYY-MM (ex: 2025-10 pour Octobre 2025).
+5. incomeTaxAmount : Cherche "IMPOT SUR LE REVENU PRELEVE", "TAUX PERSONNALISE" ou "PRELEVEMENT A LA SOURCE DU MOIS" (ex: 84.03).
 '''
                     },
                     if (rawTextContent != null && rawTextContent.isNotEmpty)
@@ -369,6 +411,18 @@ CONSIGNES STRICTES DE LECTURE DU BULLETIN DE PAIE FRANÇAIS :
     final factualGross = _extractFactualGrossFromText(rawTextContent);
     if (factualGross != null && factualGross > 0) {
       parsedGross = factualGross;
+    }
+
+    final factualTax = _extractFactualIncomeTaxFromText(rawTextContent);
+    if (factualTax != null && factualTax > 0) {
+      parsedTax = factualTax;
+    }
+
+    final factualTaxRate = _extractFactualIncomeTaxRateFromText(rawTextContent);
+    if (factualTaxRate != null && factualTaxRate > 0) {
+      parsedTaxRate = factualTaxRate;
+    } else if (parsedTax > 0 && parsedSocial > 0) {
+      parsedTaxRate = (parsedTax / parsedSocial * 100);
     }
 
     if (parsedNet > 0 || parsedGross > 0 || parsedSocial > 0) {

@@ -36,7 +36,7 @@ class _AnnualRecapWidgetState extends State<AnnualRecapWidget> {
 
     final double totalGross = filteredRecords.fold(0.0, (sum, r) => sum + (r.grossSalary ?? 0.0));
     final double totalNetBanque = filteredRecords.fold(0.0, (sum, r) => sum + r.netSalary);
-    final double totalPrimes = filteredRecords.fold(0.0, (sum, r) => sum + (r.bonusAmount ?? 0.0));
+    final double totalPrimes = filteredRecords.fold(0.0, (sum, r) => sum + r.calculatedExtraAmount);
     final double totalPEE = filteredRecords.fold(0.0, (sum, r) => sum + r.companySavingsPEE);
     final double totalNetSocial = filteredRecords.fold(0.0, (sum, r) => sum + r.netSocial);
     final double totalGlobalComp = totalNetBanque + totalPEE;
