@@ -514,9 +514,10 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     return InteractiveViewer(
       transformationController: _transformationController,
       alignment: Alignment.center,
-      minScale: 0.8,
+      minScale: 1.0,
       maxScale: 4.0,
-      boundaryMargin: const EdgeInsets.all(300),
+      boundaryMargin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
       child: Center(
         child: Stack(
           alignment: Alignment.center,
