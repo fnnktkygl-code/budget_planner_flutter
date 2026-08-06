@@ -180,6 +180,66 @@ class SalaryParserService {
     return null;
   }
 
+  static double? _extractFactualNetFromText(String? text) {
+    if (text == null || text.isEmpty) return null;
+
+    final regexes = [
+      RegExp(r'NET\s+A\s+PAYER\s+EN\s+EUROS\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
+      RegExp(r'NET\s+A\s+PAYER\s+AVANT\s+IMP[OÔ]T[^\n]*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
+      RegExp(r'NET\s+A\s+PAYER\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
+      RegExp(r'NET\s+PAY[EÉ]\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
+      RegExp(r'VIREMENT\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
+    ];
+
+    for (var re in regexes) {
+      final match = re.firstMatch(text);
+      if (match != null) {
+        final clean = match.group(1)!.replaceAll(' ', '').replaceAll(',', '.');
+        final val = double.tryParse(clean);
+        if (val != null && val > 500 && val < 50000) {
+          return val;
+        }
+      }
+    }
+    return null;
+  }
+
+  static double? _extractFactualNetSocialFromText(String? text) {
+    if (text == null || text.isEmpty) return null;
+
+    final re = RegExp(r'MONTANT\s+NET\s+SOCIAL\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false);
+    final match = re.firstMatch(text);
+    if (match != null) {
+      final clean = match.group(1)!.replaceAll(' ', '').replaceAll(',', '.');
+      final val = double.tryParse(clean);
+      if (val != null && val > 500 && val < 50000) {
+        return val;
+      }
+    }
+    return null;
+  }
+
+  static double? _extractFactualGrossFromText(String? text) {
+    if (text == null || text.isEmpty) return null;
+
+    final regexes = [
+      RegExp(r'SALAIRE\s+BRUT\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
+      RegExp(r'TOTAL\s+BRUT\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
+    ];
+
+    for (var re in regexes) {
+      final match = re.firstMatch(text);
+      if (match != null) {
+        final clean = match.group(1)!.replaceAll(' ', '').replaceAll(',', '.');
+        final val = double.tryParse(clean);
+        if (val != null && val > 500 && val < 50000) {
+          return val;
+        }
+      }
+    }
+    return null;
+  }
+
   static Future<RealParsedPayslip> parseDocument({
     Uint8List? fileBytes,
     String? fileName,
@@ -232,6 +292,8 @@ Analyse ce bulletin de paie et renvoie STRICTEMENT un JSON valide :
   "grossSalary": 3666.67,
   "netSocial": 2860.89,
   "netPayable": 2787.89,
+  "incomeTaxAmount": 0.0,
+  "incomeTaxRatePercent": 0.0,
   "hasExplicitBonus": false,
   "bonusDescription": null
 }
@@ -299,14 +361,31 @@ CONSIGNES STRICTES DE LECTURE DU BULLETIN DE PAIE FRANÇAIS :
       } catch (_) {}
     }
 
-    // 3. Extract Factual AI JSON Data (0 Regex, 0 Hardcoding)
-    if (aiJsonResult != null) {
-      final parsedPeriod = aiJsonResult['period'] as String?;
-      final bool hasGeminiPeriod = parsedPeriod != null && parsedPeriod.isNotEmpty && parsedPeriod != 'null';
+    // 3. Extract Factual AI JSON Data with PDF Text Layer Failsafe Overrides
+    double parsedNet = aiJsonResult != null ? ((aiJsonResult['netPayable'] as num?)?.toDouble() ?? 0.0) : 0.0;
+    double parsedGross = aiJsonResult != null ? ((aiJsonResult['grossSalary'] as num?)?.toDouble() ?? 0.0) : 0.0;
+    double parsedSocial = aiJsonResult != null ? ((aiJsonResult['netSocial'] as num?)?.toDouble() ?? 0.0) : 0.0;
+    double parsedTax = aiJsonResult != null ? ((aiJsonResult['incomeTaxAmount'] as num?)?.toDouble() ?? 0.0) : 0.0;
+    double parsedTaxRate = aiJsonResult != null ? ((aiJsonResult['incomeTaxRatePercent'] as num?)?.toDouble() ?? 0.0) : 0.0;
 
-      final double parsedNet = (aiJsonResult['netPayable'] as num?)?.toDouble() ?? 0.0;
-      final double parsedGross = (aiJsonResult['grossSalary'] as num?)?.toDouble() ?? 0.0;
-      final double parsedSocial = (aiJsonResult['netSocial'] as num?)?.toDouble() ?? 0.0;
+    final factualNet = _extractFactualNetFromText(rawTextContent);
+    if (factualNet != null && factualNet > 0) {
+      parsedNet = factualNet;
+    }
+
+    final factualSocial = _extractFactualNetSocialFromText(rawTextContent);
+    if (factualSocial != null && factualSocial > 0) {
+      parsedSocial = factualSocial;
+    }
+
+    final factualGross = _extractFactualGrossFromText(rawTextContent);
+    if (factualGross != null && factualGross > 0) {
+      parsedGross = factualGross;
+    }
+
+    if (parsedNet > 0 || parsedGross > 0 || parsedSocial > 0) {
+      final parsedPeriod = aiJsonResult != null ? (aiJsonResult['period'] as String?) : null;
+      final bool hasGeminiPeriod = parsedPeriod != null && parsedPeriod.isNotEmpty && parsedPeriod != 'null';
 
       int finalYr = yr;
       int finalMo = mo;
@@ -322,7 +401,7 @@ CONSIGNES STRICTES DE LECTURE DU BULLETIN DE PAIE FRANÇAIS :
       return RealParsedPayslip(
         id: 'payslip-$finalYr${finalMo < 10 ? "0$finalMo" : "$finalMo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
         employeeName: '[Caviardé]',
-        employerName: aiJsonResult['employerName'] ?? 'Employeur',
+        employerName: aiJsonResult?['employerName'] ?? 'Employeur',
         siret: 'XXXXXXXXXXXXXX',
         period: hasGeminiPeriod ? parsedPeriod : extractedPeriod,
         periodDetected: hasGeminiPeriod || periodDetected,
@@ -334,15 +413,17 @@ CONSIGNES STRICTES DE LECTURE DU BULLETIN DE PAIE FRANÇAIS :
         mealTickets: 0.0,
         teleworkAllowance: 0.0,
         nonTaxableAllowance: 0.0,
-        hasExplicitBonus: (aiJsonResult['hasExplicitBonus'] as bool?) ?? false,
-        bonusDescription: aiJsonResult['bonusDescription'],
-        bonusAmount: (aiJsonResult['bonusAmount'] as num?)?.toDouble(),
+        incomeTaxAmount: parsedTax,
+        incomeTaxRatePercent: parsedTaxRate,
+        hasExplicitBonus: aiJsonResult != null ? ((aiJsonResult['hasExplicitBonus'] as bool?) ?? false) : false,
+        bonusDescription: aiJsonResult?['bonusDescription'],
+        bonusAmount: aiJsonResult != null ? ((aiJsonResult['bonusAmount'] as num?)?.toDouble()) : null,
         isParsedFromDocument: true,
         rawFileBase64: rawFileB64,
       );
     }
 
-    // 4. Fallback if AI cannot process document (Requires manual net entry, NO fake data, NO regex)
+    // 4. Fallback if AI cannot process document
     return RealParsedPayslip(
       id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
       employeeName: '[Caviardé]',
@@ -358,6 +439,8 @@ CONSIGNES STRICTES DE LECTURE DU BULLETIN DE PAIE FRANÇAIS :
       mealTickets: 0.0,
       teleworkAllowance: 0.0,
       nonTaxableAllowance: 0.0,
+      incomeTaxAmount: 0.0,
+      incomeTaxRatePercent: 0.0,
       hasExplicitBonus: false,
       bonusDescription: null,
       isParsedFromDocument: false,
@@ -540,6 +623,27 @@ CONSIGNES STRICTES D'EXTRACTION DE PAIE FRANÇAISE :
           mo = extractedInfo['month'];
         }
 
+        double parsedNet = (obj['netPayable'] as num?)?.toDouble() ?? 0.0;
+        double parsedGross = (obj['grossSalary'] as num?)?.toDouble() ?? 0.0;
+        double parsedSocial = (obj['netSocial'] as num?)?.toDouble() ?? 0.0;
+        double parsedTax = (obj['incomeTaxAmount'] as num?)?.toDouble() ?? 0.0;
+        double parsedTaxRate = (obj['incomeTaxRatePercent'] as num?)?.toDouble() ?? 0.0;
+
+        final factualNet = _extractFactualNetFromText(item.rawTextContent);
+        if (factualNet != null && factualNet > 0) {
+          parsedNet = factualNet;
+        }
+
+        final factualSocial = _extractFactualNetSocialFromText(item.rawTextContent);
+        if (factualSocial != null && factualSocial > 0) {
+          parsedSocial = factualSocial;
+        }
+
+        final factualGross = _extractFactualGrossFromText(item.rawTextContent);
+        if (factualGross != null && factualGross > 0) {
+          parsedGross = factualGross;
+        }
+
         parsedList.add(
           RealParsedPayslip(
             id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(item.fileName?.hashCode ?? 0).abs() % 10000}',
@@ -549,13 +653,15 @@ CONSIGNES STRICTES D'EXTRACTION DE PAIE FRANÇAISE :
             period: hasGeminiPeriod ? parsedPeriod : extractedPeriod,
             periodDetected: hasGeminiPeriod || extractedInfo != null,
             date: DateTime(yr, mo, 28),
-            grossSalary: (obj['grossSalary'] as num?)?.toDouble() ?? 0.0,
-            netSocial: (obj['netSocial'] as num?)?.toDouble() ?? 0.0,
-            netPayable: (obj['netPayable'] as num?)?.toDouble() ?? 0.0,
+            grossSalary: parsedGross,
+            netSocial: parsedSocial,
+            netPayable: parsedNet,
             socialContributions: 0.0,
             mealTickets: 0.0,
             teleworkAllowance: 0.0,
             nonTaxableAllowance: 0.0,
+            incomeTaxAmount: parsedTax,
+            incomeTaxRatePercent: parsedTaxRate,
             hasExplicitBonus: (obj['hasExplicitBonus'] as bool?) ?? false,
             bonusDescription: obj['bonusDescription'],
             bonusAmount: (obj['bonusAmount'] as num?)?.toDouble(),
