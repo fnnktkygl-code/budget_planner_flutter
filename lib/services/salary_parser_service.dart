@@ -58,7 +58,6 @@ class RealParsedPayslip {
     final yearMonth = customPeriod ??
         '${date.year}-${date.month < 10 ? "0${date.month}" : "${date.month}"}';
     
-    // Strict factual value: net after tax received on bank account (Net versé sur le compte)
     final finalNet = customNet ?? netPayable;
 
     return SalaryRecord(
@@ -73,7 +72,7 @@ class RealParsedPayslip {
       nonTaxableAllowances: nonTaxableAllowance,
       investableAmount: (finalNet * 0.3).roundToDouble(),
       savingsRate: 30.0,
-      status: finalNet > 0 ? '✓ Extrait du bulletin' : '⚠️ Saisie Net requise',
+      status: finalNet > 0 ? '✓ Analysé par l\'IA' : '⚠️ Saisie Net requise',
       documentName: customFileName ?? 'bulletin_$id.pdf',
       renderedImageBase64: imageBase64 ?? renderedImageBase64,
       rawFileBase64: fileBase64 ?? rawFileBase64,
@@ -154,143 +153,6 @@ class SalaryParserService {
     return null;
   }
 
-  /// Scans extracted PDF text or Latin1 byte text strictly for Net After Tax (Net versé sur le compte)
-  static Map<String, dynamic>? _scanPdfTextForFinancials(Uint8List? fileBytes, String? rawTextContent) {
-    final StringBuffer textBuffer = StringBuffer();
-
-    if (rawTextContent != null && rawTextContent.isNotEmpty) {
-      textBuffer.write(rawTextContent);
-    }
-
-    if (fileBytes != null && fileBytes.isNotEmpty) {
-      try {
-        textBuffer.write('\n');
-        textBuffer.write(latin1.decode(fileBytes, allowInvalid: true));
-      } catch (_) {}
-    }
-
-    final fullText = textBuffer.toString();
-    if (fullText.isEmpty) return null;
-
-    double? foundNet;
-    double? foundGross;
-    double? foundNetSocial;
-    bool hasExplicitBonus = false;
-    String? bonusDesc;
-
-    // Check for explicit bonus line items in text stream
-    if (RegExp(r'PRIME\s+DE\s+VACANCES', caseSensitive: false).hasMatch(fullText)) {
-      hasExplicitBonus = true;
-      bonusDesc = 'Prime de Vacances';
-    } else if (RegExp(r"13E?ME\s+MOIS|PRIME\s+DE\s+FIN\s+D'ANNEE", caseSensitive: false).hasMatch(fullText)) {
-      hasExplicitBonus = true;
-      bonusDesc = '13ème Mois';
-    } else if (RegExp(r'PRIME\s+EXCEPTIONNELLE|GRATIFICATION|BONUS', caseSensitive: false).hasMatch(fullText)) {
-      hasExplicitBonus = true;
-      bonusDesc = 'Prime Exceptionnelle';
-    } else if (RegExp(r'PRIME\s+DE\s+PERFORMANCE|VARIABLE', caseSensitive: false).hasMatch(fullText)) {
-      hasExplicitBonus = true;
-      bonusDesc = 'Prime de Performance';
-    }
-
-    // Pattern d'extraction haute précision pour montants salariaux (3 à 6 chiffres pour les euros ex: 2713, 4400)
-    // Ne matche PAS les chiffres isolés de la formule 1-2+3-4
-    const String numPattern = r'(\d{3,6})(?:[\s,\.](\d{2}))?(?!\d)';
-
-    // PRIORITY 1A: Number PRECEDING "EN EUROS VIREMENT", "VIREMENT", "NET VERSÉ" (ex: " 2713 74 \n EN EUROS VIREMENT")
-    final numBeforeVirementRegExp = RegExp(
-      numPattern + r'[^\d]{0,60}(?:EN\s+EUROS\s+VIREMENT|VIREMENT|NET\s+VERS[EÉ]|SUR\s+VOTRE\s+COMPTE|NET\s+PAY[EÉ])',
-      caseSensitive: false,
-    );
-
-    for (final match in numBeforeVirementRegExp.allMatches(fullText)) {
-      final euros = match.group(1)!;
-      final centimes = match.group(2) ?? '00';
-      final val = double.tryParse('$euros.$centimes');
-      if (val != null && val >= 500.0 && val <= 30000.0) {
-        foundNet = val;
-        break;
-      }
-    }
-
-    // PRIORITY 1B: Number FOLLOWING "NET VERSÉ", "EN EUROS VIREMENT", etc.
-    if (foundNet == null) {
-      final netAfterTaxRegExp = RegExp(
-        r'(?:NET\s+VERS[EÉ]|NET\s+PAY[EÉ]|NET\s+A\s+PAYER\s+APR[EÈ]S\s+IMP[OÔ]T|MONTANT\s+NET\s+VERS[EÉ]|EN\s+EUROS\s+VIREMENT|VIREMENT|SOLDE\s+DE\s+TOUT\s+COMPTE)[^\d]*' + numPattern,
-        caseSensitive: false,
-      );
-
-      for (final match in netAfterTaxRegExp.allMatches(fullText)) {
-        final euros = match.group(1)!;
-        final centimes = match.group(2) ?? '00';
-        final val = double.tryParse('$euros.$centimes');
-        if (val != null && val >= 500.0 && val <= 30000.0) {
-          foundNet = val;
-          break;
-        }
-      }
-    }
-
-    // PRIORITY 2: NET A PAYER strictly excluding AVANT IMPOT (ex: "NET A PAYER 1-2+3-4 2713 74")
-    if (foundNet == null) {
-      final netGeneralRegExp = RegExp(
-        r'(?:NET\s+A\s+PAYER(?!\s+AVANT\s+IMPOT)|NET\s+PAYABLE)[^\d]*' + numPattern,
-        caseSensitive: false,
-      );
-      for (final match in netGeneralRegExp.allMatches(fullText)) {
-        final euros = match.group(1)!;
-        final centimes = match.group(2) ?? '00';
-        final val = double.tryParse('$euros.$centimes');
-        if (val != null && val >= 500.0 && val <= 30000.0) {
-          foundNet = val;
-          break;
-        }
-      }
-    }
-
-    // 2. Net Social / Montant Net Social (parcours complet allMatches)
-    final netSocialRegExp = RegExp(
-      r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*' + numPattern,
-      caseSensitive: false,
-    );
-    for (final match in netSocialRegExp.allMatches(fullText)) {
-      final euros = match.group(1)!;
-      final centimes = match.group(2) ?? '00';
-      final val = double.tryParse('$euros.$centimes');
-      if (val != null && val >= 500.0 && val <= 30000.0) {
-        foundNetSocial = val;
-        break;
-      }
-    }
-
-    // 3. Salaire Brut / Total Brut / Brut Impôts (parcours complet allMatches)
-    final grossRegExp = RegExp(
-      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\_DU\s+BRUT|BRUT\s+IMPOTS)[^\d]*' + numPattern,
-      caseSensitive: false,
-    );
-    for (final match in grossRegExp.allMatches(fullText)) {
-      final euros = match.group(1)!;
-      final centimes = match.group(2) ?? '00';
-      final val = double.tryParse('$euros.$centimes');
-      if (val != null && val >= 500.0 && val <= 30000.0) {
-        foundGross = val;
-        break;
-      }
-    }
-
-    if (foundNet != null || foundNetSocial != null || foundGross != null) {
-      return {
-        if (foundNet != null) 'net': foundNet,
-        if (foundGross != null) 'gross': foundGross,
-        if (foundNetSocial != null) 'netSocial': foundNetSocial,
-        'hasExplicitBonus': hasExplicitBonus,
-        if (bonusDesc != null) 'bonusDescription': bonusDesc,
-      };
-    }
-
-    return null;
-  }
-
   static Future<RealParsedPayslip> parseDocument({
     Uint8List? fileBytes,
     String? fileName,
@@ -302,9 +164,6 @@ class SalaryParserService {
     final bool periodDetected = extractedInfo != null;
     final int yr = extractedInfo != null ? extractedInfo['year'] : 2026;
     final int mo = extractedInfo != null ? extractedInfo['month'] : 7;
-
-    // 1. Scan PDF text content (from PDF.js browser text extraction or byte stream)
-    final scannedFinancials = _scanPdfTextForFinancials(fileBytes, rawTextContent);
     final rawFileB64 = fileBytes != null ? base64Encode(fileBytes) : null;
 
     final fnLower = (fileName ?? '').toLowerCase();
@@ -312,7 +171,9 @@ class SalaryParserService {
         ? 'application/pdf'
         : (fnLower.endsWith('.png') ? 'image/png' : 'image/jpeg');
 
-    // 2. Multi-Tier Model Rotator Cascade
+    Map<String, dynamic>? aiJsonResult;
+
+    // 1. Direct Multi-Tier Gemini/Gemma Rotator Cascade (Client Side)
     if (fileBytes != null && fileBytes.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
       final base64Data = base64Encode(fileBytes);
       final now = DateTime.now();
@@ -320,7 +181,6 @@ class SalaryParserService {
       for (String modelName in _geminiModelsCascade) {
         final cooldownUntil = _modelCooldownMap[modelName];
         if (cooldownUntil != null && now.isBefore(cooldownUntil)) {
-          debugPrint('⏳ [Gemini Rotator] Skipping $modelName (in cooldown until $cooldownUntil)');
           continue;
         }
 
@@ -347,6 +207,8 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
 - bonusDescription (String: Intitulé exact de la prime si présente, sinon null)
 '''
                     },
+                    if (rawTextContent != null && rawTextContent.isNotEmpty)
+                      {'text': 'Texte extrait :\n$rawTextContent'},
                     {
                       'inline_data': {
                         'mime_type': mimeType,
@@ -365,63 +227,72 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
             final textResult = data['candidates'][0]['content']['parts'][0]['text'];
-            final jsonMap = jsonDecode(textResult);
-
-            final parsedPeriod = jsonMap['period'] as String?;
-            final bool hasGeminiPeriod = parsedPeriod != null && parsedPeriod.isNotEmpty && parsedPeriod != 'null';
-
+            aiJsonResult = jsonDecode(textResult);
             debugPrint('✅ [AI MODEL SUCCESS] Bulletin analysé via le modèle tier : $modelName');
-
-            final double parsedNet = (jsonMap['netPayable'] as num?)?.toDouble() ?? 0.0;
-            final double parsedGross = (jsonMap['grossSalary'] as num?)?.toDouble() ?? 0.0;
-            final double parsedSocial = (jsonMap['netSocial'] as num?)?.toDouble() ?? 0.0;
-
-            return RealParsedPayslip(
-              id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
-              employeeName: '[Caviardé]',
-              employerName: jsonMap['employerName'] ?? 'Employeur',
-              siret: 'XXXXXXXXXXXXXX',
-              period: hasGeminiPeriod ? parsedPeriod : extractedPeriod,
-              periodDetected: hasGeminiPeriod || periodDetected,
-              date: DateTime(yr, mo, 28),
-              grossSalary: parsedGross >= 500.0 ? parsedGross : (scannedFinancials?['gross'] ?? 0.0),
-              netSocial: parsedSocial >= 500.0 ? parsedSocial : (scannedFinancials?['netSocial'] ?? 0.0),
-              netPayable: parsedNet >= 500.0 ? parsedNet : (scannedFinancials?['net'] ?? 0.0),
-              socialContributions: 0.0,
-              mealTickets: 0.0,
-              teleworkAllowance: 0.0,
-              nonTaxableAllowance: 0.0,
-              hasExplicitBonus: (jsonMap['hasExplicitBonus'] as bool?) ?? (scannedFinancials?['hasExplicitBonus'] ?? false),
-              bonusDescription: jsonMap['bonusDescription'] ?? scannedFinancials?['bonusDescription'],
-              isParsedFromDocument: true,
-              rawFileBase64: rawFileB64,
-            );
+            break;
           } else if (response.statusCode == 429) {
-            debugPrint('🚨 [QUOTA ALERT] Modèle $modelName sous limite de quota (HTTP 429). Placé en cooldown 30s. Bascule vers la suite du cascade...');
             _modelCooldownMap[modelName] = DateTime.now().add(const Duration(seconds: 30));
             continue;
-          } else if (response.statusCode == 404 || response.statusCode == 400) {
-            debugPrint('⚠️ [MODEL CASCADE] Modèle $modelName non disponible (HTTP ${response.statusCode}). Passage au niveau suivant...');
-            continue;
           }
-        } catch (e) {
-          debugPrint('⚠️ [MODEL CASCADE] Erreur sur $modelName: $e. Passage au niveau suivant...');
-        }
+        } catch (_) {}
       }
     }
 
-    // 3. STRICT FACTUAL EXTRACTION - ABSOLUTELY ZERO HARDCODED DUMMY FALLBACKS
-    final double netVal = (scannedFinancials?['net'] != null && scannedFinancials!['net'] >= 500.0)
-        ? scannedFinancials['net']
-        : 0.0;
-    final double grossVal = (scannedFinancials?['gross'] != null && scannedFinancials!['gross'] >= 500.0)
-        ? scannedFinancials['gross']
-        : 0.0;
-    final double netSocialVal = (scannedFinancials?['netSocial'] != null && scannedFinancials!['netSocial'] >= 500.0)
-        ? scannedFinancials['netSocial']
-        : 0.0;
-    final bool isParsed = netVal > 0.0;
+    // 2. Vercel Backend Serverless API Fallback (/api/parsePayslip) if no client key or if client direct calls timed out
+    if (aiJsonResult == null && fileBytes != null && fileBytes.isNotEmpty) {
+      try {
+        final base64Data = base64Encode(fileBytes);
+        final backendUrl = Uri.parse('/api/parsePayslip');
 
+        final response = await http.post(
+          backendUrl,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'base64Data': base64Data,
+            'mimeType': mimeType,
+            'rawTextContent': rawTextContent,
+          }),
+        );
+
+        if (response.statusCode == 200) {
+          aiJsonResult = jsonDecode(response.body);
+          debugPrint('✅ [VERCEL BACKEND AI SUCCESS] Bulletin analysé via /api/parsePayslip');
+        }
+      } catch (_) {}
+    }
+
+    // 3. Extract Factual AI JSON Data (0 Regex, 0 Hardcoding)
+    if (aiJsonResult != null) {
+      final parsedPeriod = aiJsonResult['period'] as String?;
+      final bool hasGeminiPeriod = parsedPeriod != null && parsedPeriod.isNotEmpty && parsedPeriod != 'null';
+
+      final double parsedNet = (aiJsonResult['netPayable'] as num?)?.toDouble() ?? 0.0;
+      final double parsedGross = (aiJsonResult['grossSalary'] as num?)?.toDouble() ?? 0.0;
+      final double parsedSocial = (aiJsonResult['netSocial'] as num?)?.toDouble() ?? 0.0;
+
+      return RealParsedPayslip(
+        id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
+        employeeName: '[Caviardé]',
+        employerName: aiJsonResult['employerName'] ?? 'Employeur',
+        siret: 'XXXXXXXXXXXXXX',
+        period: hasGeminiPeriod ? parsedPeriod : extractedPeriod,
+        periodDetected: hasGeminiPeriod || periodDetected,
+        date: DateTime(yr, mo, 28),
+        grossSalary: parsedGross,
+        netSocial: parsedSocial,
+        netPayable: parsedNet,
+        socialContributions: 0.0,
+        mealTickets: 0.0,
+        teleworkAllowance: 0.0,
+        nonTaxableAllowance: 0.0,
+        hasExplicitBonus: (aiJsonResult['hasExplicitBonus'] as bool?) ?? false,
+        bonusDescription: aiJsonResult['bonusDescription'],
+        isParsedFromDocument: true,
+        rawFileBase64: rawFileB64,
+      );
+    }
+
+    // 4. Fallback if AI cannot process document (Requires manual net entry, NO fake data, NO regex)
     return RealParsedPayslip(
       id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
       employeeName: '[Caviardé]',
@@ -430,16 +301,16 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
       period: extractedPeriod,
       periodDetected: periodDetected,
       date: DateTime(yr, mo, 28),
-      grossSalary: grossVal,
-      netSocial: netSocialVal,
-      netPayable: netVal,
+      grossSalary: 0.0,
+      netSocial: 0.0,
+      netPayable: 0.0,
       socialContributions: 0.0,
       mealTickets: 0.0,
       teleworkAllowance: 0.0,
       nonTaxableAllowance: 0.0,
-      hasExplicitBonus: scannedFinancials?['hasExplicitBonus'] ?? false,
-      bonusDescription: scannedFinancials?['bonusDescription'],
-      isParsedFromDocument: isParsed,
+      hasExplicitBonus: false,
+      bonusDescription: null,
+      isParsedFromDocument: false,
       rawFileBase64: rawFileB64,
     );
   }
