@@ -937,9 +937,9 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
   void _showAddTaxAdjustmentDialog(BuildContext context, {TaxAdjustment? existing}) {
     final yearCtrl = TextEditingController(text: (existing?.taxYear ?? 2025).toString());
-    final labelCtrl = TextEditingController(text: existing?.label ?? "Avis d'Imposition DGFiP");
-    final grossCtrl = TextEditingController(text: (existing?.grossAmount ?? 3000.0).toStringAsFixed(0));
-    final deductionCtrl = TextEditingController(text: (existing?.deductionAmount ?? 700.0).toStringAsFixed(0));
+    final labelCtrl = TextEditingController(text: existing?.label ?? "Avis d'Imposition DGFiP 2025");
+    final totalTaxCtrl = TextEditingController(text: (existing?.totalTaxNetDue ?? 3310.0).toStringAsFixed(0));
+    final alreadyPaidCtrl = TextEditingController(text: (existing?.alreadyPaidPas ?? 844.0).toStringAsFixed(0));
 
     int selectedStartMonth = 9; // Septembre
     int monthsCount = 4; // 4 mois
@@ -949,9 +949,9 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final gross = double.tryParse(grossCtrl.text) ?? 0.0;
-            final deduction = double.tryParse(deductionCtrl.text) ?? 0.0;
-            final netDue = (gross - deduction).clamp(0.0, 100000.0);
+            final totalTax = double.tryParse(totalTaxCtrl.text) ?? 0.0;
+            final alreadyPaid = double.tryParse(alreadyPaidCtrl.text) ?? 0.0;
+            final netDue = (totalTax - alreadyPaid).clamp(0.0, 100000.0);
             final monthly = monthsCount > 0 ? netDue / monthsCount : netDue;
 
             return AlertDialog(
@@ -961,7 +961,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 children: const [
                   Icon(Icons.account_balance_rounded, color: AppColors.accentCyan, size: 22),
                   SizedBox(width: 10),
-                  Text('Avis d\'Imposition / Rattrapage DGFiP', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text('Avis d\'Imposition / Solde DGFiP', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
                 ],
               ),
               content: SingleChildScrollView(
@@ -970,7 +970,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Saisissez le rappel réclamé par la DGFiP (ex: suite à un PAS non prélevé l\'an dernier) et vos réductions (ex: pension alimentaire parents).',
+                      'Saisissez les montants exacts figurant sur votre Avis d\'Imposition DGFiP :',
                       style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                     ),
                     const SizedBox(height: 16),
@@ -978,7 +978,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       controller: labelCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Intitulé de la régularisation',
-                        labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                         border: OutlineInputBorder(),
                       ),
                       style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
@@ -992,7 +991,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                               labelText: 'Année Fiscale',
-                              labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                               border: OutlineInputBorder(),
                             ),
                             style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
@@ -1001,12 +999,12 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: TextField(
-                            controller: grossCtrl,
+                            controller: totalTaxCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             onChanged: (_) => setModalState(() {}),
                             decoration: const InputDecoration(
-                              labelText: 'Rappel Brut (€)',
-                              labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                              labelText: 'Impôt Net Total Dû (€)',
+                              hintText: 'ex: 3310',
                               border: OutlineInputBorder(),
                               suffixText: '€',
                             ),
@@ -1017,12 +1015,12 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      controller: deductionCtrl,
+                      controller: alreadyPaidCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       onChanged: (_) => setModalState(() {}),
                       decoration: const InputDecoration(
-                        labelText: 'Réduction / Déduction (ex: Pension Parents)',
-                        labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        labelText: 'PAS déjà prélevé à la source (€)',
+                        hintText: 'ex: 844',
                         border: OutlineInputBorder(),
                         suffixText: '€',
                       ),
@@ -1055,7 +1053,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                           child: DropdownButtonFormField<int>(
                             value: monthsCount,
                             dropdownColor: AppColors.cardBackground,
-                            decoration: const InputDecoration(labelText: 'Nombre Mensualités', border: OutlineInputBorder()),
+                            decoration: const InputDecoration(labelText: 'Durée Étalement', border: OutlineInputBorder()),
                             style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
                             items: const [
                               DropdownMenuItem(value: 1, child: Text('1 mois (Comptant)')),
@@ -1083,7 +1081,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Solde Net à Payer :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                              const Text('Solde Restant à Payer (DGFiP) :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                               Text('${netDue.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 14)),
                             ],
                           ),
@@ -1111,7 +1109,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     backgroundColor: AppColors.accentCyan,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('Enregistrer la Régularisation'),
+                  child: const Text('Enregistrer l\'Avis DGFiP'),
                   onPressed: () {
                     final yr = int.tryParse(yearCtrl.text) ?? 2025;
                     final startM = selectedStartMonth < 10 ? '0$selectedStartMonth' : '$selectedStartMonth';
@@ -1119,13 +1117,14 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       id: existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                       label: labelCtrl.text.isEmpty ? "Avis d'Imposition DGFiP" : labelCtrl.text,
                       taxYear: yr,
-                      grossAmount: double.tryParse(grossCtrl.text) ?? 0.0,
-                      deductionAmount: double.tryParse(deductionCtrl.text) ?? 0.0,
+                      totalTaxNetDue: double.tryParse(totalTaxCtrl.text) ?? 3310.0,
+                      alreadyPaidPas: double.tryParse(alreadyPaidCtrl.text) ?? 844.0,
                       startPeriod: '2026-$startM',
                       monthsCount: monthsCount,
                     );
 
                     ref.read(salaryProvider.notifier).addTaxAdjustment(adj);
+                    Navigator.of(ctx).pop();
                   },
                 ),
               ],
@@ -1853,24 +1852,22 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                                 color: AppColors.accentRose.withValues(alpha: 0.15),
                                                 borderRadius: BorderRadius.circular(6),
                                               ),
-                                              child: Text('Rappel ${adj.taxYear} : ${adj.grossAmount.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.accentRose, fontSize: 9, fontWeight: FontWeight.bold)),
+                                              child: Text('Impôt Dû ${adj.taxYear} : ${adj.totalTaxNetDue.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.accentRose, fontSize: 9, fontWeight: FontWeight.bold)),
                                             ),
-                                            if (adj.deductionAmount > 0) ...[
-                                              const SizedBox(width: 6),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: AppColors.accentEmerald.withValues(alpha: 0.15),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                ),
-                                                child: Text('Réduction : -${adj.deductionAmount.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold)),
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(6),
                                               ),
-                                            ],
+                                              child: Text('PAS Déjà Payé : -${adj.alreadyPaidPas.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold)),
+                                            ),
                                           ],
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          'Étalé sur ${adj.monthsCount} mois (début ${adj.startPeriod}) • Solde Net dû : ${adj.netTaxDue.toStringAsFixed(2)} €',
+                                          'Étalé sur ${adj.monthsCount} mois (début ${adj.startPeriod}) • Solde Restant : ${adj.netTaxDue.toStringAsFixed(2)} €',
                                           style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
                                         ),
                                       ],

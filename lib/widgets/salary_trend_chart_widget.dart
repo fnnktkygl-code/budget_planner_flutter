@@ -39,10 +39,8 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
       return record.netSalary;
     }
     
-    final totalYearNetTaxDue = adjList.fold(0.0, (sum, t) => sum + t.netTaxDue);
-    final monthlyRetroactiveTax = totalYearNetTaxDue / 12.0;
-
-    return max(0.0, record.netSocial - monthlyRetroactiveTax);
+    final monthlyRealTax = adjList.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear);
+    return max(0.0, record.netSocial - monthlyRealTax);
   }
 
   @override
@@ -340,9 +338,8 @@ class _SalaryChartPainter extends CustomPainter {
       final year = int.tryParse(yearStr) ?? 0;
       final adjList = taxAdjustments!.where((t) => t.taxYear == year).toList();
       if (adjList.isEmpty) return r.netSalary;
-      final totalYearNetTaxDue = adjList.fold(0.0, (sum, t) => sum + t.netTaxDue);
-      final monthlyRetroactiveTax = totalYearNetTaxDue / 12.0;
-      return max(0.0, r.netSocial - monthlyRetroactiveTax);
+      final monthlyRealTax = adjList.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear);
+      return max(0.0, r.netSocial - monthlyRealTax);
     }
     return r.netSalary;
   }

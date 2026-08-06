@@ -2,8 +2,8 @@ class TaxAdjustment {
   final String id;
   final String label;
   final int taxYear;
-  final double grossAmount;
-  final double deductionAmount;
+  final double totalTaxNetDue; // Impôt net total dû pour l'année (ex: 3310 €)
+  final double alreadyPaidPas; // Retenue à la source déjà prélevée (ex: 844 €)
   final String startPeriod; // YYYY-MM e.g. "2026-09"
   final int monthsCount; // e.g. 4 (Sept-Dec)
 
@@ -11,15 +11,20 @@ class TaxAdjustment {
     required this.id,
     required this.label,
     required this.taxYear,
-    required this.grossAmount,
-    required this.deductionAmount,
+    required this.totalTaxNetDue,
+    required this.alreadyPaidPas,
     required this.startPeriod,
     required this.monthsCount,
   });
 
-  double get netTaxDue => (grossAmount - deductionAmount).clamp(0.0, 100000.0);
+  /// Solde d'impôt net restant à payer (ex: 3310 - 844 = 2466 €)
+  double get netTaxDue => (totalTaxNetDue - alreadyPaidPas).clamp(0.0, 100000.0);
 
+  /// Mensualité étalée à prélever sur le budget (ex: 2466 / 4 = 616.50 €/mois)
   double get monthlyInstallment => monthsCount > 0 ? netTaxDue / monthsCount : netTaxDue;
+
+  /// Impôt mensuel réel ajusté pour l'année de référence (ex: 3310 / 12 = 275.83 €/mois)
+  double get monthlyRealTaxForYear => totalTaxNetDue / 12.0;
 
   bool isActiveForPeriod(String period) {
     try {
@@ -45,8 +50,8 @@ class TaxAdjustment {
         'id': id,
         'label': label,
         'taxYear': taxYear,
-        'grossAmount': grossAmount,
-        'deductionAmount': deductionAmount,
+        'totalTaxNetDue': totalTaxNetDue,
+        'alreadyPaidPas': alreadyPaidPas,
         'startPeriod': startPeriod,
         'monthsCount': monthsCount,
       };
@@ -55,8 +60,12 @@ class TaxAdjustment {
         id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
         label: json['label'] as String? ?? 'Avis d\'imposition',
         taxYear: json['taxYear'] as int? ?? 2025,
-        grossAmount: (json['grossAmount'] as num?)?.toDouble() ?? 0.0,
-        deductionAmount: (json['deductionAmount'] as num?)?.toDouble() ?? 0.0,
+        totalTaxNetDue: (json['totalTaxNetDue'] as num?)?.toDouble() ??
+            (json['grossAmount'] as num?)?.toDouble() ??
+            3310.0,
+        alreadyPaidPas: (json['alreadyPaidPas'] as num?)?.toDouble() ??
+            (json['deductionAmount'] as num?)?.toDouble() ??
+            844.0,
         startPeriod: json['startPeriod'] as String? ?? '2026-09',
         monthsCount: json['monthsCount'] as int? ?? 4,
       );
@@ -65,8 +74,8 @@ class TaxAdjustment {
     String? id,
     String? label,
     int? taxYear,
-    double? grossAmount,
-    double? deductionAmount,
+    double? totalTaxNetDue,
+    double? alreadyPaidPas,
     String? startPeriod,
     int? monthsCount,
   }) {
@@ -74,8 +83,8 @@ class TaxAdjustment {
       id: id ?? this.id,
       label: label ?? this.label,
       taxYear: taxYear ?? this.taxYear,
-      grossAmount: grossAmount ?? this.grossAmount,
-      deductionAmount: deductionAmount ?? this.deductionAmount,
+      totalTaxNetDue: totalTaxNetDue ?? this.totalTaxNetDue,
+      alreadyPaidPas: alreadyPaidPas ?? this.alreadyPaidPas,
       startPeriod: startPeriod ?? this.startPeriod,
       monthsCount: monthsCount ?? this.monthsCount,
     );
