@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -190,18 +191,15 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     }
   }
 
-  Future<void> _save() async {
+  Timer? _indexedDbDebounceTimer;
+
+  Future<void> _save({bool saveHeavyBinaries = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Save lightweight financial JSON to SharedPreferences
+      // Save lightweight financial JSON to SharedPreferences (Ultra-fast, < 1ms)
       final cleanJsonStr = jsonEncode(state.records.map((r) => r.toJson(includeBinary: false)).toList());
       await prefs.setString('aura_salary_records_v3', cleanJsonStr);
-
-      // Save full records with PDF images to Web IndexedDB (Multi-GB quota!)
-      if (kIsWeb && state.records.isNotEmpty) {
-        IndexedDbService.saveFullRecords(state.records);
-      }
 
       final taxJsonStr = jsonEncode(state.taxAdjustments.map((t) => t.toJson()).toList());
       await prefs.setString('aura_tax_adjustments_v1', taxJsonStr);
@@ -210,6 +208,14 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       await prefs.setString('aura_temporary_expenses_v1', tempJsonStr);
 
       await prefs.setDouble('aura_account_balance_v1', state.accountBalance);
+
+      // Heavy IndexedDB binary save: Debounced in background so UI thread NEVER freezes!
+      if (kIsWeb && state.records.isNotEmpty && saveHeavyBinaries) {
+        _indexedDbDebounceTimer?.cancel();
+        _indexedDbDebounceTimer = Timer(const Duration(seconds: 2), () {
+          IndexedDbService.saveFullRecords(state.records);
+        });
+      }
     } catch (e) {
       debugPrint('[SalaryNotifier] Save exception: $e');
     }
@@ -227,7 +233,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     }
 
     state = state.copyWith(records: updated);
-    _save();
+    _save(saveHeavyBinaries: true);
   }
 
   void addMultipleRecords(List<SalaryRecord> newRecords) {
@@ -247,7 +253,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     }
 
     state = state.copyWith(records: updated);
-    _save();
+    _save(saveHeavyBinaries: true);
   }
 
   void updateRecord(SalaryRecord record) {
@@ -260,7 +266,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       updated[idx] = record;
       updated.sort((a, b) => b.period.compareTo(a.period));
       state = state.copyWith(records: updated);
-      _save();
+      _save(saveHeavyBinaries: true);
     }
   }
 
@@ -273,7 +279,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     }
 
     state = state.copyWith(records: updated);
-    _save();
+    _save(saveHeavyBinaries: true);
   }
 
   void setActiveBaseline(String id) {
