@@ -58,7 +58,13 @@ class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
     }
 
     final salaryValues = sorted.map((r) {
-      return _includeIncomeTax ? r.regularNetSalary : r.regularNetSocial;
+      if (!_includeIncomeTax) return r.regularNetSocial;
+      double pas = r.incomeTaxAmount.abs();
+      if (pas <= 1.0) {
+        final yearRecs = sorted.where((x) => x.year == r.year && x.incomeTaxAmount.abs() > 1.0).toList();
+        if (yearRecs.isNotEmpty) pas = yearRecs.first.incomeTaxAmount.abs();
+      }
+      return (r.regularNetSocial - pas).clamp(0.0, double.infinity);
     }).toList();
 
     final fixedValues = sorted.map((_) => widget.defaultFixedCharges).toList();

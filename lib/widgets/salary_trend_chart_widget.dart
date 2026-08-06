@@ -442,6 +442,17 @@ class _SalaryChartPainter extends CustomPainter {
     this.taxAdjustments,
   });
 
+  double _getEffectivePasForYear(SalaryRecord r) {
+    if (r.incomeTaxAmount.abs() > 1.0) {
+      return r.incomeTaxAmount.abs();
+    }
+    final yearRecs = records.where((x) => x.year == r.year && x.incomeTaxAmount.abs() > 1.0).toList();
+    if (yearRecs.isNotEmpty) {
+      return yearRecs.first.incomeTaxAmount.abs();
+    }
+    return 0.0;
+  }
+
   double _getVal(SalaryRecord r) {
     if (!separateBonus) {
       if (viewMode == 1) return r.netSocial;
@@ -457,9 +468,11 @@ class _SalaryChartPainter extends CustomPainter {
           return max(0.0, r.regularNetSocial - monthlyRealTax);
         }
       }
-      return r.regularNetSalary;
+      final pas = _getEffectivePasForYear(r);
+      return max(0.0, r.regularNetSocial - pas);
     }
-    return r.regularNetSalary;
+    final pas = _getEffectivePasForYear(r);
+    return max(0.0, r.regularNetSocial - pas);
   }
 
   @override
