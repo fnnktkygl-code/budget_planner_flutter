@@ -415,18 +415,19 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Radiant Gradient Card — RESTE À VIVRE & ALLOCATION GAUGE
+            // Sleek Dark Theme Card — RESTE À VIVRE & ALLOCATION GAUGE
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                gradient: AppColors.radiantGradient,
-                borderRadius: BorderRadius.circular(24),
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.borderSubtle),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.accentPurple.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
                   ),
                 ],
               ),
@@ -435,29 +436,36 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'RESTE À VIVRE ESTIMÉ',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
+                      Row(
+                        children: const [
+                          Icon(Icons.account_balance_wallet_rounded, color: AppColors.accentEmerald, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'RESTE À VIVRE ESTIMÉ',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                        ],
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.25),
+                          color: AppColors.surface,
                           borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.borderSubtle),
                         ),
                         child: Text(
-                          'Revenu : ${netSalary.toStringAsFixed(2)} €',
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          'Revenu Net : ${netSalary.toStringAsFixed(2)} €',
+                          style: const TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -466,22 +474,30 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       Text(
                         '${resteAVivre.toStringAsFixed(2)} €',
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 36,
+                          color: AppColors.textPrimary,
+                          fontSize: 34,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Text(
-                        '${(netSalary > 0 ? (resteAVivre / netSalary * 100) : 0).toStringAsFixed(1)} % du net',
-                        style: const TextStyle(
-                          color: AppColors.accentEmerald,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          '${(netSalary > 0 ? (resteAVivre / netSalary * 100) : 0).toStringAsFixed(1)} % du net',
+                          style: const TextStyle(
+                            color: AppColors.accentEmerald,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   
                   // Visual Progress Gauge Bar
                   ClipRRect(
@@ -528,21 +544,21 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             const SizedBox(height: 24),
 
             // Section 1: ALLOCATION MENSUELLE D'ÉPARGNE
-            _buildSectionHeader('ALLOCATION MENSUELLE D\'ÉPARGNE'),
+            _buildSectionHeader('ALLOCATION MENSUELLE D\'ÉPARGNE', totalSavings, netSalary, AppColors.chartBlue),
             const SizedBox(height: 12),
             _buildCategoryGroupCard(_savingsCategories, netSalary, allowDelete: false, onAdd: () => _showAddCategoryDialog(_savingsCategories, 'Épargne', AppColors.accentCyan)),
 
             const SizedBox(height: 24),
 
             // Section 2: CHARGES FIXES INCOMPRESSIBLES
-            _buildSectionHeader('CHARGES FIXES INCOMPRESSIBLES'),
+            _buildSectionHeader('CHARGES FIXES INCOMPRESSIBLES', totalFixed, netSalary, AppColors.chartRed),
             const SizedBox(height: 12),
             _buildCategoryGroupCard(_fixedChargesCategories, netSalary, allowDelete: true, onAdd: () => _showAddCategoryDialog(_fixedChargesCategories, 'Charge', AppColors.accentRose)),
 
             const SizedBox(height: 24),
 
             // Section 3: DÉPENSES QUOTIDIENNES
-            _buildSectionHeader('DÉPENSES QUOTIDIENNES'),
+            _buildSectionHeader('DÉPENSES QUOTIDIENNES', totalDaily, netSalary, AppColors.chartYellow),
             const SizedBox(height: 12),
             _buildCategoryGroupCard(_dailyCategories, netSalary, allowDelete: true, onAdd: () => _showAddCategoryDialog(_dailyCategories, 'Dépense', AppColors.accentEmerald)),
 
@@ -553,15 +569,38 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: AppColors.textSecondary,
-        fontSize: 11,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 0.8,
-      ),
+  Widget _buildSectionHeader(String title, double totalAmount, double netSalary, Color accentColor) {
+    final pct = netSalary > 0 ? (totalAmount / netSalary * 100) : 0.0;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: accentColor.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+          ),
+          child: Text(
+            'Total : ${totalAmount.toStringAsFixed(2)} €  •  ${pct.toStringAsFixed(1)}%',
+            style: TextStyle(
+              color: accentColor,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -654,7 +693,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
           // Icon Container
@@ -732,37 +771,41 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                
-                // Display both % and € clearly side-by-side with equal visual weight!
-                Row(
-                  children: [
-                    Text(
-                      item.isPercentage
-                          ? '= ${effectiveAmt.toStringAsFixed(2)} € / mois'
-                          : '= ${effectivePct.toStringAsFixed(1)}% du salaire',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
           const SizedBox(width: 12),
 
+          // Calculated Secondary Value Badge (Equal Font Size & High Contrast)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: Text(
+              item.isPercentage
+                  ? '= ${effectiveAmt.toStringAsFixed(2)} €'
+                  : '= ${effectivePct.toStringAsFixed(1)} %',
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
           // Primary Value Button Box (Tap to edit)
           GestureDetector(
             onTap: () => _showEditAmountDialog(item, netSalary),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.5)),
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
                 ],
@@ -773,7 +816,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   Text(
                     item.isPercentage ? '${item.amount.toStringAsFixed(1)} %' : '${item.amount.toStringAsFixed(0)} €',
                     style: const TextStyle(
-                      color: AppColors.textPrimary,
+                      color: AppColors.accentCyan,
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
                     ),
