@@ -62,6 +62,24 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     RuleCategoryItem(id: 'day-2', name: 'Tampon / Marge €', amount: 0, isPercentage: false, iconType: 'basket', iconBgColor: AppColors.accentEmerald),
   ];
 
+  Widget _buildGaugeLegend(String label, double amount, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '$label: ${amount.toStringAsFixed(0)}€',
+          style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+
   void _showAddCategoryDialog(List<RuleCategoryItem> targetList, String defaultGroup, Color color) {
     final titleController = TextEditingController();
     final amountController = TextEditingController(text: '10');
@@ -200,7 +218,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
-  void _showEditAmountDialog(RuleCategoryItem item) {
+  void _showEditAmountDialog(RuleCategoryItem item, double netSalary) {
     final amountController = TextEditingController(text: item.amount.toStringAsFixed(item.isPercentage ? 1 : 0));
     bool isPercentage = item.isPercentage;
 
@@ -272,15 +290,51 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: amountController,
-                    keyboardType: TextInputType.number,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: isPercentage ? 'Pourcentage (%)' : 'Montant mensuel (€)',
-                      suffixText: isPercentage ? '%' : '€',
-                    ),
-                    style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: amountController,
+                    builder: (context, val, _) {
+                      final inputNum = double.tryParse(val.text.trim()) ?? 0.0;
+                      final calcVal = isPercentage
+                          ? (netSalary * inputNum / 100)
+                          : (netSalary > 0 ? (inputNum / netSalary * 100) : 0.0);
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TextField(
+                            controller: amountController,
+                            keyboardType: TextInputType.number,
+                            autofocus: true,
+                            decoration: InputDecoration(
+                              labelText: isPercentage ? 'Pourcentage (%)' : 'Montant mensuel (€)',
+                              suffixText: isPercentage ? '%' : '€',
+                            ),
+                            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.cardBackground,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Équivalence exacte :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                Text(
+                                  isPercentage
+                                      ? '= ${calcVal.toStringAsFixed(2)} € / mois'
+                                      : '= ${calcVal.toStringAsFixed(1)} % du salaire net',
+                                  style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -361,7 +415,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Radiant Gradient Card — RESTE À VIVRE ESTIMÉ
+            // Radiant Gradient Card — RESTE À VIVRE & ALLOCATION GAUGE
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
@@ -378,46 +432,95 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               ),
               child: Column(
                 children: [
-                  const Text(
-                    'RESTE À VIVRE ESTIMÉ',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'RESTE À VIVRE ESTIMÉ',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          'Revenu : ${netSalary.toStringAsFixed(2)} €',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${resteAVivre.toStringAsFixed(2)} €',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        '${resteAVivre.toStringAsFixed(2)} €',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '${(netSalary > 0 ? (resteAVivre / netSalary * 100) : 0).toStringAsFixed(1)} % du net',
+                        style: const TextStyle(
+                          color: AppColors.accentEmerald,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(12),
+                  
+                  // Visual Progress Gauge Bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox(
+                      height: 10,
+                      child: Row(
+                        children: [
+                          if (netSalary > 0) ...[
+                            Expanded(
+                              flex: ((totalFixed / netSalary) * 100).round().clamp(1, 100),
+                              child: Container(color: AppColors.chartRed),
+                            ),
+                            Expanded(
+                              flex: ((totalSavings / netSalary) * 100).round().clamp(1, 100),
+                              child: Container(color: AppColors.chartBlue),
+                            ),
+                            Expanded(
+                              flex: ((totalDaily / netSalary) * 100).round().clamp(1, 100),
+                              child: Container(color: AppColors.chartYellow),
+                            ),
+                            Expanded(
+                              flex: ((resteAVivre / netSalary) * 100).round().clamp(0, 100),
+                              child: Container(color: AppColors.accentEmerald),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.wallet_rounded, color: Colors.white, size: 16),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Basé sur un revenu net de ${netSalary.toStringAsFixed(2)} €',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildGaugeLegend('Charges', totalFixed, AppColors.chartRed),
+                      _buildGaugeLegend('Épargne PEA/LA', totalSavings, AppColors.chartBlue),
+                      _buildGaugeLegend('Quotidien', totalDaily, AppColors.chartYellow),
+                      _buildGaugeLegend('Reste', resteAVivre, AppColors.accentEmerald),
+                    ],
                   ),
                 ],
               ),
@@ -551,7 +654,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     }
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           // Icon Container
@@ -565,81 +668,127 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
           ),
           const SizedBox(width: 14),
 
-          // Name & Percentage / Amount Subtext
+          // Name & Mode Switcher Chip
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Text(
+                        item.name,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: item.isPercentage ? AppColors.accentCyan.withValues(alpha: 0.2) : AppColors.surface,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: item.isPercentage ? AppColors.accentCyan.withValues(alpha: 0.5) : AppColors.borderSubtle),
-                      ),
-                      child: Text(
-                        item.isPercentage ? '% Ratio' : '€ Fixe',
-                        style: TextStyle(
-                          color: item.isPercentage ? AppColors.accentCyan : AppColors.textMuted,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                    const SizedBox(width: 8),
+                    
+                    // Interactive Mode Toggle Chip (% vs €)
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (item.isPercentage) {
+                            // Switch from % to Nominal €
+                            item.amount = double.parse(effectiveAmt.toStringAsFixed(2));
+                            item.isPercentage = false;
+                          } else {
+                            // Switch from Nominal € to %
+                            item.amount = double.parse(effectivePct.toStringAsFixed(1));
+                            item.isPercentage = true;
+                          }
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: item.isPercentage ? AppColors.accentCyan.withValues(alpha: 0.15) : AppColors.surface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: item.isPercentage ? AppColors.accentCyan.withValues(alpha: 0.5) : AppColors.borderSubtle,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              item.isPercentage ? '% Ratio' : '€ Fixe',
+                              style: TextStyle(
+                                color: item.isPercentage ? AppColors.accentCyan : AppColors.textSecondary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.swap_horiz_rounded, size: 12, color: item.isPercentage ? AppColors.accentCyan : AppColors.textMuted),
+                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  item.isPercentage
-                      ? 'Valeur calculée : ${effectiveAmt.toStringAsFixed(2)} €'
-                      : '${effectivePct.toStringAsFixed(1)}% du revenu',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
+                const SizedBox(height: 4),
+                
+                // Display both % and € clearly side-by-side with equal visual weight!
+                Row(
+                  children: [
+                    Text(
+                      item.isPercentage
+                          ? '= ${effectiveAmt.toStringAsFixed(2)} € / mois'
+                          : '= ${effectivePct.toStringAsFixed(1)}% du salaire',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 12),
 
-          // Amount Box (Tap to edit amount)
+          // Primary Value Button Box (Tap to edit)
           GestureDetector(
-            onTap: () => _showEditAmountDialog(item),
+            onTap: () => _showEditAmountDialog(item, netSalary),
             child: Container(
-              width: 110,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderSubtle),
+                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
+                ],
               ),
-              alignment: Alignment.centerRight,
-              child: Text(
-                item.isPercentage ? '${item.amount.toStringAsFixed(1)} %' : '${item.amount.toStringAsFixed(0)} €',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.isPercentage ? '${item.amount.toStringAsFixed(1)} %' : '${item.amount.toStringAsFixed(0)} €',
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.edit_rounded, color: AppColors.accentCyan, size: 14),
+                ],
               ),
             ),
           ),
 
           if (allowDelete) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 20),
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
               onPressed: onDelete,
             ),
           ],
