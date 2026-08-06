@@ -2342,30 +2342,45 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                               ),
                                             ],
                                             const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: record.incomeTaxAmount != 0.0
-                                                    ? AppColors.accentRose.withValues(alpha: 0.15)
-                                                    : AppColors.accentEmerald.withValues(alpha: 0.15),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              child: Text(
-                                                'PAS: ${record.incomeTaxAmount != 0.0 ? record.incomeTaxAmount.toStringAsFixed(2) : "0.00"} € (${record.incomeTaxRatePercent.toStringAsFixed(1)}%)',
-                                                style: TextStyle(
-                                                  color: record.incomeTaxAmount != 0.0 ? AppColors.accentRose : AppColors.accentEmerald,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.bold,
+                                            Builder(builder: (context) {
+                                              final bool hasPas = record.incomeTaxAmount.abs() > 0.01;
+                                              final badgeBg = hasPas
+                                                  ? AppColors.accentRose.withValues(alpha: 0.15)
+                                                  : AppColors.cardBackground;
+                                              final badgeColor = hasPas ? AppColors.accentRose : AppColors.textMuted;
+
+                                              return Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: badgeBg,
+                                                  borderRadius: BorderRadius.circular(6),
                                                 ),
-                                              ),
-                                            ),
+                                                child: Text(
+                                                  'PAS: ${hasPas ? record.incomeTaxAmount.toStringAsFixed(2) : "0.00"} € (${record.incomeTaxRatePercent.toStringAsFixed(1)}%)',
+                                                  style: TextStyle(
+                                                    color: badgeColor,
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              );
+                                            }),
                                           ],
                                         ),
                                         const SizedBox(height: 4),
-                                        Text(
-                                          'Net Social : ${record.netSocial.toStringAsFixed(2)} € • ${record.notes ?? record.status}',
-                                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                                        ),
+                                        Builder(builder: (context) {
+                                          String cleanNotes = (record.notes ?? '').trim();
+                                          if (cleanNotes.contains('Net Social')) {
+                                            cleanNotes = cleanNotes.split('—').first.trim();
+                                          }
+                                          final String extraLabel = (cleanNotes.isNotEmpty && cleanNotes != 'Employeur')
+                                              ? ' • $cleanNotes'
+                                              : '';
+                                          return Text(
+                                            'Net Social : ${record.netSocial.toStringAsFixed(2)} €$extraLabel',
+                                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                          );
+                                        }),
                                       ],
                                     ),
                                   ),

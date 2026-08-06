@@ -107,7 +107,7 @@ class RealParsedPayslip {
       bonusDescription: bonusDescription,
       bonusAmount: bonusAmount,
       updatedAt: DateTime.now(),
-      notes: '$employerName — Net Social: ${computedNetSocial > 0 ? computedNetSocial.toStringAsFixed(2) : "N/A"} €',
+      notes: employerName,
     );
   }
 }
