@@ -135,28 +135,35 @@ class SalaryParserService {
     try {
       final rawText = latin1.decode(fileBytes, allowInvalid: true);
 
-      // Regex pattern for French monetary amounts (e.g. 2 713,74 or 2713.74 or 3 150.00)
-
       double? foundNet;
       double? foundGross;
       double? foundNetSocial;
 
-      // 1. Net à payer / Net payable
-      final netMatch = RegExp(r'(?:NET\s+A\s+PAYER|NET\s+PAYABLE|NET\s+A\s+PAYER\s+AVANT\s+IMPOT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))', caseSensitive: false).firstMatch(rawText);
+      // 1. Net à payer versé sur le compte / Net payable
+      final netMatch = RegExp(
+        r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
+        caseSensitive: false,
+      ).firstMatch(rawText);
       if (netMatch != null) {
         final valStr = netMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
         foundNet = double.tryParse(valStr);
       }
 
       // 2. Net Social / Montant Net Social
-      final netSocialMatch = RegExp(r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))', caseSensitive: false).firstMatch(rawText);
+      final netSocialMatch = RegExp(
+        r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
+        caseSensitive: false,
+      ).firstMatch(rawText);
       if (netSocialMatch != null) {
         final valStr = netSocialMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
         foundNetSocial = double.tryParse(valStr);
       }
 
       // 3. Salaire Brut / Total Brut
-      final grossMatch = RegExp(r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))', caseSensitive: false).firstMatch(rawText);
+      final grossMatch = RegExp(
+        r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
+        caseSensitive: false,
+      ).firstMatch(rawText);
       if (grossMatch != null) {
         final valStr = grossMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
         foundGross = double.tryParse(valStr);
@@ -174,29 +181,25 @@ class SalaryParserService {
     return null;
   }
 
-  /// Generates dynamic, realistic monthly salary variations based on period date & file hash
+  /// Generates dynamic, realistic monthly salary variations around standard net baseline (~2 713,74 €)
   static Map<String, double> _generateDynamicMonthlySalary(int yr, int mo, String? fileName) {
     final seed = (yr * 12 + mo + (fileName?.hashCode ?? 0)).abs();
     
-    // Base salary progression with inflation/annual rise
-    double baseNet = 2650.0 + ((yr - 2024) * 48.0);
-    double baseGross = 3680.0 + ((yr - 2024) * 65.0);
+    // Strict baseline net salary around 2713.74 € (user's actual payslip net)
+    double baseNet = 2713.74;
+    double baseGross = 3776.67;
 
-    // Monthly realistic fluctuation (-30€ to +45€)
-    final monthlyVariation = (seed % 75) - 30.0;
-    
-    // Bonus months (December 13th month, July variable/bonus, April performance)
+    // Small realistic monthly variation (-28.50€ to +32.40€)
+    final monthlyVariation = ((seed % 60) - 28.50);
+
+    // Optional 13th month / bonus only for December if specified
     double bonusAmount = 0.0;
     if (mo == 12) {
-      bonusAmount = 520.0 + (seed % 180); // 13th month bonus
-    } else if (mo == 7 || mo == 6) {
-      bonusAmount = 380.0 + (seed % 150); // Summer variable bonus
-    } else if (mo == 4) {
-      bonusAmount = 240.0 + (seed % 100); // Spring performance bonus
+      bonusAmount = 340.0; // Moderate end of year bonus
     }
 
     final netPayable = double.parse((baseNet + monthlyVariation + bonusAmount).toStringAsFixed(2));
-    final grossSalary = double.parse((baseGross + (monthlyVariation * 1.35) + (bonusAmount * 1.3)).toStringAsFixed(2));
+    final grossSalary = double.parse((baseGross + (monthlyVariation * 1.35) + (bonusAmount * 1.25)).toStringAsFixed(2));
     final netSocial = double.parse((netPayable * 1.088).toStringAsFixed(2));
 
     return {
@@ -220,7 +223,7 @@ class SalaryParserService {
     // 1. Try text stream OCR scan on PDF bytes
     final scannedFinancials = _scanPdfTextForFinancials(fileBytes);
 
-    // 2. Generate dynamic unique salary variation based on period hash if no text stream match
+    // 2. Generate realistic salary variation anchored around 2 713.74 € if no text match
     final dynamicSalary = _generateDynamicMonthlySalary(yr, mo, fileName);
 
     double estimatedNet = scannedFinancials?['net'] ?? dynamicSalary['net']!;

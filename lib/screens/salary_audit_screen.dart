@@ -185,8 +185,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
         if (files.isEmpty) return;
 
         int processedCount = 0;
-        String currentFileName = files.first.name;
         List<SalaryRecord> batchRecords = [];
+        StateSetter? modalStateSetter;
 
         showDialog(
           context: context,
@@ -194,6 +194,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
           builder: (ctx) {
             return StatefulBuilder(
               builder: (context, setModalState) {
+                modalStateSetter = setModalState;
                 return AlertDialog(
                   backgroundColor: AppColors.surface,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -207,36 +208,106 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                           style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
-                    ],
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Traitement séquentiel optimisé avec file d\'attente anti-surcharge IA...',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Linear Progress Bar
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: LinearProgressIndicator(
-                          value: processedCount / files.length,
-                          backgroundColor: AppColors.cardBackground,
-                          color: AppColors.accentEmerald,
-                          minHeight: 10,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentCyan.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${((processedCount / files.length) * 100).round()}%',
+                          style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 12),
                         ),
                       ),
-                      const SizedBox(height: 12),
-
-                      Text(
-                        '📄 Analyse : $currentFileName',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 12),
-                      ),
                     ],
+                  ),
+                  content: SizedBox(
+                    width: 440,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'File d\'attente séquentielle IA anti-surcharge en cours...',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Linear Progress Bar
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: files.isNotEmpty ? processedCount / files.length : 0,
+                            backgroundColor: AppColors.cardBackground,
+                            color: AppColors.accentEmerald,
+                            minHeight: 10,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Live Processed List Items Checklist
+                        Container(
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: AppColors.cardBackground,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.borderSubtle),
+                          ),
+                          child: ListView.builder(
+                            itemCount: files.length,
+                            padding: const EdgeInsets.all(8),
+                            itemBuilder: (context, idx) {
+                              final f = files[idx];
+                              final isDone = idx < batchRecords.length;
+                              final isCurrent = idx == batchRecords.length && processedCount < files.length;
+                              final record = isDone ? batchRecords[idx] : null;
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isCurrent ? AppColors.accentCyan.withValues(alpha: 0.1) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    if (isDone)
+                                      const Icon(Icons.check_circle_rounded, color: AppColors.accentEmerald, size: 18)
+                                    else if (isCurrent)
+                                      const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentCyan))
+                                    else
+                                      const Icon(Icons.radio_button_unchecked_rounded, color: AppColors.textMuted, size: 18),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        f.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: isDone || isCurrent ? AppColors.textPrimary : AppColors.textMuted,
+                                          fontSize: 12,
+                                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isDone && record != null)
+                                      Text(
+                                        '${record.netSalary.toStringAsFixed(2)} €',
+                                        style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 12),
+                                      )
+                                    else if (isCurrent)
+                                      const Text(
+                                        'Analyse IA...',
+                                        style: TextStyle(color: AppColors.accentCyan, fontSize: 11, fontStyle: FontStyle.italic),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -247,7 +318,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
         // Process batch sequentially in queue buffer
         for (int i = 0; i < files.length; i++) {
           final file = files[i];
-          currentFileName = file.name;
+          modalStateSetter?.call(() {});
 
           // Render PDF page image
           Uint8List? renderedImg;
@@ -275,6 +346,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
           batchRecords.add(record);
           processedCount = i + 1;
+          modalStateSetter?.call(() {});
         }
 
         // Add all batch records to state notifier
