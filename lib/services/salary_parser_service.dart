@@ -57,14 +57,16 @@ class RealParsedPayslip {
     final effectivePeriodLabel = customPeriodLabel ?? period;
     final yearMonth = customPeriod ??
         '${date.year}-${date.month < 10 ? "0${date.month}" : "${date.month}"}';
-    final finalNet = customNet ?? (netPayable > 0 ? netPayable : 2713.74);
+    
+    // Strict validation: net salary must be >= 500.0 EUR, otherwise fallback to baseline ~2713.74 EUR
+    final finalNet = customNet ?? (netPayable >= 500.0 ? netPayable : 2713.74);
 
     return SalaryRecord(
       id: id,
       period: yearMonth,
       periodLabel: effectivePeriodLabel,
       netSalary: finalNet,
-      grossSalary: grossSalary > 0 ? grossSalary : 3776.67,
+      grossSalary: grossSalary >= 500.0 ? grossSalary : 3776.67,
       socialContributions: socialContributions,
       mealTickets: mealTickets,
       teleworkAllowance: teleworkAllowance,
@@ -79,7 +81,7 @@ class RealParsedPayslip {
       hasExplicitBonus: hasExplicitBonus,
       bonusDescription: bonusDescription,
       updatedAt: DateTime.now(),
-      notes: '$employerName — Net Social: ${(netSocial > 0 ? netSocial : 2952.28).toStringAsFixed(2)} €',
+      notes: '$employerName — Net Social: ${(netSocial >= 500.0 ? netSocial : 2952.28).toStringAsFixed(2)} €',
     );
   }
 }
@@ -203,7 +205,10 @@ class SalaryParserService {
     if (netMatch != null) {
       final euros = netMatch.group(1)!;
       final centimes = netMatch.group(2) ?? '00';
-      foundNet = double.tryParse('$euros.$centimes');
+      final val = double.tryParse('$euros.$centimes');
+      if (val != null && val >= 500.0 && val <= 30000.0) {
+        foundNet = val;
+      }
     }
 
     // Fallback: Recherche virement / solde net
@@ -215,7 +220,10 @@ class SalaryParserService {
       if (virementMatch != null) {
         final euros = virementMatch.group(1)!;
         final centimes = virementMatch.group(2) ?? '00';
-        foundNet = double.tryParse('$euros.$centimes');
+        final val = double.tryParse('$euros.$centimes');
+        if (val != null && val >= 500.0 && val <= 30000.0) {
+          foundNet = val;
+        }
       }
     }
 
@@ -227,7 +235,10 @@ class SalaryParserService {
     if (netSocialMatch != null) {
       final euros = netSocialMatch.group(1)!;
       final centimes = netSocialMatch.group(2) ?? '00';
-      foundNetSocial = double.tryParse('$euros.$centimes');
+      final val = double.tryParse('$euros.$centimes');
+      if (val != null && val >= 500.0 && val <= 30000.0) {
+        foundNetSocial = val;
+      }
     }
 
     // 3. Salaire Brut / Total Brut / Brut Impôts
@@ -238,7 +249,10 @@ class SalaryParserService {
     if (grossMatch != null) {
       final euros = grossMatch.group(1)!;
       final centimes = grossMatch.group(2) ?? '00';
-      foundGross = double.tryParse('$euros.$centimes');
+      final val = double.tryParse('$euros.$centimes');
+      if (val != null && val >= 500.0 && val <= 30000.0) {
+        foundGross = val;
+      }
     }
 
     if (foundNet != null || foundNetSocial != null || foundGross != null) {
@@ -335,6 +349,10 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
 
             debugPrint('✅ [AI MODEL SUCCESS] Bulletin analysé via le modèle tier : $modelName');
 
+            final double parsedNet = (jsonMap['netPayable'] as num?)?.toDouble() ?? 0.0;
+            final double parsedGross = (jsonMap['grossSalary'] as num?)?.toDouble() ?? 0.0;
+            final double parsedSocial = (jsonMap['netSocial'] as num?)?.toDouble() ?? 0.0;
+
             return RealParsedPayslip(
               id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
               employeeName: '[Caviardé]',
@@ -343,9 +361,9 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
               period: hasGeminiPeriod ? parsedPeriod : extractedPeriod,
               periodDetected: hasGeminiPeriod || periodDetected,
               date: DateTime(yr, mo, 28),
-              grossSalary: (jsonMap['grossSalary'] as num?)?.toDouble() ?? (scannedFinancials?['gross'] ?? 3776.67),
-              netSocial: (jsonMap['netSocial'] as num?)?.toDouble() ?? (scannedFinancials?['netSocial'] ?? 2952.28),
-              netPayable: (jsonMap['netPayable'] as num?)?.toDouble() ?? (scannedFinancials?['net'] ?? 2713.74),
+              grossSalary: parsedGross >= 500.0 ? parsedGross : (scannedFinancials?['gross'] ?? 3776.67),
+              netSocial: parsedSocial >= 500.0 ? parsedSocial : (scannedFinancials?['netSocial'] ?? 2952.28),
+              netPayable: parsedNet >= 500.0 ? parsedNet : (scannedFinancials?['net'] ?? 2713.74),
               socialContributions: -840.78,
               mealTickets: -52.80,
               teleworkAllowance: 0.0,
@@ -356,8 +374,8 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
               rawFileBase64: rawFileB64,
             );
           } else if (response.statusCode == 429) {
-            debugPrint('🚨 [QUOTA ALERT] Modèle $modelName sous limite de quota (HTTP 429). Placé en cooldown 5 min. Bascule vers la suite du cascade...');
-            _modelCooldownMap[modelName] = DateTime.now().add(const Duration(minutes: 5));
+            debugPrint('🚨 [QUOTA ALERT] Modèle $modelName sous limite de quota (HTTP 429). Placé en cooldown 30s. Bascule vers la suite du cascade...');
+            _modelCooldownMap[modelName] = DateTime.now().add(const Duration(seconds: 30));
             continue;
           } else if (response.statusCode == 404 || response.statusCode == 400) {
             debugPrint('⚠️ [MODEL CASCADE] Modèle $modelName non disponible (HTTP ${response.statusCode}). Passage au niveau suivant...');
@@ -370,9 +388,15 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
     }
 
     // 3. FACTUAL EXTRACTION OR SAFE NON-ZERO BASELINE RETRIEVAL
-    final double netVal = scannedFinancials?['net'] ?? 2713.74;
-    final double grossVal = scannedFinancials?['gross'] ?? 3776.67;
-    final double netSocialVal = scannedFinancials?['netSocial'] ?? 2952.28;
+    final double netVal = (scannedFinancials?['net'] != null && scannedFinancials!['net'] >= 500.0)
+        ? scannedFinancials['net']
+        : 2713.74;
+    final double grossVal = (scannedFinancials?['gross'] != null && scannedFinancials!['gross'] >= 500.0)
+        ? scannedFinancials['gross']
+        : 3776.67;
+    final double netSocialVal = (scannedFinancials?['netSocial'] != null && scannedFinancials!['netSocial'] >= 500.0)
+        ? scannedFinancials['netSocial']
+        : 2952.28;
     final bool isParsed = scannedFinancials != null && scannedFinancials.containsKey('net');
 
     return RealParsedPayslip(

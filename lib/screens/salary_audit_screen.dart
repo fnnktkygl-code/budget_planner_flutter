@@ -354,8 +354,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
             extractedText = await _extractPdfTextFromBytes(file.bytes!);
           }
 
-          // Rate-limiting delay buffer to prevent API overload
-          await Future.delayed(const Duration(milliseconds: 150));
+          // Rate-limiting delay buffer to prevent API quota overload (RPM pacing)
+          await Future.delayed(const Duration(milliseconds: 600));
 
           // Parse document values
           final parsed = await SalaryParserService.parseDocument(
