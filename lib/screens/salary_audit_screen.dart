@@ -1216,6 +1216,117 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     );
   }
 
+  void _showEditSalaryRecordDialog(BuildContext context, SalaryRecord record) {
+    final netCtrl = TextEditingController(text: record.netSalary.toStringAsFixed(2));
+    final grossCtrl = TextEditingController(text: (record.grossSalary ?? 0.0).toStringAsFixed(2));
+    final netSocialCtrl = TextEditingController(text: record.netSocial.toStringAsFixed(2));
+    final labelCtrl = TextEditingController(text: record.periodLabel);
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.edit_note_rounded, color: AppColors.accentCyan, size: 22),
+              SizedBox(width: 10),
+              Text('Ajuster le Bulletin de Salaire', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Période : ${record.periodLabel}',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: labelCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Intitulé Période',
+                    border: OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: netCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Net en Banque (€)',
+                    suffixText: '€',
+                    border: OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: grossCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Salaire Brut (€)',
+                    suffixText: '€',
+                    border: OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: netSocialCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Montant Net Social (€)',
+                    suffixText: '€',
+                    border: OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textSecondary)),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Mettre à Jour'),
+              onPressed: () {
+                final newNet = double.tryParse(netCtrl.text) ?? record.netSalary;
+                final newGross = double.tryParse(grossCtrl.text) ?? record.grossSalary;
+                final newNetSocial = double.tryParse(netSocialCtrl.text) ?? record.netSocial;
+                final updated = record.copyWith(
+                  periodLabel: labelCtrl.text.isNotEmpty ? labelCtrl.text : record.periodLabel,
+                  netSalary: newNet,
+                  grossSalary: newGross,
+                  netSocial: newNetSocial,
+                );
+                ref.read(salaryProvider.notifier).updateRecord(updated);
+                Navigator.of(ctx).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('✓ Bulletin ${record.periodLabel} mis à jour avec le salaire net de ${newNet.toStringAsFixed(2)} €'),
+                    backgroundColor: AppColors.accentEmerald,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showExportImportBackupDialog(BuildContext context) {
     final jsonExport = ref.read(salaryProvider.notifier).exportAppDataJson();
     final jsonImportController = TextEditingController();
@@ -2270,6 +2381,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                       style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
                                     ),
                                   ],
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit_rounded, color: AppColors.accentCyan, size: 18),
+                                  tooltip: 'Modifier ce bulletin',
+                                  onPressed: () => _showEditSalaryRecordDialog(context, record),
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),

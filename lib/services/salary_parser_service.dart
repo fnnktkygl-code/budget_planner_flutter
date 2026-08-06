@@ -401,14 +401,14 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
     List<Map<String, dynamic>> parts = [
       {
         'text': '''
-Tu es un expert comptable spécialisé dans la paie française.
+Tu es un expert comptable français spécialisé dans l'analyse de bulletins de salaire.
 Analyse les ${chunk.length} bulletins de paie fournis dans ce message.
 Pour chaque bulletin (identifié par son index de 0 à ${chunk.length - 1}), extrait les données et renvoie STRICTEMENT un TABLEAU JSON d'objets :
 [
   {
     "index": 0,
     "fileName": "nom_fichier.pdf",
-    "period": "YYYY-MM (ex: 2026-03)",
+    "period": "YYYY-MM (ex: 2025-09)",
     "grossSalary": 3800.0,
     "netSocial": 2952.28,
     "netPayable": 2713.74,
@@ -416,7 +416,11 @@ Pour chaque bulletin (identifié par son index de 0 à ${chunk.length - 1}), ext
     "bonusDescription": null
   }
 ]
-- netPayable doit être STRICTEMENT le Salaire Net VERSÉ sur le compte bancaire après prélèvement à la source.
+CONSIGNES STRICTES D'EXTRACTION DE PAIE FRANÇAISE :
+1. period: Identifie l'année et le mois du bulletin de salaire sous le format STRICT YYYY-MM (ex: 2025-09 pour Septembre 2025, 2025-10 pour Octobre 2025). NE PAS se tromper d'année !
+2. netPayable: Extraire STRICTEMENT le MONTANT NET PAYÉ ET VERSÉ SUR LE COMPTE BANCAIRE ("Net à Payer", "Net Payé", "Net Versé", "Net Effectif", "Net à payer avant PAS" moins impôt). ATTENTION: Ne JAMAIS prendre le "Net Imposable" ou "Cumul Net Imposable" !
+3. netSocial: Extraire le "Net Social" ou "Net avant impôt sur le revenu".
+4. grossSalary: Extraire le Salaire Brut (Total Brut).
 '''
       }
     ];
@@ -497,11 +501,23 @@ Pour chaque bulletin (identifié par son index de 0 à ${chunk.length - 1}), ext
         final item = (idx >= 0 && idx < chunk.length) ? chunk[idx] : chunk[0];
         final extractedInfo = _extractPeriodFromFileName(item.fileName);
         final String extractedPeriod = extractedInfo != null ? extractedInfo['period'] : 'Période Inconnue';
-        final int yr = extractedInfo != null ? extractedInfo['year'] : 2026;
-        final int mo = extractedInfo != null ? extractedInfo['month'] : 7;
 
         final parsedPeriod = obj['period'] as String?;
         final bool hasGeminiPeriod = parsedPeriod != null && parsedPeriod.isNotEmpty && parsedPeriod != 'null';
+
+        int yr = 2026;
+        int mo = 7;
+
+        if (hasGeminiPeriod && parsedPeriod.contains('-')) {
+          final pParts = parsedPeriod.split('-');
+          if (pParts.length >= 2) {
+            yr = int.tryParse(pParts[0]) ?? yr;
+            mo = int.tryParse(pParts[1]) ?? mo;
+          }
+        } else if (extractedInfo != null) {
+          yr = extractedInfo['year'];
+          mo = extractedInfo['month'];
+        }
 
         parsedList.add(
           RealParsedPayslip(
