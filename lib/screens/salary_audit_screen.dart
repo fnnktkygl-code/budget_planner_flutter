@@ -2491,7 +2491,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                           const SizedBox(width: 6),
                                         ],
                                         Text(
-                                          '${record.regularNetSalary.toStringAsFixed(2)} €',
+                                          '${record.netSalary.toStringAsFixed(2)} €',
                                           style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 15),
                                         ),
                                       ],
