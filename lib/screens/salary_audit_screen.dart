@@ -448,7 +448,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     );
   }
 
-  Widget _buildRealDocumentView() {
+  Widget _buildCanvasContent(bool hasFileLoaded) {
     // 1. EMPTY STATE : No file imported yet
     if (_customFileBytes == null || _customFileBytes!.isEmpty) {
       return Center(
@@ -508,17 +508,94 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
       );
     }
 
-    final Image imageWidget = _renderedPdfImageBytes != null
-        ? Image.memory(_renderedPdfImageBytes!, fit: BoxFit.contain, width: double.infinity, height: double.infinity)
-        : Image.memory(_customFileBytes!, fit: BoxFit.contain, width: double.infinity, height: double.infinity);
+    final Uint8List activeBytes = _renderedPdfImageBytes ?? _customFileBytes!;
 
-    // 3. INTERACTIVE PINCH-TO-ZOOM VIEWPORT
+    // 3. UNIFIED PINCH-TO-ZOOM VIEWPORT (Document Image & Redaction Canvas combined)
     return InteractiveViewer(
       transformationController: _transformationController,
-      minScale: 0.5,
-      maxScale: 5.0,
-      clipBehavior: Clip.hardEdge,
-      child: imageWidget,
+      alignment: Alignment.center,
+      minScale: 0.8,
+      maxScale: 4.0,
+      boundaryMargin: const EdgeInsets.all(300),
+      child: Center(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // PDF Document Image Page
+            Image.memory(
+              activeBytes,
+              fit: BoxFit.contain,
+            ),
+
+            // Redaction Drawing Overlay
+            if (_canvasTab == 0 && hasFileLoaded)
+              Positioned.fill(
+                child: GestureDetector(
+                  onPanStart: (details) {
+                    final pos = details.localPosition;
+                    setState(() {
+                      _startDrag = pos;
+                      _currentDrag = pos;
+                      if (_selectedTool == RedactionTool.paint) {
+                        _currentPaintPoints = [pos];
+                      }
+                    });
+                  },
+                  onPanUpdate: (details) {
+                    final pos = details.localPosition;
+                    setState(() {
+                      _currentDrag = pos;
+                      if (_selectedTool == RedactionTool.paint) {
+                        _currentPaintPoints.add(pos);
+                      }
+                    });
+                  },
+                  onPanEnd: (_) {
+                    if (_startDrag != null && _currentDrag != null) {
+                      final rect = Rect.fromPoints(_startDrag!, _currentDrag!);
+                      setState(() {
+                        if (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle) {
+                          _redactor.addShape(
+                            RedactionShape(
+                              id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
+                              type: _selectedTool,
+                              rect: rect,
+                            ),
+                          );
+                        } else if (_selectedTool == RedactionTool.paint && _currentPaintPoints.isNotEmpty) {
+                          _redactor.addShape(
+                            RedactionShape(
+                              id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
+                              type: RedactionTool.paint,
+                              points: List.from(_currentPaintPoints),
+                            ),
+                          );
+                        }
+                        _startDrag = null;
+                        _currentDrag = null;
+                        _currentPaintPoints = [];
+                      });
+                    }
+                  },
+                  child: CustomPaint(
+                    size: Size.infinite,
+                    painter: RedactionCanvasPainter(
+                      shapes: _redactor.shapes,
+                      isMaskVisible: _isMaskVisible,
+                      currentDraftShape: _startDrag != null && _currentDrag != null && (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle)
+                          ? RedactionShape(
+                              id: 'draft',
+                              type: _selectedTool,
+                              rect: Rect.fromPoints(_startDrag!, _currentDrag!),
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -729,7 +806,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               width: double.infinity,
               child: Stack(
                 children: [
-                  // Full Document Paper Card
+                  // Full Document Paper Card Container
                   Container(
                     width: double.infinity,
                     height: 540,
@@ -743,79 +820,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(20),
-                      child: Stack(
-                        children: [
-                          // Real Converted PDF Image with Zoom Support
-                          Positioned.fill(child: _buildRealDocumentView()),
-
-                          // Interactive Redaction Canvas Overlay
-                          if (_canvasTab == 0 && hasFileLoaded)
-                            Positioned.fill(
-                              child: GestureDetector(
-                                onPanStart: (details) {
-                                  final pos = details.localPosition;
-                                  setState(() {
-                                    _startDrag = pos;
-                                    _currentDrag = pos;
-                                    if (_selectedTool == RedactionTool.paint) {
-                                      _currentPaintPoints = [pos];
-                                    }
-                                  });
-                                },
-                                onPanUpdate: (details) {
-                                  final pos = details.localPosition;
-                                  setState(() {
-                                    _currentDrag = pos;
-                                    if (_selectedTool == RedactionTool.paint) {
-                                      _currentPaintPoints.add(pos);
-                                    }
-                                  });
-                                },
-                                onPanEnd: (_) {
-                                  if (_startDrag != null && _currentDrag != null) {
-                                    final rect = Rect.fromPoints(_startDrag!, _currentDrag!);
-                                    setState(() {
-                                      if (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle) {
-                                        _redactor.addShape(
-                                          RedactionShape(
-                                            id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
-                                            type: _selectedTool,
-                                            rect: rect,
-                                          ),
-                                        );
-                                      } else if (_selectedTool == RedactionTool.paint && _currentPaintPoints.isNotEmpty) {
-                                        _redactor.addShape(
-                                          RedactionShape(
-                                            id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
-                                            type: RedactionTool.paint,
-                                            points: List.from(_currentPaintPoints),
-                                          ),
-                                        );
-                                      }
-                                      _startDrag = null;
-                                      _currentDrag = null;
-                                      _currentPaintPoints = [];
-                                    });
-                                  }
-                                },
-                                child: CustomPaint(
-                                  size: Size.infinite,
-                                  painter: RedactionCanvasPainter(
-                                    shapes: _redactor.shapes,
-                                    isMaskVisible: _isMaskVisible,
-                                    currentDraftShape: _startDrag != null && _currentDrag != null && (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle)
-                                        ? RedactionShape(
-                                            id: 'draft',
-                                            type: _selectedTool,
-                                            rect: Rect.fromPoints(_startDrag!, _currentDrag!),
-                                          )
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                      child: _buildCanvasContent(hasFileLoaded),
                     ),
                   ),
 
