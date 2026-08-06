@@ -448,6 +448,62 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     ref.read(salaryProvider.notifier).setActiveBaseline(record.id);
   }
 
+  void _exportBackupJson() {
+    try {
+      final jsonStr = ref.read(salaryProvider.notifier).exportAppDataJson();
+      if (kIsWeb) {
+        final bytes = utf8.encode(jsonStr);
+        final base64Str = base64Encode(bytes);
+        final anchor = js.context['document'].callMethod('createElement', ['a']);
+        anchor['href'] = 'data:application/json;charset=utf-8;base64,$base64Str';
+        anchor['download'] = 'aurabudget_backup_${DateTime.now().millisecondsSinceEpoch}.json';
+        anchor.callMethod('click', []);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('💾 Sauvegarde JSON téléchargée avec succès !'),
+          backgroundColor: AppColors.accentEmerald,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[SalaryAuditScreen] Export JSON exception: $e');
+    }
+  }
+
+  Future<void> _importBackupJson() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty && result.files.first.bytes != null) {
+        final jsonStr = utf8.decode(result.files.first.bytes!);
+        final success = ref.read(salaryProvider.notifier).importAppDataJson(jsonStr);
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🎉 Restauration réussie : vos données ont été réimportées avec succès !'),
+              backgroundColor: AppColors.accentEmerald,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Fichier JSON invalide ou corrompu.'),
+              backgroundColor: AppColors.accentRose,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[SalaryAuditScreen] Import JSON exception: $e');
+    }
+  }
+
   void _showExtractionConfirmationDialog(BuildContext context, RealParsedPayslip parsed) {
     _selectedYear = parsed.date.year;
     _selectedMonth = parsed.date.month;
@@ -2006,21 +2062,49 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '${filteredRecords.length} bulletin(s) trouvé(s)',
+                              '${filteredRecords.length} bulletin(s) trouvé(s) • Stockage IndexedDB Multi-Go Actif',
                               style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                             ),
                           ],
                         ),
-                        if (records.isNotEmpty)
-                          TextButton.icon(
-                            style: TextButton.styleFrom(foregroundColor: AppColors.accentRose),
-                            icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-                            label: const Text('Vider l\'historique', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                            onPressed: () {
-                              _clearCanvasDocument();
-                              ref.read(salaryProvider.notifier).clearAllRecords();
-                            },
-                          ),
+                        Row(
+                          children: [
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.accentCyan.withValues(alpha: 0.15),
+                                foregroundColor: AppColors.accentCyan,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.download_rounded, size: 16),
+                              label: const Text('Sauvegarder JSON', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              onPressed: _exportBackupJson,
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.accentPurple.withValues(alpha: 0.15),
+                                foregroundColor: AppColors.accentPurple,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.upload_rounded, size: 16),
+                              label: const Text('Restaurer', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              onPressed: _importBackupJson,
+                            ),
+                            if (records.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              IconButton(
+                                tooltip: 'Vider l\'historique',
+                                icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.accentRose, size: 20),
+                                onPressed: () {
+                                  _clearCanvasDocument();
+                                  ref.read(salaryProvider.notifier).clearAllRecords();
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),

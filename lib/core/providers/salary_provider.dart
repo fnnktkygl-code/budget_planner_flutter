@@ -7,6 +7,8 @@ import '../../models/tax_adjustment.dart';
 import '../../models/temporary_expense.dart';
 import '../../services/salary_analyzer_service.dart';
 
+import '../../services/indexed_db_service.dart';
+
 class SalaryState {
   final List<SalaryRecord> records;
   final List<TaxAdjustment> taxAdjustments;
@@ -101,6 +103,19 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       } catch (_) {}
     }
 
+    // Attempt to load full records with PDF images from Web IndexedDB
+    if (kIsWeb) {
+      try {
+        final idbRecords = await IndexedDbService.loadFullRecords();
+        if (idbRecords != null && idbRecords.isNotEmpty && idbRecords.length >= list.length) {
+          list = idbRecords;
+          list.sort((a, b) => b.period.compareTo(a.period));
+        }
+      } catch (e) {
+        debugPrint('[SalaryNotifier] IndexedDB load exception: $e');
+      }
+    }
+
     if (rawTaxJson != null && rawTaxJson.isNotEmpty) {
       try {
         final List<dynamic> parsedTax = jsonDecode(rawTaxJson);
@@ -127,7 +142,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       accountBalance: savedBalance,
     );
 
-    // Save to ensure v3 is populated with migrated data
+    // Save to ensure v3 and IndexedDB are populated
     _save();
   }
 
@@ -136,38 +151,29 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       'version': 3,
       'exportedAt': DateTime.now().toIso8601String(),
       'accountBalance': state.accountBalance,
-      'records': state.records.map((r) => r.toJson()).toList(),
+      'records': state.records.map((r) => r.toJson(includeBinary: true)).toList(),
       'taxAdjustments': state.taxAdjustments.map((t) => t.toJson()).toList(),
       'temporaryExpenses': state.temporaryExpenses.map((e) => e.toJson()).toList(),
     };
     return jsonEncode(data);
   }
 
-  bool importAppDataJson(String rawJsonStr) {
+  bool importAppDataJson(String jsonStr) {
     try {
-      final Map<String, dynamic> data = jsonDecode(rawJsonStr);
+      final Map<String, dynamic> data = jsonDecode(jsonStr);
+      final List<dynamic> rParsed = data['records'] ?? [];
+      final List<dynamic> tParsed = data['taxAdjustments'] ?? [];
+      final List<dynamic> eParsed = data['temporaryExpenses'] ?? [];
       final double balance = (data['accountBalance'] as num?)?.toDouble() ?? 1740.0;
 
-      List<SalaryRecord> rList = [];
-      if (data['records'] != null) {
-        final List<dynamic> rParsed = data['records'];
-        rList = rParsed.map((item) => SalaryRecord.fromJson(item)).toList();
-        rList.sort((a, b) => b.period.compareTo(a.period));
-        if (rList.isNotEmpty && !rList.any((r) => r.isLatestActive)) {
-          rList[0] = rList[0].copyWith(isLatestActive: true);
-        }
-      }
+      final rList = rParsed.map((item) => SalaryRecord.fromJson(item)).toList();
+      final tList = tParsed.map((item) => TaxAdjustment.fromJson(item)).toList();
+      final eList = eParsed.map((item) => TemporaryExpense.fromJson(item)).toList();
 
-      List<TaxAdjustment> tList = [];
-      if (data['taxAdjustments'] != null) {
-        final List<dynamic> tParsed = data['taxAdjustments'];
-        tList = tParsed.map((item) => TaxAdjustment.fromJson(item)).toList();
-      }
+      rList.sort((a, b) => b.period.compareTo(a.period));
 
-      List<TemporaryExpense> eList = [];
-      if (data['temporaryExpenses'] != null) {
-        final List<dynamic> eParsed = data['temporaryExpenses'];
-        eList = eParsed.map((item) => TemporaryExpense.fromJson(item)).toList();
+      if (rList.isNotEmpty && !rList.any((r) => r.isLatestActive)) {
+        rList[0] = rList[0].copyWith(isLatestActive: true);
       }
 
       state = SalaryState(
@@ -188,15 +194,13 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Attempt to save full records first. If Web LocalStorage quota is exceeded due to heavy base64 files,
-      // fallback to lightweight JSON (excluding heavy binary images) so financial data is NEVER lost!
-      try {
-        final jsonStr = jsonEncode(state.records.map((r) => r.toJson(includeBinary: true)).toList());
-        await prefs.setString('aura_salary_records_v3', jsonStr);
-      } catch (e) {
-        debugPrint('[SalaryNotifier] Quota exceeded on full save, falling back to lightweight JSON without binaries: $e');
-        final cleanJsonStr = jsonEncode(state.records.map((r) => r.toJson(includeBinary: false)).toList());
-        await prefs.setString('aura_salary_records_v3', cleanJsonStr);
+      // Save lightweight financial JSON to SharedPreferences
+      final cleanJsonStr = jsonEncode(state.records.map((r) => r.toJson(includeBinary: false)).toList());
+      await prefs.setString('aura_salary_records_v3', cleanJsonStr);
+
+      // Save full records with PDF images to Web IndexedDB (Multi-GB quota!)
+      if (kIsWeb && state.records.isNotEmpty) {
+        IndexedDbService.saveFullRecords(state.records);
       }
 
       final taxJsonStr = jsonEncode(state.taxAdjustments.map((t) => t.toJson()).toList());
