@@ -189,6 +189,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () {
@@ -208,7 +209,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     });
                     Navigator.pop(ctx);
                   },
-                  child: const Text('Ajouter'),
+                  child: const Text('Ajouter', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -219,6 +220,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
   }
 
   void _showEditAmountDialog(RuleCategoryItem item, double netSalary) {
+    final nameController = TextEditingController(text: item.name);
     final amountController = TextEditingController(text: item.amount.toStringAsFixed(item.isPercentage ? 1 : 0));
     bool isPercentage = item.isPercentage;
 
@@ -230,10 +232,25 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             return AlertDialog(
               backgroundColor: AppColors.surface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text('Modifier ${item.name}', style: const TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+              title: Row(
+                children: const [
+                  Icon(Icons.edit_note_rounded, color: AppColors.accentCyan),
+                  SizedBox(width: 10),
+                  Text('Modifier la catégorie', style: TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+                ],
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nom de la catégorie',
+                    ),
+                    style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  
                   // Mode Selector: Nominal € vs Percentage %
                   Container(
                     padding: const EdgeInsets.all(4),
@@ -304,7 +321,6 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                           TextField(
                             controller: amountController,
                             keyboardType: TextInputType.number,
-                            autofocus: true,
                             decoration: InputDecoration(
                               labelText: isPercentage ? 'Pourcentage (%)' : 'Montant mensuel (€)',
                               suffixText: isPercentage ? '%' : '€',
@@ -344,16 +360,22 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
                 ),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                   onPressed: () {
+                    final newName = nameController.text.trim().isEmpty ? item.name : nameController.text.trim();
                     final newAmount = double.tryParse(amountController.text.trim()) ?? item.amount;
                     setState(() {
+                      item.name = newName;
                       item.amount = newAmount;
                       item.isPercentage = isPercentage;
                     });
                     Navigator.pop(ctx);
                   },
-                  child: const Text('Enregistrer'),
+                  child: const Text('Enregistrer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ],
             );

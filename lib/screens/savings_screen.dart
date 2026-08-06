@@ -12,15 +12,18 @@ class SavingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SavingsScreenState extends ConsumerState<SavingsScreen> {
+  String _livretAName = 'Livret A / Précaution';
   double _livretABalance = 1600;
   double _livretATarget = 8000;
 
+  String _lddsName = 'Cible PEA & Bourse';
   double _lddsBalance = 0;
   double _lddsTarget = 0;
 
   double _monthlySavingsRate = 200;
 
-  void _showEditTankDialog(String title, double currentBalance, double currentTarget, Function(double, double) onSave) {
+  void _showEditTankDialog(String title, double currentBalance, double currentTarget, Function(String, double, double) onSave) {
+    final nameCtrl = TextEditingController(text: title);
     final balanceCtrl = TextEditingController(text: currentBalance.toStringAsFixed(0));
     final targetCtrl = TextEditingController(text: currentTarget.toStringAsFixed(0));
 
@@ -31,15 +34,23 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
           backgroundColor: AppColors.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
-            children: [
-              const Icon(Icons.edit_note_rounded, color: AppColors.accentGold),
-              const SizedBox(width: 10),
-              Text('Ajuster $title', style: const TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+            children: const [
+              Icon(Icons.edit_note_rounded, color: AppColors.accentGold),
+              SizedBox(width: 10),
+              Text('Ajuster le Réservoir', style: TextStyle(color: AppColors.textPrimary, fontSize: 18)),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nom du réservoir',
+                ),
+                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 14),
               TextField(
                 controller: balanceCtrl,
                 keyboardType: TextInputType.number,
@@ -69,17 +80,134 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
+                final newName = nameCtrl.text.trim().isEmpty ? title : nameCtrl.text.trim();
                 final newBal = double.tryParse(balanceCtrl.text.trim()) ?? currentBalance;
                 final newTarget = double.tryParse(targetCtrl.text.trim()) ?? currentTarget;
-                onSave(newBal, newTarget);
+                onSave(newName, newBal, newTarget);
                 Navigator.pop(ctx);
               },
-              child: const Text('Enregistrer'),
+              child: const Text('Enregistrer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showLumpSumDistributionDialog() {
+    final amountCtrl = TextEditingController(text: '3600');
+    double peaPercent = 70.0;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final totalAmt = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+            final peaAmt = totalAmt * peaPercent / 100;
+            final livretAmt = totalAmt * (100 - peaPercent) / 100;
+
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: const [
+                  Icon(Icons.stars_rounded, color: AppColors.accentGold),
+                  SizedBox(width: 10),
+                  Text('Ventiler un Gains / Prime / Tontine', style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    onChanged: (_) => setDialogState(() {}),
+                    controller: amountCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Montant à ventiler (€)',
+                      hintText: 'ex: 3600 (Tontine) ou 2000 (Prime)',
+                      suffixText: '€',
+                    ),
+                    style: const TextStyle(color: AppColors.accentGold, fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Répartition choisie :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Slider(
+                          value: peaPercent,
+                          min: 0,
+                          max: 100,
+                          divisions: 10,
+                          activeColor: AppColors.accentCyan,
+                          label: '${peaPercent.round()}% PEA',
+                          onChanged: (val) => setDialogState(() => peaPercent = val),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBackground,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('🎯 PEA (${peaPercent.round()}%) :', style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text('+ ${peaAmt.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentCyan, fontSize: 13, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('🛡️ Livret A (${(100 - peaPercent).round()}%) :', style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text('+ ${livretAmt.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentEmerald, fontSize: 13, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentGold,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _lddsBalance += peaAmt;
+                      _livretABalance += livretAmt;
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Appliquer la ventilation', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -101,15 +229,35 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Section Title: ARCHITECTURE DE SÉCURITÉ (Matching Screenshots 1 & 8)
-            const Text(
-              'ARCHITECTURE DE SÉCURITÉ',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-              ),
+            // Section Header & One-Off Payout Button (Tontine / Prime)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'ARCHITECTURE DE SÉCURITÉ',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentGold,
+                    foregroundColor: Colors.black,
+                    elevation: 2,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.stars_rounded, size: 16),
+                  label: const Text(
+                    'Ventiler Prime / Tontine',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: _showLumpSumDistributionDialog,
+                ),
+              ],
             ),
             const SizedBox(height: 14),
 
@@ -121,12 +269,13 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                     children: [
                       Expanded(
                         child: LiquidTankWidget(
-                          title: 'Livret A',
+                          title: _livretAName,
                           currentAmount: _livretABalance,
                           targetAmount: _livretATarget,
                           liquidColor: AppColors.accentGold,
-                          onEdit: () => _showEditTankDialog('Livret A', _livretABalance, _livretATarget, (b, t) {
+                          onEdit: () => _showEditTankDialog(_livretAName, _livretABalance, _livretATarget, (n, b, t) {
                             setState(() {
+                              _livretAName = n;
                               _livretABalance = b;
                               _livretATarget = t;
                             });
@@ -136,12 +285,13 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                       const SizedBox(width: 14),
                       Expanded(
                         child: LiquidTankWidget(
-                          title: 'LDDS',
+                          title: _lddsName,
                           currentAmount: _lddsBalance,
                           targetAmount: _lddsTarget,
                           liquidColor: AppColors.accentCyan,
-                          onEdit: () => _showEditTankDialog('LDDS', _lddsBalance, _lddsTarget, (b, t) {
+                          onEdit: () => _showEditTankDialog(_lddsName, _lddsBalance, _lddsTarget, (n, b, t) {
                             setState(() {
+                              _lddsName = n;
                               _lddsBalance = b;
                               _lddsTarget = t;
                             });
@@ -154,12 +304,13 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                   return Column(
                     children: [
                       LiquidTankWidget(
-                        title: 'Livret A',
+                        title: _livretAName,
                         currentAmount: _livretABalance,
                         targetAmount: _livretATarget,
                         liquidColor: AppColors.accentGold,
-                        onEdit: () => _showEditTankDialog('Livret A', _livretABalance, _livretATarget, (b, t) {
+                        onEdit: () => _showEditTankDialog(_livretAName, _livretABalance, _livretATarget, (n, b, t) {
                           setState(() {
+                            _livretAName = n;
                             _livretABalance = b;
                             _livretATarget = t;
                           });
@@ -167,12 +318,13 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                       ),
                       const SizedBox(height: 14),
                       LiquidTankWidget(
-                        title: 'LDDS',
+                        title: _lddsName,
                         currentAmount: _lddsBalance,
                         targetAmount: _lddsTarget,
                         liquidColor: AppColors.accentCyan,
-                        onEdit: () => _showEditTankDialog('LDDS', _lddsBalance, _lddsTarget, (b, t) {
+                        onEdit: () => _showEditTankDialog(_lddsName, _lddsBalance, _lddsTarget, (n, b, t) {
                           setState(() {
+                            _lddsName = n;
                             _lddsBalance = b;
                             _lddsTarget = t;
                           });
