@@ -171,9 +171,9 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                     ),
                     child: Row(
                       children: [
-                        _buildModeButton(0, '🏦 Banque'),
-                        _buildModeButton(1, '📈 Brut Social'),
-                        _buildModeButton(2, '⚖️ Réel DGFiP'),
+                        _buildModeButton(0, '🏦 Net Banque (Après PAS)'),
+                        _buildModeButton(1, '📈 Net Social (Sans Impôt)'),
+                        _buildModeButton(2, '⚖️ Lissé DGFiP'),
                       ],
                     ),
                   ),
