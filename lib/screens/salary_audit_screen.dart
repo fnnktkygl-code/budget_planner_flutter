@@ -1222,107 +1222,172 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     final grossCtrl = TextEditingController(text: (record.grossSalary ?? 0.0).toStringAsFixed(2));
     final netSocialCtrl = TextEditingController(text: record.netSocial.toStringAsFixed(2));
     final labelCtrl = TextEditingController(text: record.periodLabel);
+    final bonusAmountCtrl = TextEditingController(text: (record.bonusAmount ?? 0.0) > 0 ? record.bonusAmount!.toStringAsFixed(2) : '');
+    final bonusDescCtrl = TextEditingController(text: record.bonusDescription ?? '');
+    bool isBonus = record.hasExplicitBonus;
 
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: const [
-              Icon(Icons.edit_note_rounded, color: AppColors.accentCyan, size: 22),
-              SizedBox(width: 10),
-              Text('Ajuster le Bulletin de Salaire', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Période : ${record.periodLabel}',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: const [
+                  Icon(Icons.edit_note_rounded, color: AppColors.accentCyan, size: 22),
+                  SizedBox(width: 10),
+                  Text('Ajuster le Bulletin de Salaire', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Période : ${record.periodLabel}',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: labelCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Intitulé Période',
+                        border: OutlineInputBorder(),
+                      ),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: netCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Net en Banque Total (€)',
+                        suffixText: '€',
+                        border: OutlineInputBorder(),
+                      ),
+                      style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: grossCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Salaire Brut (€)',
+                        suffixText: '€',
+                        border: OutlineInputBorder(),
+                      ),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: netSocialCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Montant Net Social (€)',
+                        suffixText: '€',
+                        border: OutlineInputBorder(),
+                      ),
+                      style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: () => setModalState(() => isBonus = !isBonus),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isBonus ? AppColors.accentGold.withValues(alpha: 0.15) : AppColors.cardBackground,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: isBonus ? AppColors.accentGold : AppColors.borderSubtle),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isBonus ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                              color: isBonus ? AppColors.accentGold : AppColors.textMuted,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                'Contient un Extra / Rachat de Congés / Prime',
+                                style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (isBonus) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: bonusAmountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Montant de l\'Extra / Prime (€)',
+                          hintText: 'ex: 1500.00',
+                          suffixText: '€',
+                          border: OutlineInputBorder(),
+                        ),
+                        style: const TextStyle(color: AppColors.accentGold, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: bonusDescCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Libellé de l\'Extra',
+                          hintText: 'ex: Rachat de congés payés',
+                          border: OutlineInputBorder(),
+                        ),
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: labelCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Intitulé Période',
-                    border: OutlineInputBorder(),
-                  ),
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text('Annuler', style: TextStyle(color: AppColors.textSecondary)),
+                  onPressed: () => Navigator.of(ctx).pop(),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: netCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Net en Banque (€)',
-                    suffixText: '€',
-                    border: OutlineInputBorder(),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
                   ),
-                  style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: grossCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Salaire Brut (€)',
-                    suffixText: '€',
-                    border: OutlineInputBorder(),
-                  ),
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: netSocialCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Montant Net Social (€)',
-                    suffixText: '€',
-                    border: OutlineInputBorder(),
-                  ),
-                  style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 13),
+                  child: const Text('Mettre à Jour'),
+                  onPressed: () {
+                    final newNet = double.tryParse(netCtrl.text) ?? record.netSalary;
+                    final newGross = double.tryParse(grossCtrl.text) ?? record.grossSalary;
+                    final newNetSocial = double.tryParse(netSocialCtrl.text) ?? record.netSocial;
+                    final bAmt = double.tryParse(bonusAmountCtrl.text);
+
+                    final updated = record.copyWith(
+                      periodLabel: labelCtrl.text.isNotEmpty ? labelCtrl.text : record.periodLabel,
+                      netSalary: newNet,
+                      grossSalary: newGross,
+                      netSocial: newNetSocial,
+                      hasExplicitBonus: isBonus,
+                      bonusAmount: isBonus ? bAmt : null,
+                      bonusDescription: isBonus ? (bonusDescCtrl.text.isNotEmpty ? bonusDescCtrl.text : 'Extra / Prime') : null,
+                    );
+                    ref.read(salaryProvider.notifier).updateRecord(updated);
+                    Navigator.of(ctx).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('✓ Bulletin ${record.periodLabel} mis à jour'),
+                        backgroundColor: AppColors.accentEmerald,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
                 ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Annuler', style: TextStyle(color: AppColors.textSecondary)),
-              onPressed: () => Navigator.of(ctx).pop(),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Mettre à Jour'),
-              onPressed: () {
-                final newNet = double.tryParse(netCtrl.text) ?? record.netSalary;
-                final newGross = double.tryParse(grossCtrl.text) ?? record.grossSalary;
-                final newNetSocial = double.tryParse(netSocialCtrl.text) ?? record.netSocial;
-                final updated = record.copyWith(
-                  periodLabel: labelCtrl.text.isNotEmpty ? labelCtrl.text : record.periodLabel,
-                  netSalary: newNet,
-                  grossSalary: newGross,
-                  netSocial: newNetSocial,
-                );
-                ref.read(salaryProvider.notifier).updateRecord(updated);
-                Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('✓ Bulletin ${record.periodLabel} mis à jour avec le salaire net de ${newNet.toStringAsFixed(2)} €'),
-                    backgroundColor: AppColors.accentEmerald,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
-          ],
+            );
+          },
         );
       },
     );
