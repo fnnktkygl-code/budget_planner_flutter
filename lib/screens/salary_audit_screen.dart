@@ -16,6 +16,7 @@ import '../models/salary_record.dart';
 import '../services/redactor_engine.dart';
 import '../services/salary_parser_service.dart';
 import '../widgets/notification_header.dart';
+import '../widgets/salary_trend_chart_widget.dart';
 
 class SalaryAuditScreen extends ConsumerStatefulWidget {
   const SalaryAuditScreen({super.key});
@@ -90,6 +91,45 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     });
   }
 
+  Future<Uint8List?> _renderPdfBytesToImage(Uint8List bytes) async {
+    if (kIsWeb) {
+      final completer = Completer<Uint8List?>();
+
+      js.context['onPdfPageRendered'] = (dynamic dataUrl) {
+        if (dataUrl != null && dataUrl is String && dataUrl.startsWith('data:image')) {
+          final base64Str = dataUrl.split(',')[1];
+          completer.complete(base64Decode(base64Str));
+        } else {
+          completer.complete(null);
+        }
+      };
+
+      try {
+        final base64Pdf = base64Encode(bytes);
+        js.context.callMethod('renderPdfBase64WithCallback', [base64Pdf, 'onPdfPageRendered']);
+        return await completer.future;
+      } catch (e) {
+        debugPrint('[SalaryAuditScreen] JS PDF Render Exception: $e');
+        return null;
+      }
+    } else {
+      try {
+        final pdfDoc = await PdfDocument.openData(bytes);
+        final page = await pdfDoc.getPage(1);
+        final pageImage = await page.render(
+          width: page.width * 2,
+          height: page.height * 2,
+          format: PdfPageImageFormat.jpeg,
+        );
+        await pdfDoc.close();
+        return pageImage?.bytes;
+      } catch (e) {
+        debugPrint('[SalaryAuditScreen] Native Pdfx Render Exception: $e');
+        return null;
+      }
+    }
+  }
+
   Future<void> _processUploadedFile(Uint8List bytes, String fileName) async {
     setState(() {
       _customFileBytes = bytes;
@@ -102,84 +142,163 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     final isPdf = fileName.toLowerCase().endsWith('.pdf');
     if (isPdf) {
       setState(() => _isRenderingPdf = true);
-
-      if (kIsWeb) {
-        final completer = Completer<Uint8List?>();
-
-        js.context['onPdfPageRendered'] = (dynamic dataUrl) {
-          if (dataUrl != null && dataUrl is String && dataUrl.startsWith('data:image')) {
-            final base64Str = dataUrl.split(',')[1];
-            completer.complete(base64Decode(base64Str));
-          } else {
-            completer.complete(null);
-          }
-        };
-
-        try {
-          final base64Pdf = base64Encode(bytes);
-          js.context.callMethod('renderPdfBase64WithCallback', [base64Pdf, 'onPdfPageRendered']);
-          final renderedBytes = await completer.future;
-
-          if (mounted) {
-            setState(() {
-              _renderedPdfImageBytes = renderedBytes;
-              _isRenderingPdf = false;
-            });
-          }
-        } catch (e) {
-          debugPrint('[SalaryAuditScreen] JS PDF Render Exception: $e');
-          if (mounted) setState(() => _isRenderingPdf = false);
-        }
-      } else {
-        try {
-          final pdfDoc = await PdfDocument.openData(bytes);
-          final page = await pdfDoc.getPage(1);
-          final pageImage = await page.render(
-            width: page.width * 2,
-            height: page.height * 2,
-            format: PdfPageImageFormat.jpeg,
-          );
-          await pdfDoc.close();
-
-          if (mounted) {
-            setState(() {
-              _renderedPdfImageBytes = pageImage?.bytes;
-              _isRenderingPdf = false;
-            });
-          }
-        } catch (e) {
-          debugPrint('[SalaryAuditScreen] Native Pdfx Render Exception: $e');
-          if (mounted) setState(() => _isRenderingPdf = false);
-        }
+      final renderedBytes = await _renderPdfBytesToImage(bytes);
+      if (mounted) {
+        setState(() {
+          _renderedPdfImageBytes = renderedBytes;
+          _isRenderingPdf = false;
+        });
       }
     }
   }
 
-  Future<void> _pickUserPayslipFile() async {
+  Future<void> _pickUserPayslipFiles() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],
+        allowMultiple: true,
         withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        if (file.bytes != null) {
-          await _processUploadedFile(file.bytes!, file.name);
+        // Single file import
+        if (result.files.length == 1) {
+          final file = result.files.first;
+          if (file.bytes != null) {
+            await _processUploadedFile(file.bytes!, file.name);
 
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('📄 Bulletin chargé : ${file.name} (${(file.size / 1024).toStringAsFixed(1)} KB)'),
-              backgroundColor: AppColors.accentEmerald,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('📄 Bulletin chargé : ${file.name} (${(file.size / 1024).toStringAsFixed(1)} KB)'),
+                backgroundColor: AppColors.accentEmerald,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
         }
+
+        // BATCH MULTI-FILE IMPORT QUEUE (5, 10, 12, 20 payslips)
+        final files = result.files.where((f) => f.bytes != null).toList();
+        if (files.isEmpty) return;
+
+        int processedCount = 0;
+        String currentFileName = files.first.name;
+        List<SalaryRecord> batchRecords = [];
+
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) {
+            return StatefulBuilder(
+              builder: (context, setModalState) {
+                return AlertDialog(
+                  backgroundColor: AppColors.surface,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  title: Row(
+                    children: [
+                      const Icon(Icons.folder_zip_rounded, color: AppColors.accentCyan, size: 26),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Importation en lot ($processedCount / ${files.length})',
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Traitement séquentiel optimisé avec file d\'attente anti-surcharge IA...',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Linear Progress Bar
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: processedCount / files.length,
+                          backgroundColor: AppColors.cardBackground,
+                          color: AppColors.accentEmerald,
+                          minHeight: 10,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      Text(
+                        '📄 Analyse : $currentFileName',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+
+        // Process batch sequentially in queue buffer
+        for (int i = 0; i < files.length; i++) {
+          final file = files[i];
+          currentFileName = file.name;
+
+          // Render PDF page image
+          Uint8List? renderedImg;
+          if (file.name.toLowerCase().endsWith('.pdf')) {
+            renderedImg = await _renderPdfBytesToImage(file.bytes!);
+          }
+
+          // Rate-limiting delay buffer to prevent API overload
+          await Future.delayed(const Duration(milliseconds: 150));
+
+          // Parse document values
+          final parsed = await SalaryParserService.parseDocument(
+            fileBytes: file.bytes,
+            fileName: file.name,
+          );
+
+          final renderedB64 = renderedImg != null ? base64Encode(renderedImg) : null;
+          final fileB64 = base64Encode(file.bytes!);
+
+          final record = parsed.toSalaryRecord(
+            customFileName: file.name,
+            imageBase64: renderedB64,
+            fileBase64: fileB64,
+          );
+
+          batchRecords.add(record);
+          processedCount = i + 1;
+        }
+
+        // Add all batch records to state notifier
+        ref.read(salaryProvider.notifier).addMultipleRecords(batchRecords);
+
+        // Set latest processed file on canvas
+        final lastFile = files.last;
+        await _processUploadedFile(lastFile.bytes!, lastFile.name);
+
+        if (!mounted) return;
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context); // Close batch modal
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🎉 Importation Réussie : ${batchRecords.length} bulletins analysés & ajoutés !'),
+            backgroundColor: AppColors.accentEmerald,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } catch (e) {
-      debugPrint('[SalaryAuditScreen] Pick File Exception: $e');
+      debugPrint('[SalaryAuditScreen] Pick Multiple Files Exception: $e');
     }
   }
 
@@ -472,7 +591,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Importez un bulletin de salaire ou sélectionnez-en un dans votre historique ci-dessous pour l\'afficher et caviarder vos données.',
+                'Importez un ou plusieurs bulletins de salaire (PDF / Images) pour les analyser et caviarder vos données.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
               ),
@@ -485,8 +604,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 icon: const Icon(Icons.file_upload_outlined, size: 20),
-                label: const Text('Importer mon bulletin (PDF / Image)', style: TextStyle(fontWeight: FontWeight.bold)),
-                onPressed: _pickUserPayslipFile,
+                label: const Text('Importer bulletins (1 ou plusieurs)', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: _pickUserPayslipFiles,
               ),
             ],
           ),
@@ -680,7 +799,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // User Guidance Checklist
+            // User Guidance Checklist & Batch File Button
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -710,15 +829,16 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                             ),
                             const SizedBox(width: 4),
                           ],
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.accentCyan,
-                              side: const BorderSide(color: AppColors.accentCyan),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentCyan,
+                              foregroundColor: Colors.white,
+                              elevation: 2,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
-                            icon: const Icon(Icons.folder_open_rounded, size: 16),
-                            label: Text(_customFileName ?? 'Importer mon bulletin', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                            onPressed: _pickUserPayslipFile,
+                            icon: const Icon(Icons.file_upload_outlined, size: 16),
+                            label: Text(_customFileName ?? 'Importer bulletins (Lot / Unitaire)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            onPressed: _pickUserPayslipFiles,
                           ),
                         ],
                       ),
@@ -996,6 +1116,18 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               ),
             ),
             const SizedBox(height: 28),
+
+            // Feature 2: Interactive Salary Trend & Bonus Chart Section
+            if (records.isNotEmpty) ...[
+              SalaryTrendChartWidget(
+                records: records,
+                averageNet: analytics.overallAverageNet,
+                onRecordTap: (record) {
+                  _switchDisplayedRecord(record);
+                },
+              ),
+              const SizedBox(height: 28),
+            ],
 
             // Timeline & Smoothed Salary Card
             Container(

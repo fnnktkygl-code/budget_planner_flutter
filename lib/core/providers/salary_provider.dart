@@ -59,6 +59,31 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     _save();
   }
 
+  void addMultipleRecords(List<SalaryRecord> newRecords) {
+    if (newRecords.isEmpty) return;
+
+    List<SalaryRecord> updated = state.records
+        .map((r) => r.copyWith(isLatestActive: false))
+        .toList();
+
+    final existingIds = updated.map((r) => r.id).toSet();
+    for (var r in newRecords) {
+      if (!existingIds.contains(r.id)) {
+        updated.add(r.copyWith(isLatestActive: false));
+        existingIds.add(r.id);
+      }
+    }
+
+    // Set the latest chronological record as active baseline
+    updated.sort((a, b) => b.period.compareTo(a.period));
+    if (updated.isNotEmpty) {
+      updated[0] = updated[0].copyWith(isLatestActive: true);
+    }
+
+    state = SalaryState(records: updated);
+    _save();
+  }
+
   void updateRecord(SalaryRecord record) {
     List<SalaryRecord> updated = List.from(state.records);
     if (record.isLatestActive) {
