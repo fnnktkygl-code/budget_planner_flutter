@@ -43,6 +43,27 @@ class AuraBudgetApp extends ConsumerWidget {
           surface: AppColors.surface,
         ),
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+        tooltipTheme: TooltipThemeData(
+          decoration: BoxDecoration(
+            color: const Color(0xFF151D2A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.5), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.6),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          textStyle: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          margin: const EdgeInsets.all(6),
+        ),
         useMaterial3: true,
       ),
       home: authState.isLoading

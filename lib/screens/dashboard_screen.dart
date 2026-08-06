@@ -201,16 +201,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(Icons.info_outline_rounded, color: AppColors.accentCyan, size: 18),
-                    tooltip: 'En savoir plus sur l\'Allocation d\'actifs',
-                    onPressed: () {
-                      _showExplanationModal(
-                        context,
-                        title: '📊 Allocation d\'Actifs & Répartition',
-                        content: 'Cette roue présente la ventilation stratégique de votre salaire net en banque selon vos règles budgétaires configurées (Charges fixes, Cible d\'investissement PEA, Épargne liquide Livret A et Reste à vivre).\n\nVous pouvez cliquer sur chaque segment ou élément de légende pour afficher la décomposition exacte des sous-postes.',
-                      );
-                    },
+                  Tooltip(
+                    message: 'En savoir plus sur l\'Allocation d\'actifs',
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF151D2A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.5)),
+                    ),
+                    textStyle: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                    child: IconButton(
+                      icon: const Icon(Icons.info_outline_rounded, color: AppColors.accentCyan, size: 18),
+                      onPressed: () {
+                        _showExplanationModal(
+                          context,
+                          title: '📊 Allocation d\'Actifs & Répartition',
+                          content: 'Cette roue présente la ventilation stratégique de votre salaire net en banque selon vos règles budgétaires configurées (Charges fixes, Cible d\'investissement PEA, Épargne liquide Livret A et Reste à vivre).\n\nVous pouvez cliquer sur chaque segment ou élément de légende pour afficher la décomposition exacte des sous-postes.',
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -413,16 +421,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(Icons.info_outline_rounded, color: AppColors.accentEmerald, size: 18),
-                    tooltip: 'Détails du Revenu Net',
-                    onPressed: () {
-                      _showExplanationModal(
-                        context,
-                        title: '🧾 Décomposition du Revenu Net Mensuel',
-                        content: 'Cette carte restitue l\'analyse financière exacte extraite de votre bulletin de salaire actif (${activeRecord?.periodLabel ?? "Juillet 2026"}) par l\'IA Gemini.\n\nElle présente le passage rigoureux du Salaire Brut aux cotisations sociales, au Net Social (Net avant impôt) puis au Prélèvement à la source (Impôt IR) jusqu\'au montant net final crédité sur votre compte bancaire.',
-                      );
-                    },
+                  Tooltip(
+                    message: 'Détails du Revenu Net Mensuel',
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF151D2A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.5)),
+                    ),
+                    textStyle: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                    child: IconButton(
+                      icon: const Icon(Icons.info_outline_rounded, color: AppColors.accentEmerald, size: 18),
+                      onPressed: () {
+                        _showExplanationModal(
+                          context,
+                          title: '🧾 Décomposition du Revenu Net Mensuel',
+                          content: 'Cette carte restitue l\'analyse financière exacte extraite de votre bulletin de salaire actif (${activeRecord?.periodLabel ?? "Juillet 2026"}) par l\'IA Gemini.\n\nElle présente le passage rigoureux du Salaire Brut aux cotisations sociales, au Net Social (Net avant impôt) puis au Prélèvement à la source (Impôt IR) jusqu\'au montant net final crédité sur votre compte bancaire.',
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
