@@ -336,30 +336,39 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
           },
         );
 
-        // Process batch sequentially in queue buffer
+        // Process batch using Gemini API Micro-Batching (Lots de 5 bulletins par requête)
+        final List<PayslipBatchItem> batchItems = [];
+        final List<Uint8List?> renderedImages = [];
+
         for (int i = 0; i < files.length; i++) {
           final file = files[i];
-          modalStateSetter?.call(() {});
-
-          // Render PDF page image and extract text via PDF.js on Web
           Uint8List? renderedImg;
           String? extractedText;
           if (file.name.toLowerCase().endsWith('.pdf')) {
             renderedImg = await _renderPdfBytesToImage(file.bytes!);
             extractedText = await _extractPdfTextFromBytes(file.bytes!);
           }
+          renderedImages.add(renderedImg);
 
-          // Rate-limiting delay buffer to prevent API quota overload (RPM pacing)
-          await Future.delayed(const Duration(milliseconds: 600));
-
-          // Parse document values
-          final parsed = await SalaryParserService.parseDocument(
-            fileBytes: file.bytes,
-            fileName: file.name,
-            apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
-            rawTextContent: extractedText,
+          batchItems.add(
+            PayslipBatchItem(
+              fileBytes: file.bytes,
+              fileName: file.name,
+              rawTextContent: extractedText,
+            ),
           );
+        }
 
+        // Execute Batch Micro-Parsing with Gemini IA
+        final parsedPayslips = await SalaryParserService.parseBatchDocuments(
+          items: batchItems,
+          apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
+        );
+
+        for (int i = 0; i < parsedPayslips.length && i < files.length; i++) {
+          final file = files[i];
+          final parsed = parsedPayslips[i];
+          final renderedImg = renderedImages[i];
           final renderedB64 = renderedImg != null ? base64Encode(renderedImg) : null;
           final fileB64 = base64Encode(file.bytes!);
 

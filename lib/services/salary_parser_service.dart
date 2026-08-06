@@ -343,4 +343,194 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
       rawFileBase64: rawFileB64,
     );
   }
+
+  // --- BATCH PROCESSING (MICRO-BATCHING OF MULTIPLE PAYSLIPS) ---
+  static Future<List<RealParsedPayslip>> parseBatchDocuments({
+    required List<PayslipBatchItem> items,
+    String? apiKey,
+  }) async {
+    if (items.isEmpty) return [];
+
+    if (items.length == 1) {
+      final single = await parseDocument(
+        fileBytes: items[0].fileBytes,
+        fileName: items[0].fileName,
+        apiKey: apiKey,
+        rawTextContent: items[0].rawTextContent,
+      );
+      return [single];
+    }
+
+    final List<RealParsedPayslip> results = [];
+    const int batchSize = 5;
+
+    for (int i = 0; i < items.length; i += batchSize) {
+      final chunk = items.sublist(i, (i + batchSize).clamp(0, items.length));
+      final chunkResults = await _processMicroBatch(chunk: chunk, apiKey: apiKey);
+      results.addAll(chunkResults);
+    }
+
+    return results;
+  }
+
+  static Future<List<RealParsedPayslip>> _processMicroBatch({
+    required List<PayslipBatchItem> chunk,
+    String? apiKey,
+  }) async {
+    List<Map<String, dynamic>> parts = [
+      {
+        'text': '''
+Tu es un expert comptable spécialisé dans la paie française.
+Analyse les ${chunk.length} bulletins de paie fournis dans ce message.
+Pour chaque bulletin (identifié par son index de 0 à ${chunk.length - 1}), extrait les données et renvoie STRICTEMENT un TABLEAU JSON d'objets :
+[
+  {
+    "index": 0,
+    "fileName": "nom_fichier.pdf",
+    "period": "YYYY-MM (ex: 2026-03)",
+    "grossSalary": 3800.0,
+    "netSocial": 2952.28,
+    "netPayable": 2713.74,
+    "hasExplicitBonus": false,
+    "bonusDescription": null
+  }
+]
+- netPayable doit être STRICTEMENT le Salaire Net VERSÉ sur le compte bancaire après prélèvement à la source.
+'''
+      }
+    ];
+
+    for (int i = 0; i < chunk.length; i++) {
+      final item = chunk[i];
+      final fnLower = (item.fileName ?? '').toLowerCase();
+      final String mimeType = fnLower.endsWith('.pdf')
+          ? 'application/pdf'
+          : (fnLower.endsWith('.png') ? 'image/png' : 'image/jpeg');
+
+      parts.add({'text': '\n--- BULLETIN #$i (Fichier: ${item.fileName ?? "inconnu"}) ---'});
+
+      if (item.rawTextContent != null && item.rawTextContent!.isNotEmpty) {
+        parts.add({'text': 'Texte extrait :\n${item.rawTextContent}'});
+      }
+
+      if (item.fileBytes != null && item.fileBytes!.isNotEmpty) {
+        parts.add({
+          'inline_data': {
+            'mime_type': mimeType,
+            'data': base64Encode(item.fileBytes!),
+          }
+        });
+      }
+    }
+
+    List<dynamic>? jsonListResult;
+
+    if (apiKey != null && apiKey.isNotEmpty) {
+      final now = DateTime.now();
+
+      for (String modelName in _geminiModelsCascade) {
+        final cooldownUntil = _modelCooldownMap[modelName];
+        if (cooldownUntil != null && now.isBefore(cooldownUntil)) {
+          continue;
+        }
+
+        try {
+          final url = Uri.parse(
+            'https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey',
+          );
+
+          final response = await http.post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'contents': [
+                {'parts': parts}
+              ],
+              'generationConfig': {
+                'response_mime_type': 'application/json',
+              }
+            }),
+          );
+
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            final textResult = data['candidates'][0]['content']['parts'][0]['text'];
+            jsonListResult = jsonDecode(textResult);
+            debugPrint('✅ [BATCH AI SUCCESS] Lot de ${chunk.length} bulletins analysé via $modelName');
+            break;
+          } else if (response.statusCode == 429) {
+            _modelCooldownMap[modelName] = DateTime.now().add(const Duration(seconds: 30));
+            continue;
+          }
+        } catch (e) {
+          debugPrint('⚠️ [BATCH AI ERROR] Erreur sur $modelName: $e');
+        }
+      }
+    }
+
+    final List<RealParsedPayslip> parsedList = [];
+
+    if (jsonListResult != null) {
+      for (var obj in jsonListResult) {
+        final idx = (obj['index'] as num?)?.toInt() ?? 0;
+        final item = (idx >= 0 && idx < chunk.length) ? chunk[idx] : chunk[0];
+        final extractedInfo = _extractPeriodFromFileName(item.fileName);
+        final String extractedPeriod = extractedInfo != null ? extractedInfo['period'] : 'Période Inconnue';
+        final int yr = extractedInfo != null ? extractedInfo['year'] : 2026;
+        final int mo = extractedInfo != null ? extractedInfo['month'] : 7;
+
+        final parsedPeriod = obj['period'] as String?;
+        final bool hasGeminiPeriod = parsedPeriod != null && parsedPeriod.isNotEmpty && parsedPeriod != 'null';
+
+        parsedList.add(
+          RealParsedPayslip(
+            id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(item.fileName?.hashCode ?? 0).abs() % 10000}',
+            employeeName: '[Caviardé]',
+            employerName: obj['employerName'] ?? 'Employeur',
+            siret: 'XXXXXXXXXXXXXX',
+            period: hasGeminiPeriod ? parsedPeriod : extractedPeriod,
+            periodDetected: hasGeminiPeriod || extractedInfo != null,
+            date: DateTime(yr, mo, 28),
+            grossSalary: (obj['grossSalary'] as num?)?.toDouble() ?? 0.0,
+            netSocial: (obj['netSocial'] as num?)?.toDouble() ?? 0.0,
+            netPayable: (obj['netPayable'] as num?)?.toDouble() ?? 0.0,
+            socialContributions: 0.0,
+            mealTickets: 0.0,
+            teleworkAllowance: 0.0,
+            nonTaxableAllowance: 0.0,
+            hasExplicitBonus: (obj['hasExplicitBonus'] as bool?) ?? false,
+            bonusDescription: obj['bonusDescription'],
+            bonusAmount: (obj['bonusAmount'] as num?)?.toDouble(),
+            isParsedFromDocument: true,
+            rawFileBase64: item.fileBytes != null ? base64Encode(item.fileBytes!) : null,
+          ),
+        );
+      }
+      return parsedList;
+    }
+
+    // Fallback item by item if batch failed
+    for (var item in chunk) {
+      final single = await parseDocument(
+        fileBytes: item.fileBytes,
+        fileName: item.fileName,
+        apiKey: apiKey,
+        rawTextContent: item.rawTextContent,
+      );
+      parsedList.add(single);
+    }
+    return parsedList;
+  }
+}
+
+class PayslipBatchItem {
+  final Uint8List? fileBytes;
+  final String? fileName;
+  final String? rawTextContent;
+
+  PayslipBatchItem({
+    this.fileBytes,
+    this.fileName,
+    this.rawTextContent,
+  });
 }
