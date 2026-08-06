@@ -1755,7 +1755,10 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 const SizedBox(height: 20),
 
                 // Annual Global Compensation Recap Widget
-                AnnualRecapWidget(records: records),
+                AnnualRecapWidget(
+                  records: records,
+                  taxAdjustments: salaryState.taxAdjustments,
+                ),
                 const SizedBox(height: 20),
 
                 // Avis d'Imposition & Rattrapage Fiscale DGFiP Card
@@ -1905,6 +1908,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     final double avgTaxRate = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.incomeTaxRatePercent) / records.length : 0.0;
                     final double avgNetSocial = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.netSocial) / records.length : 0.0;
                     final double activeMonthlyAdj = salaryState.activeTaxAdjustmentMonthlyInstallment;
+                    final bool hasTaxAdj = salaryState.taxAdjustments.isNotEmpty;
+
+                    final double dgfipTotalTax = hasTaxAdj ? salaryState.taxAdjustments.fold(0.0, (sum, t) => sum + t.totalTaxNetDue) : 0.0;
+                    final double dgfipMonthlyTax = hasTaxAdj ? salaryState.taxAdjustments.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear) : 0.0;
+                    final double dgfipRealRate = (hasTaxAdj && avgNetSocial > 0) ? (dgfipMonthlyTax / avgNetSocial) * 100.0 : 9.05;
 
                     return Container(
                       padding: const EdgeInsets.all(16),
@@ -1931,20 +1939,38 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('Cumul Impôt IR Prélevé (Taux Moy. ${avgTaxRate.toStringAsFixed(1)}%) :', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                              Text('${cumulTax != 0.0 ? cumulTax.toStringAsFixed(2) : "0.00"} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
-                            ],
-                          ),
+                          if (hasTaxAdj) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Impôt Réel DGFiP (Taux Réel ${dgfipRealRate.toStringAsFixed(1)}%) :', style: const TextStyle(color: AppColors.accentRose, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text('${dgfipTotalTax.toStringAsFixed(0)} € / an (${dgfipMonthlyTax.toStringAsFixed(2)} €/mois)', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('PAS Provisoire Paie (Taux ${avgTaxRate.toStringAsFixed(1)}%) :', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                                Text('-${cumulTax != 0.0 ? cumulTax.toStringAsFixed(2) : "0.00"} € cumulé', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                              ],
+                            ),
+                          ] else ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Cumul Impôt IR Prélevé (Taux Moy. ${avgTaxRate.toStringAsFixed(1)}%) :', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                Text('${cumulTax != 0.0 ? cumulTax.toStringAsFixed(2) : "0.00"} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
+                              ],
+                            ),
+                          ],
                           if (activeMonthlyAdj > 0) ...[
                             const SizedBox(height: 8),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Mensualité Étalée Avis DGFiP :', style: TextStyle(color: AppColors.accentRose, fontSize: 12, fontWeight: FontWeight.bold)),
-                                Text('-${activeMonthlyAdj.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
+                                const Text('Mensualité Étalée Avis DGFiP (Sept-Déc 2026) :', style: TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text('-${activeMonthlyAdj.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 13)),
                               ],
                             ),
                           ],

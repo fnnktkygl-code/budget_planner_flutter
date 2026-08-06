@@ -2,10 +2,17 @@ import 'package:flutter/material.dart';
 import '../constants/colors.dart';
 import '../models/salary_record.dart';
 
+import '../models/tax_adjustment.dart';
+
 class AnnualRecapWidget extends StatelessWidget {
   final List<SalaryRecord> records;
+  final List<TaxAdjustment>? taxAdjustments;
 
-  const AnnualRecapWidget({super.key, required this.records});
+  const AnnualRecapWidget({
+    super.key,
+    required this.records,
+    this.taxAdjustments,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +26,10 @@ class AnnualRecapWidget extends StatelessWidget {
     final double totalPAS = records.fold(0.0, (sum, r) => sum + r.incomeTaxAmount.abs());
     final double totalNetSocial = records.fold(0.0, (sum, r) => sum + r.netSocial);
     final double totalGlobalComp = totalNetBanque + totalPEE;
+
+    final bool hasTaxAdj = taxAdjustments != null && taxAdjustments!.isNotEmpty;
+    final double totalRealTaxDgfip = hasTaxAdj ? taxAdjustments!.fold(0.0, (sum, t) => sum + t.totalTaxNetDue) : 0.0;
+    final double totalRealMonthlyDgfip = hasTaxAdj ? taxAdjustments!.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear) : 0.0;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -91,15 +102,22 @@ class AnnualRecapWidget extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text(
-                      'Rétention Fiscale Impôt IR (PAS)',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
+                    Text(
+                      hasTaxAdj ? 'Impôt Réel DGFiP (Avis 2025)' : 'Rétention Fiscale Impôt IR (PAS)',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${totalPAS.toStringAsFixed(2)} €',
+                      hasTaxAdj ? '${totalRealTaxDgfip.toStringAsFixed(0)} € / an' : '${totalPAS.toStringAsFixed(2)} €',
                       style: const TextStyle(color: AppColors.accentRose, fontSize: 18, fontWeight: FontWeight.bold),
                     ),
+                    if (hasTaxAdj) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '(${totalRealMonthlyDgfip.toStringAsFixed(2)} €/mois • PAS Paie prov.: ${totalPAS.toStringAsFixed(0)} €)',
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                      ),
+                    ],
                   ],
                 ),
               ],

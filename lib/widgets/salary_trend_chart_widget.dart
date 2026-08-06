@@ -464,6 +464,96 @@ class _SalaryChartPainter extends CustomPainter {
         canvas.drawCircle(pt, rec.hasExplicitBonus ? 4.5 : 3.5, dotPaint);
       }
     }
+
+    // 5. Draw Floating Interactive Tooltip Box on Hover / Selection
+    final activeIdx = hoverIndex ?? selectedIndex;
+    if (activeIdx >= 0 && activeIdx < records.length) {
+      final rec = records[activeIdx];
+      final pt = points[activeIdx];
+      final val = values[activeIdx];
+
+      final String periodText = rec.periodLabel.isNotEmpty ? rec.periodLabel : rec.period;
+      final double pasAmount = rec.incomeTaxAmount.abs();
+      final double pasRate = rec.incomeTaxRatePercent;
+
+      double realMonthlyTax = pasAmount;
+      if (viewMode == 2 && taxAdjustments != null && taxAdjustments!.isNotEmpty) {
+        final yearStr = rec.period.split('-').first;
+        final year = int.tryParse(yearStr) ?? 0;
+        final adjList = taxAdjustments!.where((t) => t.taxYear == year).toList();
+        if (adjList.isNotEmpty) {
+          realMonthlyTax = adjList.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear);
+        }
+      }
+
+      const tooltipWidth = 195.0;
+      final double tooltipHeight = rec.hasExplicitBonus ? 106.0 : 90.0;
+      double tooltipX = pt.dx + 12;
+      if (tooltipX + tooltipWidth > size.width) {
+        tooltipX = pt.dx - tooltipWidth - 12;
+      }
+      double tooltipY = pt.dy - 45;
+      if (tooltipY < 5) tooltipY = 5;
+      if (tooltipY + tooltipHeight > size.height) {
+        tooltipY = size.height - tooltipHeight - 5;
+      }
+
+      final cardRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(tooltipX, tooltipY, tooltipWidth, tooltipHeight),
+        const Radius.circular(12),
+      );
+
+      canvas.drawRRect(
+        cardRect,
+        Paint()..color = AppColors.surface.withValues(alpha: 0.96),
+      );
+      canvas.drawRRect(
+        cardRect,
+        Paint()
+          ..color = lineColor.withValues(alpha: 0.6)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      );
+
+      TextPainter makeText(String text, Color color, {bool isBold = false, double fontSize = 11}) {
+        final tp = TextPainter(
+          text: TextSpan(
+            text: text,
+            style: TextStyle(
+              color: color,
+              fontSize: fontSize,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        tp.layout();
+        return tp;
+      }
+
+      final titleTp = makeText(periodText, AppColors.textPrimary, isBold: true, fontSize: 12);
+      titleTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 8));
+
+      final netSocTp = makeText('• Net Social: ${rec.netSocial.toStringAsFixed(2)} €', AppColors.accentPurple, isBold: true);
+      netSocTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 28));
+
+      final taxText = viewMode == 2
+          ? '• Impôt Réel DGFiP: -${realMonthlyTax.toStringAsFixed(2)} €'
+          : '• PAS (${pasRate.toStringAsFixed(1)}%): -${pasAmount.toStringAsFixed(2)} €';
+      final taxTp = makeText(taxText, AppColors.accentRose, isBold: true);
+      taxTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 46));
+
+      final effText = viewMode == 2
+          ? '• Net Réel Ajusté: ${val.toStringAsFixed(2)} €'
+          : '• Net Banque: ${rec.netSalary.toStringAsFixed(2)} €';
+      final effTp = makeText(effText, AppColors.accentCyan, isBold: true);
+      effTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 64));
+
+      if (rec.hasExplicitBonus) {
+        final bonusTp = makeText('• Prime: +${rec.bonusAmount!.toStringAsFixed(0)} €', AppColors.accentGold, isBold: true, fontSize: 10);
+        bonusTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 82));
+      }
+    }
   }
 
   @override
