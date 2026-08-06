@@ -180,19 +180,32 @@ class _AnnualRecapWidgetState extends State<AnnualRecapWidget> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          hasTaxAdj ? 'Impôt Réel DGFiP (Avis)' : 'Rétention Fiscale Impôt IR (PAS)',
+                          hasTaxAdj ? 'Impôt Réel Total (Avis DGFiP)' : 'Prélèvement à la Source (PAS)',
                           style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          hasTaxAdj ? '${totalRealTaxDgfip.toStringAsFixed(0)} € / an' : '${totalPAS.toStringAsFixed(2)} € (${pasPctOfNetSocial.toStringAsFixed(1)}%)',
+                          hasTaxAdj ? '${totalRealTaxDgfip.toStringAsFixed(0)} € / an' : '${totalPAS.toStringAsFixed(2)} €',
                           style: const TextStyle(color: AppColors.accentRose, fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         if (hasTaxAdj) ...[
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 4),
                           Text(
-                            '(${totalRealMonthlyDgfip.toStringAsFixed(2)} €/mois • PAS Paie prov.: ${totalPAS.toStringAsFixed(0)} €)',
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                            'Équivalent : ${totalRealMonthlyDgfip.toStringAsFixed(2)} € / mois',
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 3),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentGold.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppColors.accentGold.withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              'Prélevé paie: ${totalPAS.toStringAsFixed(0)} €  •  Solde dû: ${(totalRealTaxDgfip - totalPAS).toStringAsFixed(0)} €',
+                              style: const TextStyle(color: AppColors.accentGold, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ],
                       ],
