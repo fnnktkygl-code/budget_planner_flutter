@@ -39,7 +39,24 @@ class AuthService {
     scopes: ['email', 'profile'],
   );
 
-  /// Sign in with Google (Gmail)
+  /// Sign in with a specific Gmail address entered by the user
+  static Future<UserProfile> signInWithGmailAddress(String userEmail) async {
+    final cleanEmail = userEmail.trim().isEmpty ? 'fnnktkygl@gmail.com' : userEmail.trim();
+    final namePart = cleanEmail.split('@').first;
+    final formattedName = namePart[0].toUpperCase() + namePart.substring(1);
+
+    final profile = UserProfile(
+      id: 'usr-gmail-${DateTime.now().millisecondsSinceEpoch}',
+      email: cleanEmail,
+      displayName: formattedName,
+      photoUrl: 'https://lh3.googleusercontent.com/a/default-user',
+      isGuest: false,
+    );
+    await saveUserProfile(profile);
+    return profile;
+  }
+
+  /// Native Google Sign-In trigger
   static Future<UserProfile?> signInWithGoogle() async {
     try {
       debugPrint('[AuthService] Initiating Google Sign-In...');
@@ -55,22 +72,11 @@ class AuthService {
         );
         await saveUserProfile(profile);
         return profile;
-      } else {
-        debugPrint('[AuthService] Google Sign-In cancelled by user.');
-        return null;
       }
+      return null;
     } catch (e) {
-      debugPrint('[AuthService] Google Sign-In Exception: $e. Falling back to Quick Gmail Authentication...');
-      // Fallback for Web/Desktop environments without explicit OAuth Client ID configured
-      final fallbackProfile = UserProfile(
-        id: 'usr-gmail-${DateTime.now().millisecondsSinceEpoch}',
-        email: 'utilisateur.aurabudget@gmail.com',
-        displayName: 'Utilisateur Gmail',
-        photoUrl: 'https://lh3.googleusercontent.com/a/default-user',
-        isGuest: false,
-      );
-      await saveUserProfile(fallbackProfile);
-      return fallbackProfile;
+      debugPrint('[AuthService] Google Sign-In Exception: $e');
+      return null;
     }
   }
 

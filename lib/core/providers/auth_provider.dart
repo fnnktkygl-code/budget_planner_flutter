@@ -40,13 +40,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
+  Future<void> signInWithGmailAddress(String email) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    final profile = await AuthService.signInWithGmailAddress(email);
+    state = AuthState(user: profile, isLoading: false);
+  }
+
   Future<void> signInWithGoogle() async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     final profile = await AuthService.signInWithGoogle();
     if (profile != null) {
       state = AuthState(user: profile, isLoading: false);
     } else {
-      state = AuthState(user: null, isLoading: false, errorMessage: 'Connexion annulée.');
+      state = AuthState(user: null, isLoading: false);
     }
   }
 

@@ -3,11 +3,118 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
 import '../core/providers/auth_provider.dart';
 
-class LoginScreen extends ConsumerWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  void _showGmailSignInDialog(BuildContext context) {
+    final emailController = TextEditingController(text: 'fnnktkygl@gmail.com');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            top: 24,
+            left: 20,
+            right: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: const [
+                      Text('🔴', style: TextStyle(fontSize: 22)),
+                      SizedBox(width: 10),
+                      Text(
+                        'Connexion Gmail / Google',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Entrez votre adresse email Gmail pour accéder à votre espace AuraBudget Pro.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 18),
+
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Votre adresse Gmail',
+                  hintText: 'ex: votre.nom@gmail.com',
+                  prefixIcon: const Icon(Icons.email_outlined, color: AppColors.accentCyan),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.accentCyan, width: 2),
+                  ),
+                ),
+                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.login_rounded),
+                  label: const Text('Se connecter à AuraBudget Pro', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  onPressed: () {
+                    final email = emailController.text.trim();
+                    Navigator.pop(ctx);
+                    ref.read(authProvider.notifier).signInWithGmailAddress(email);
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              Center(
+                child: TextButton.icon(
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16, color: AppColors.textSecondary),
+                  label: const Text('Essayer la connexion Google One-Tap / Popup Native', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ref.read(authProvider.notifier).signInWithGoogle();
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
 
     return Scaffold(
@@ -86,9 +193,7 @@ class LoginScreen extends ConsumerWidget {
                           elevation: 2,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
-                        onPressed: () {
-                          ref.read(authProvider.notifier).signInWithGoogle();
-                        },
+                        onPressed: () => _showGmailSignInDialog(context),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: const [
