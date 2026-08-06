@@ -196,19 +196,37 @@ class SalaryParserService {
     // Pattern d'extraction haute précision (euros et centimes séparés par espace, virgule ou point)
     const String numPattern = r'(\d{1,6})(?:[\s,\.](\d{2}))?(?!\d)';
 
-    // PRIORITY 1: NET APRES IMPOT / NET VERSE SUR LE COMPTE / VIREMENT
-    final netAfterTaxRegExp = RegExp(
-      r'(?:NET\s+VERS[EÉ]|NET\s+PAY[EÉ]|NET\s+A\s+PAYER\s+APR[EÈ]S\s+IMP[OÔ]T|MONTANT\s+NET\s+VERS[EÉ]|EN\s+EUROS\s+VIREMENT|VIREMENT|SOLDE\s+DE\s+TOUT\s+COMPTE)[^\d]*' + numPattern,
+    // PRIORITY 1A: Number PRECEDING "EN EUROS VIREMENT", "VIREMENT", "NET VERSÉ" (ex: " 2713 74 \n EN EUROS VIREMENT")
+    final numBeforeVirementRegExp = RegExp(
+      numPattern + r'[^\d]{0,50}(?:EN\s+EUROS\s+VIREMENT|VIREMENT|NET\s+VERS[EÉ]|SUR\s+VOTRE\s+COMPTE|NET\s+PAY[EÉ])',
       caseSensitive: false,
     );
 
-    for (final match in netAfterTaxRegExp.allMatches(fullText)) {
+    for (final match in numBeforeVirementRegExp.allMatches(fullText)) {
       final euros = match.group(1)!;
       final centimes = match.group(2) ?? '00';
       final val = double.tryParse('$euros.$centimes');
       if (val != null && val >= 500.0 && val <= 30000.0) {
         foundNet = val;
         break;
+      }
+    }
+
+    // PRIORITY 1B: Number FOLLOWING "NET VERSÉ", "EN EUROS VIREMENT", etc.
+    if (foundNet == null) {
+      final netAfterTaxRegExp = RegExp(
+        r'(?:NET\s+VERS[EÉ]|NET\s+PAY[EÉ]|NET\s+A\s+PAYER\s+APR[EÈ]S\s+IMP[OÔ]T|MONTANT\s+NET\s+VERS[EÉ]|EN\s+EUROS\s+VIREMENT|VIREMENT|SOLDE\s+DE\s+TOUT\s+COMPTE)[^\d]*' + numPattern,
+        caseSensitive: false,
+      );
+
+      for (final match in netAfterTaxRegExp.allMatches(fullText)) {
+        final euros = match.group(1)!;
+        final centimes = match.group(2) ?? '00';
+        final val = double.tryParse('$euros.$centimes');
+        if (val != null && val >= 500.0 && val <= 30000.0) {
+          foundNet = val;
+          break;
+        }
       }
     }
 
