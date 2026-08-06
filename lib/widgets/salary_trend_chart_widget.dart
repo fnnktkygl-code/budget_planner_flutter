@@ -428,23 +428,18 @@ class _SalaryChartPainter extends CustomPainter {
   });
 
   double _getVal(SalaryRecord r) {
-    double val = r.netSalary;
-    if (viewMode == 1) val = r.netSocial;
+    if (viewMode == 1) return r.regularNetSocial;
     if (viewMode == 2) {
       if (taxAdjustments != null && taxAdjustments!.isNotEmpty) {
         final year = r.year;
         final adjList = taxAdjustments!.where((t) => t.taxYear == year).toList();
         if (adjList.isNotEmpty) {
           final monthlyRealTax = adjList.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear);
-          val = max(0.0, r.netSocial - monthlyRealTax);
+          return max(0.0, r.regularNetSocial - monthlyRealTax);
         }
       }
     }
-    if (separateBonus && r.hasExplicitBonus) {
-      final bonus = r.bonusAmount ?? 0.0;
-      val = max(0.0, val - bonus);
-    }
-    return val;
+    return r.regularNetSalary;
   }
 
   @override

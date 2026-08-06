@@ -2388,9 +2388,29 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    Text(
-                                      '${record.netSalary.toStringAsFixed(2)} €',
-                                      style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 15),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (record.hasExplicitBonus && (record.bonusAmount ?? 0) > 0) ...[
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.accentGold.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: AppColors.accentGold.withValues(alpha: 0.3)),
+                                            ),
+                                            child: Text(
+                                              '+${record.bonusAmount!.toStringAsFixed(2)} € (Prime)',
+                                              style: const TextStyle(color: AppColors.accentGold, fontSize: 10, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        Text(
+                                          '${record.regularNetSalary.toStringAsFixed(2)} €',
+                                          style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 15),
+                                        ),
+                                      ],
                                     ),
                                     Text(
                                       'Brut : ${(record.grossSalary ?? 0).toStringAsFixed(2)} €',

@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import '../constants/colors.dart';
 import '../models/salary_record.dart';
@@ -59,11 +58,7 @@ class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
     }
 
     final salaryValues = sorted.map((r) {
-      double baseNet = _includeIncomeTax ? r.netSalary : r.netSocial;
-      if (r.hasExplicitBonus && (r.bonusAmount ?? 0.0) > 0) {
-        baseNet = max(0.0, baseNet - (r.bonusAmount ?? 0.0));
-      }
-      return baseNet;
+      return _includeIncomeTax ? r.regularNetSalary : r.regularNetSocial;
     }).toList();
 
     final fixedValues = sorted.map((_) => widget.defaultFixedCharges).toList();
