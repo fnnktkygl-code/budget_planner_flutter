@@ -229,29 +229,38 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                     ],
                   ],
                 ),
-                Row(
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (_useNetSocialView) ...[
-                      Text(
-                        'Net Social : ${selectedRecord.netSocial.toStringAsFixed(2)} €',
-                        style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 14),
+                    Text(
+                      'Net Social : ${selectedRecord.netSocial.toStringAsFixed(2)} €',
+                      style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const Text('➔', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: selectedRecord.incomeTaxAmount != 0.0
+                            ? AppColors.accentRose.withValues(alpha: 0.15)
+                            : AppColors.accentEmerald.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Taux PAS : ${selectedRecord.incomeTaxRatePercent.toStringAsFixed(1)}%',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      child: Text(
+                        'IR (${selectedRecord.incomeTaxRatePercent.toStringAsFixed(1)}%) : ${selectedRecord.incomeTaxAmount != 0.0 ? selectedRecord.incomeTaxAmount.toStringAsFixed(2) : "0.00"} €',
+                        style: TextStyle(
+                          color: selectedRecord.incomeTaxAmount != 0.0 ? AppColors.accentRose : AppColors.accentEmerald,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
-                    ] else ...[
-                      Text(
-                        'Net Banque : ${selectedRecord.netSalary.toStringAsFixed(2)} €',
-                        style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Impôt IR : ${selectedRecord.incomeTaxAmount != 0.0 ? selectedRecord.incomeTaxAmount.toStringAsFixed(2) : "0.00"} €',
-                        style: const TextStyle(color: AppColors.accentRose, fontSize: 12),
-                      ),
-                    ],
+                    ),
+                    const Text('➔', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                    Text(
+                      'Net Banque : ${selectedRecord.netSalary.toStringAsFixed(2)} €',
+                      style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
                   ],
                 ),
               ],

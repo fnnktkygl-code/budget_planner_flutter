@@ -1340,23 +1340,49 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
 
                   if (records.isNotEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentEmerald.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Salaire Net Moyen Lissée :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
-                          Text(
-                            '${analytics.overallAverageNet.toStringAsFixed(2)} € / mois',
-                            style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 14),
+                    // Fiscal KPI Summary Bar
+                    Builder(
+                      builder: (context) {
+                        final double cumulTax = records.fold(0.0, (sum, r) => sum + r.incomeTaxAmount);
+                        final double avgTaxRate = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.incomeTaxRatePercent) / records.length : 0.0;
+                        final double avgNetSocial = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.netSocial) / records.length : 0.0;
+
+                        return Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.borderSubtle),
                           ),
-                        ],
-                      ),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Net Banque Moyen :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+                                  Text('${analytics.overallAverageNet.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13)),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Net Social Moyen (Avant PAS) :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+                                  Text('${avgNetSocial.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 13)),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Cumul Impôt IR Prélevé (Taux Moy. ${avgTaxRate.toStringAsFixed(1)}%) :', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                                  Text('${cumulTax != 0.0 ? cumulTax.toStringAsFixed(2) : "0.00"} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 12)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
 
@@ -1408,11 +1434,29 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                               child: const Text('Référent Actif', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
                                             ),
                                           ],
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: record.incomeTaxAmount != 0.0
+                                                  ? AppColors.accentRose.withValues(alpha: 0.15)
+                                                  : AppColors.accentEmerald.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              'PAS: ${record.incomeTaxAmount != 0.0 ? record.incomeTaxAmount.toStringAsFixed(2) : "0.00"} € (${record.incomeTaxRatePercent.toStringAsFixed(1)}%)',
+                                              style: TextStyle(
+                                                color: record.incomeTaxAmount != 0.0 ? AppColors.accentRose : AppColors.accentEmerald,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
-                                      const SizedBox(height: 2),
+                                      const SizedBox(height: 4),
                                       Text(
-                                        record.notes ?? record.status,
+                                        'Net Social : ${record.netSocial.toStringAsFixed(2)} € • ${record.notes ?? record.status}',
                                         style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
                                       ),
                                     ],
