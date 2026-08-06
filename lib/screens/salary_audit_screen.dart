@@ -342,6 +342,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
         for (int i = 0; i < files.length; i++) {
           final file = files[i];
+          modalStateSetter?.call(() {});
+
           Uint8List? renderedImg;
           String? extractedText;
           if (file.name.toLowerCase().endsWith('.pdf')) {
@@ -363,6 +365,10 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
         final parsedPayslips = await SalaryParserService.parseBatchDocuments(
           items: batchItems,
           apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
+          onBatchProgress: (pCount, total, msg) {
+            processedCount = pCount;
+            modalStateSetter?.call(() {});
+          },
         );
 
         for (int i = 0; i < parsedPayslips.length && i < files.length; i++) {
@@ -379,9 +385,10 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
           );
 
           batchRecords.add(record);
-          processedCount = i + 1;
-          modalStateSetter?.call(() {});
         }
+
+        processedCount = files.length;
+        modalStateSetter?.call(() {});
 
         // Add all batch records to state notifier
         ref.read(salaryProvider.notifier).addMultipleRecords(batchRecords);

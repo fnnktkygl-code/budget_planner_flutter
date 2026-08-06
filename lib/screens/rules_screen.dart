@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
+import '../models/temporary_expense.dart';
 import '../widgets/notification_header.dart';
 
 class RuleCategoryItem {
@@ -391,14 +392,183 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     });
   }
 
+  void _showAddTemporaryExpenseDialog(BuildContext context) {
+    final labelCtrl = TextEditingController(text: 'Dentiste Couronne');
+    final amountCtrl = TextEditingController(text: '164.50');
+    final startCtrl = TextEditingController(text: '2026-06');
+    final durationCtrl = TextEditingController(text: '12');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final amt = double.tryParse(amountCtrl.text) ?? 0.0;
+            final dur = int.tryParse(durationCtrl.text) ?? 12;
+
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: const [
+                  Icon(Icons.calendar_month_rounded, color: AppColors.accentCyan, size: 22),
+                  SizedBox(width: 10),
+                  Text('Dépense Échéancée / Temporaire', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Ajoutez une dépense à durée limitée (ex: soins dentaires 164€/mois sur 12 mois, achat informatique en N fois).',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: labelCtrl,
+                      decoration: const InputDecoration(labelText: 'Intitulé', border: OutlineInputBorder()),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: amountCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            onChanged: (_) => setModalState(() {}),
+                            decoration: const InputDecoration(labelText: 'Montant Mensuel (€)', border: OutlineInputBorder(), suffixText: '€'),
+                            style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: durationCtrl,
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) => setModalState(() {}),
+                            decoration: const InputDecoration(labelText: 'Durée (Mois)', border: OutlineInputBorder()),
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: startCtrl,
+                      decoration: const InputDecoration(labelText: 'Mois Début (AAAA-MM)', border: OutlineInputBorder()),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Total Échéancier :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                          Text('${(amt * dur).toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text('Annuler', style: TextStyle(color: AppColors.textSecondary)),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
+                  child: const Text('Ajouter l\'échéancier'),
+                  onPressed: () {
+                    final exp = TemporaryExpense(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      label: labelCtrl.text.isEmpty ? 'Dépense temporaire' : labelCtrl.text,
+                      monthlyAmount: double.tryParse(amountCtrl.text) ?? 0.0,
+                      startPeriod: startCtrl.text.isEmpty ? '2026-06' : startCtrl.text,
+                      durationMonths: int.tryParse(durationCtrl.text) ?? 12,
+                    );
+                    ref.read(salaryProvider.notifier).addTemporaryExpense(exp);
+                    Navigator.pop(ctx);
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditAccountBalanceDialog(BuildContext context, double currentBalance) {
+    final balanceCtrl = TextEditingController(text: currentBalance.toStringAsFixed(2));
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.account_balance_wallet_rounded, color: AppColors.accentCyan, size: 22),
+              SizedBox(width: 10),
+              Text('Solde Réel Compte Courant', style: TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Indiquez le solde réel de votre compte bancaire principal pour calibrer le buffer de sécurité :',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: balanceCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Solde Réel Actuel (€)', suffixText: '€', border: OutlineInputBorder()),
+                style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textSecondary)),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentEmerald, foregroundColor: Colors.white),
+              child: const Text('Mettre à jour'),
+              onPressed: () {
+                final val = double.tryParse(balanceCtrl.text) ?? currentBalance;
+                ref.read(salaryProvider.notifier).updateAccountBalance(val);
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final salary = ref.watch(salaryProvider);
     final netSalary = salary.activeBaseline?.netSalary ?? 2713.74;
 
     final taxMonthly = salary.activeTaxAdjustmentMonthlyInstallment;
+    final tempMonthly = salary.activeTemporaryExpensesMonthlyTotal;
     final totalSavings = _savingsCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
-    final totalFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary)) + taxMonthly;
+    final totalFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary)) + taxMonthly + tempMonthly;
     final totalDaily = _dailyCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
 
     final resteAVivre = netSalary - totalSavings - totalFixed - totalDaily;
@@ -561,6 +731,194 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       _buildGaugeLegend('Reste', resteAVivre, AppColors.accentEmerald),
                     ],
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // SECTION BUFFER COMPTE COURANT & SANTÉ TRÉSORERIE (1500€ - 1800€)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.shield_outlined, color: AppColors.accentCyan, size: 20),
+                          SizedBox(width: 8),
+                          Text('Buffer Compte Courant & Santé Trésorerie', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accentEmerald.withValues(alpha: 0.2),
+                          foregroundColor: AppColors.accentEmerald,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.edit_rounded, size: 14),
+                        label: Text('${salary.accountBalance.toStringAsFixed(0)} € Réel', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        onPressed: () => _showEditAccountBalanceDialog(context, salary.accountBalance),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Builder(
+                    builder: (context) {
+                      final bal = salary.accountBalance;
+                      final projBal = bal + resteAVivre;
+                      Color statusColor;
+                      String statusText;
+                      String adviceText;
+
+                      if (bal < 1200) {
+                        statusColor = AppColors.accentRose;
+                        statusText = '🚨 Danger de Découvert (< 1 200 €)';
+                        adviceText = 'Votre buffer est sous le seuil de sécurité. Il est recommandé de réduire temporairement vos allocations PEA pour renflouer le compte courant à 1 500 €.';
+                      } else if (bal < 1500) {
+                        statusColor = Colors.orange;
+                        statusText = '🟧 Absorption de Choc (1 200 € - 1 500 €)';
+                        adviceText = 'Votre buffer absorbe les variations. Maintenez vos charges sous contrôle pour remonter progressivement vers la cible de 1 500 €.';
+                      } else if (bal <= 1800) {
+                        statusColor = AppColors.accentEmerald;
+                        statusText = '🟩 Cible Idéale (1 500 € - 1 800 €)';
+                        adviceText = 'Trésorerie optimale ! Votre solde est parfaitement équilibré entre sécurité et investissement.';
+                      } else {
+                        statusColor = AppColors.accentCyan;
+                        statusText = '💡 Cash Dormant Détecté (> 1 800 €)';
+                        adviceText = 'Vous avez +${(bal - 1800).toStringAsFixed(0)} € d\'excédent sur votre compte courant. Pensez à l\'arbitrer vers votre PEA ou votre Livret A !';
+                      }
+
+                      return Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                                    Text('Projeté Fin de Mois : ${projBal.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(adviceText, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // SECTION DÉPENSES TEMPORAIRES ÉCHÉANCÉES (Dentiste 12 mois, Crédits N fois...)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.calendar_month_rounded, color: AppColors.accentCyan, size: 20),
+                          SizedBox(width: 8),
+                          Text('Dépenses Échéancées & Temporaires', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accentCyan,
+                          foregroundColor: Colors.white,
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: const Text('Déclarer un Échéancier', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: () => _showAddTemporaryExpenseDialog(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (salary.temporaryExpenses.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: const Text(
+                        'Aucune dépense temporaire enregistrée. Déclarez vos soins dentaires (ex: 164€/mois sur 12 mois) ou achats étalés N fois.',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      ),
+                    )
+                  else
+                    Column(
+                      children: salary.temporaryExpenses.map((exp) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.borderSubtle),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(exp.label, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Début ${exp.startPeriod} • Durée : ${exp.durationMonths} mois (Fin ${exp.endPeriod})',
+                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                '-${exp.monthlyAmount.toStringAsFixed(2)} €/mois',
+                                style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
+                                onPressed: () {
+                                  ref.read(salaryProvider.notifier).deleteTemporaryExpense(exp.id);
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
                 ],
               ),
             ),

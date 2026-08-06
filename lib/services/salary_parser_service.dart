@@ -348,16 +348,19 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
   static Future<List<RealParsedPayslip>> parseBatchDocuments({
     required List<PayslipBatchItem> items,
     String? apiKey,
+    void Function(int processedCount, int totalCount, String statusMessage)? onBatchProgress,
   }) async {
     if (items.isEmpty) return [];
 
     if (items.length == 1) {
+      onBatchProgress?.call(0, 1, 'Analyse du bulletin en cours...');
       final single = await parseDocument(
         fileBytes: items[0].fileBytes,
         fileName: items[0].fileName,
         apiKey: apiKey,
         rawTextContent: items[0].rawTextContent,
       );
+      onBatchProgress?.call(1, 1, 'Terminé');
       return [single];
     }
 
@@ -366,8 +369,23 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
 
     for (int i = 0; i < items.length; i += batchSize) {
       final chunk = items.sublist(i, (i + batchSize).clamp(0, items.length));
+      final int startNum = i + 1;
+      final int endNum = (i + batchSize).clamp(0, items.length);
+
+      onBatchProgress?.call(
+        i,
+        items.length,
+        'Analyse IA du lot $startNum à $endNum sur ${items.length}...',
+      );
+
       final chunkResults = await _processMicroBatch(chunk: chunk, apiKey: apiKey);
       results.addAll(chunkResults);
+
+      onBatchProgress?.call(
+        results.length,
+        items.length,
+        'Analysé ${results.length} / ${items.length} bulletins...',
+      );
     }
 
     return results;

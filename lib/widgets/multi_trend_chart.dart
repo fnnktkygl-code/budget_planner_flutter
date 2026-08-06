@@ -22,6 +22,7 @@ class MultiTrendChartWidget extends StatefulWidget {
 
 class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
   bool _includeIncomeTax = true; // With PAS vs Before PAS
+  int? _hoverIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -139,20 +140,39 @@ class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
           ),
           const SizedBox(height: 16),
 
-          // Multi-Curve Canvas Area
+          // Multi-Curve Canvas Area with Hover & Touch Gestures
           SizedBox(
-            height: 200,
+            height: 220,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                return CustomPaint(
-                  size: Size(constraints.maxWidth, constraints.maxHeight),
-                  painter: _MultiTrendPainter(
-                    records: sorted,
-                    salaryValues: salaryValues,
-                    fixedValues: fixedValues,
-                    savingsValues: savingsValues,
-                    resteValues: resteValues,
-                    maxY: maxY,
+                final width = constraints.maxWidth;
+                final n = sorted.length;
+                final stepX = n > 1 ? width / (n - 1) : width / 2;
+
+                void updateHover(Offset localPos) {
+                  final idx = (localPos.dx / stepX).round().clamp(0, n - 1);
+                  if (_hoverIndex != idx) {
+                    setState(() => _hoverIndex = idx);
+                  }
+                }
+
+                return MouseRegion(
+                  onHover: (evt) => updateHover(evt.localPosition),
+                  onExit: (_) => setState(() => _hoverIndex = null),
+                  child: GestureDetector(
+                    onTapDown: (evt) => updateHover(evt.localPosition),
+                    child: CustomPaint(
+                      size: Size(width, constraints.maxHeight),
+                      painter: _MultiTrendPainter(
+                        records: sorted,
+                        salaryValues: salaryValues,
+                        fixedValues: fixedValues,
+                        savingsValues: savingsValues,
+                        resteValues: resteValues,
+                        maxY: maxY,
+                        hoverIndex: _hoverIndex,
+                      ),
+                    ),
                   ),
                 );
               },
@@ -200,6 +220,7 @@ class _MultiTrendPainter extends CustomPainter {
   final List<double> savingsValues;
   final List<double> resteValues;
   final double maxY;
+  final int? hoverIndex;
 
   _MultiTrendPainter({
     required this.records,
@@ -208,6 +229,7 @@ class _MultiTrendPainter extends CustomPainter {
     required this.savingsValues,
     required this.resteValues,
     required this.maxY,
+    this.hoverIndex,
   });
 
   @override
@@ -247,7 +269,6 @@ class _MultiTrendPainter extends CustomPainter {
       path.moveTo(pts[0].dx, pts[0].dy);
 
       if (pts.length == 1) {
-        // Single point
         path.addOval(Rect.fromCircle(center: pts[0], radius: 2));
       } else {
         for (int i = 0; i < pts.length - 1; i++) {
@@ -266,8 +287,10 @@ class _MultiTrendPainter extends CustomPainter {
       final bgDotPaint = Paint()..color = AppColors.cardBackground;
 
       for (int i = 0; i < pts.length; i++) {
-        canvas.drawCircle(pts[i], 4, dotPaint);
-        canvas.drawCircle(pts[i], 2, bgDotPaint);
+        final isHovered = hoverIndex == i;
+        final radius = isHovered ? 6.0 : 4.0;
+        canvas.drawCircle(pts[i], radius, dotPaint);
+        canvas.drawCircle(pts[i], isHovered ? 3.0 : 2.0, bgDotPaint);
       }
     }
 
@@ -276,8 +299,91 @@ class _MultiTrendPainter extends CustomPainter {
     drawCurve(fixedValues, AppColors.chartRed);
     drawCurve(savingsValues, AppColors.chartBlue);
     drawCurve(resteValues, AppColors.accentEmerald);
+
+    // Draw active hover guide line and tooltip box
+    if (hoverIndex != null && hoverIndex! >= 0 && hoverIndex! < n) {
+      final idx = hoverIndex!;
+      final record = records[idx];
+      final salary = salaryValues[idx];
+      final fixed = fixedValues[idx];
+      final savings = savingsValues[idx];
+      final reste = resteValues[idx];
+
+      final x = n > 1 ? idx * stepX : size.width / 2;
+
+      // Vertical dashed guide line
+      final guidePaint = Paint()
+        ..color = AppColors.accentCyan.withValues(alpha: 0.6)
+        ..strokeWidth = 1.5;
+
+      for (double dy = 0; dy < size.height; dy += 6) {
+        canvas.drawLine(Offset(x, dy), Offset(x, (dy + 3).clamp(0.0, size.height)), guidePaint);
+      }
+
+      // Draw Tooltip Card Box
+      final String periodText = record.periodLabel.isNotEmpty ? record.periodLabel : record.period;
+      const tooltipWidth = 175.0;
+      const tooltipHeight = 105.0;
+      double tooltipX = x + 12;
+      if (tooltipX + tooltipWidth > size.width) {
+        tooltipX = x - tooltipWidth - 12;
+      }
+      const tooltipY = 10.0;
+
+      final cardRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(tooltipX, tooltipY, tooltipWidth, tooltipHeight),
+        const Radius.circular(12),
+      );
+
+      canvas.drawRRect(
+        cardRect,
+        Paint()..color = AppColors.surface.withValues(alpha: 0.95),
+      );
+      canvas.drawRRect(
+        cardRect,
+        Paint()
+          ..color = AppColors.accentCyan.withValues(alpha: 0.5)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+
+      TextPainter makeText(String text, Color color, {bool isBold = false, double fontSize = 11}) {
+        final tp = TextPainter(
+          text: TextSpan(
+            text: text,
+            style: TextStyle(
+              color: color,
+              fontSize: fontSize,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        tp.layout();
+        return tp;
+      }
+
+      final titleTp = makeText(periodText, AppColors.textPrimary, isBold: true, fontSize: 12);
+      titleTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 8));
+
+      final revTp = makeText('• Revenu: ${salary.toStringAsFixed(2)} €', AppColors.accentCyan, isBold: true);
+      revTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 28));
+
+      final fixTp = makeText('• Charges: ${fixed.toStringAsFixed(2)} €', AppColors.accentRose, isBold: true);
+      fixTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 46));
+
+      final savTp = makeText('• Épargne: ${savings.toStringAsFixed(2)} €', AppColors.accentPurple, isBold: true);
+      savTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 64));
+
+      final rstTp = makeText('• Reste: ${reste.toStringAsFixed(2)} €', AppColors.accentEmerald, isBold: true);
+      rstTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 82));
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _MultiTrendPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _MultiTrendPainter oldDelegate) {
+    return oldDelegate.hoverIndex != hoverIndex ||
+        oldDelegate.records != records ||
+        oldDelegate.salaryValues != salaryValues;
+  }
 }
