@@ -2466,12 +2466,12 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                   ),
                                 ),
                                 Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        if (record.hasExplicitBonus && (record.bonusAmount ?? 0) > 0) ...[
+                                        if (record.isExtraOrBonusMonth && record.calculatedExtraAmount > 10.0) ...[
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             decoration: BoxDecoration(
@@ -2480,7 +2480,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                               border: Border.all(color: AppColors.accentGold.withValues(alpha: 0.3)),
                                             ),
                                             child: Text(
-                                              '+${record.bonusAmount!.toStringAsFixed(2)} € (Prime)',
+                                              '+${record.calculatedExtraAmount.toStringAsFixed(2)} € (${record.bonusDescription ?? "Extra / Rachat RTT / Prime"})',
                                               style: const TextStyle(color: AppColors.accentGold, fontSize: 10, fontWeight: FontWeight.bold),
                                             ),
                                           ),

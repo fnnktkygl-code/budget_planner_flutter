@@ -56,29 +56,40 @@ class SalaryRecord {
   /// Nom du salarié
   String get employeeName => "NEGEM RICHARD";
 
-  /// Salaire net récurrent hors prime exceptionnel (aligné sur le salaire de base récurrent)
-  double get regularNetSalary {
-    if (hasExplicitBonus && bonusAmount != null && bonusAmount! > 0) {
-      final base = netSalary - bonusAmount!;
-      if (base >= 2650 && base < 3200) return base;
-      return 2787.89;
+  /// Montant d'extra / rachat de congés / prime calculé dynamiquement
+  double get calculatedExtraAmount {
+    if (bonusAmount != null && bonusAmount! > 0) return bonusAmount!;
+    if (netSocial > 3100) {
+      return (netSocial - 2952.28).abs();
     }
-    // Clamping pour isoler les rachats de congés/RTT et extras exceptionnels (ex: Décembre 2025 > 3300 €)
-    if (netSalary > 3300) {
-      return 2787.89;
+    if (netSalary > 3100) {
+      return (netSalary - 2787.89).abs();
+    }
+    return 0.0;
+  }
+
+  /// Mois contenant un extra (Prime, Rachat de Congés/RTT, Bonus)
+  bool get isExtraOrBonusMonth =>
+      hasExplicitBonus || (bonusAmount != null && bonusAmount! > 0) || calculatedExtraAmount > 10.0;
+
+  /// Salaire net récurrent hors prime exceptionnel (calculé dynamiquement)
+  double get regularNetSalary {
+    if (bonusAmount != null && bonusAmount! > 0) {
+      return (netSalary - bonusAmount!).clamp(0.0, double.infinity);
+    }
+    if (calculatedExtraAmount > 10.0) {
+      return (netSalary - calculatedExtraAmount).clamp(0.0, double.infinity);
     }
     return netSalary;
   }
 
-  /// Net social récurrent hors prime exceptionnel
+  /// Net social récurrent hors prime exceptionnel (calculé dynamiquement)
   double get regularNetSocial {
-    if (hasExplicitBonus && bonusAmount != null && bonusAmount! > 0) {
-      final base = netSocial - bonusAmount!;
-      if (base >= 2850 && base < 3400) return base;
-      return 2952.28;
+    if (bonusAmount != null && bonusAmount! > 0) {
+      return (netSocial - bonusAmount!).clamp(0.0, double.infinity);
     }
-    if (netSocial > 3400) {
-      return 2952.28;
+    if (calculatedExtraAmount > 10.0) {
+      return (netSocial - calculatedExtraAmount).clamp(0.0, double.infinity);
     }
     return netSocial;
   }

@@ -530,8 +530,9 @@ Pour chaque bulletin (identifié par son index de 0 à ${chunk.length - 1}), ext
     "grossSalary": 3800.0,
     "netSocial": 2952.28,
     "netPayable": 2713.74,
-    "hasExplicitBonus": false,
-    "bonusDescription": null
+    "hasExplicitBonus": true,
+    "bonusDescription": "Rachat 6j repos RTT",
+    "bonusAmount": 964.64
   }
 ]
 CONSIGNES STRICTES D'EXTRACTION DE PAIE FRANÇAISE :
@@ -539,6 +540,7 @@ CONSIGNES STRICTES D'EXTRACTION DE PAIE FRANÇAISE :
 2. netPayable: Extraire STRICTEMENT le MONTANT NET PAYÉ ET VERSÉ SUR LE COMPTE BANCAIRE ("Net à Payer", "Net Payé", "Net Versé", "Net Effectif", "Net à payer avant PAS" moins impôt). ATTENTION: Ne JAMAIS prendre le "Net Imposable" ou "Cumul Net Imposable" !
 3. netSocial: Extraire le "Net Social" ou "Net avant impôt sur le revenu".
 4. grossSalary: Extraire le Salaire Brut (Total Brut).
+5. hasExplicitBonus, bonusDescription & bonusAmount: Détecte toute ligne exceptionnelle (Rachat de congés, Rachat jour repos, Rachat RTT, Prime, 13e mois, Bonus, Indemnités). Si présente, définis "hasExplicitBonus": true, l'intitulé exact dans "bonusDescription" (ex: "Rachat 6j repos RTT") et le montant dans "bonusAmount".
 '''
       }
     ];
