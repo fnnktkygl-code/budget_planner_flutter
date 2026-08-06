@@ -513,14 +513,15 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     // 3. UNIFIED PINCH-TO-ZOOM VIEWPORT (Document Image & Redaction Canvas combined)
     return InteractiveViewer(
       transformationController: _transformationController,
-      alignment: Alignment.center,
+      alignment: Alignment.topCenter,
       minScale: 1.0,
       maxScale: 4.0,
-      boundaryMargin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: Center(
+      boundaryMargin: const EdgeInsets.symmetric(vertical: 300, horizontal: 100),
+      clipBehavior: Clip.hardEdge,
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
         child: Stack(
-          alignment: Alignment.center,
+          alignment: Alignment.topCenter,
           children: [
             // PDF Document Image Page
             Image.memory(
