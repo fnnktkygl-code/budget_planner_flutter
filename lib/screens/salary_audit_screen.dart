@@ -59,7 +59,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   String _historySearchQuery = '';
   int _selectedHistoryYear = 0; // 0 = Tous
   int _historyPage = 1;
-  final int _itemsPerPage = 5;
+  final int _itemsPerPage = 10;
 
   // Period Selector Dialog State
   int _selectedYear = 2026;
