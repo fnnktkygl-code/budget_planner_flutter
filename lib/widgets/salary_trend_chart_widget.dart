@@ -21,6 +21,7 @@ class SalaryTrendChartWidget extends StatefulWidget {
 
 class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
   int? _selectedIndex;
+  bool _useNetSocialView = false; // Normalisation fiscale (Net Social Avant PAS)
 
   @override
   Widget build(BuildContext context) {
@@ -32,21 +33,23 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
     final sortedRecords = List<SalaryRecord>.from(widget.records)
       ..sort((a, b) => a.period.compareTo(b.period));
 
-    final explicitBonusRecords = sortedRecords.where((r) => r.hasExplicitBonus).toList();
-
     final selectedIndex = _selectedIndex != null && _selectedIndex! < sortedRecords.length
         ? _selectedIndex!
         : sortedRecords.length - 1;
     final selectedRecord = sortedRecords[selectedIndex];
 
+    final effectiveValue = _useNetSocialView ? selectedRecord.netSocial : selectedRecord.netSalary;
+
     // Detect if current selected record is a permanent salary increase vs previous month
     bool isSalaryIncrease = false;
     double growthPercent = 0.0;
     if (selectedIndex > 0) {
-      final prevNet = sortedRecords[selectedIndex - 1].netSalary;
-      if (selectedRecord.netSalary > prevNet + 15.0 && !selectedRecord.hasExplicitBonus) {
+      final prevVal = _useNetSocialView
+          ? sortedRecords[selectedIndex - 1].netSocial
+          : sortedRecords[selectedIndex - 1].netSalary;
+      if (effectiveValue > prevVal + 15.0 && !selectedRecord.hasExplicitBonus) {
         isSalaryIncrease = true;
-        growthPercent = ((selectedRecord.netSalary - prevNet) / prevNet) * 100;
+        growthPercent = ((effectiveValue - prevVal) / prevVal) * 100;
       }
     }
 
@@ -60,7 +63,7 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header KPI Row
+          // Header & Tax Normalization Toggle Row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -68,11 +71,11 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    children: [
-                      const Icon(Icons.show_chart_rounded, color: AppColors.accentCyan, size: 22),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Évolution & Tendance des Salaires',
+                    children: const [
+                      Icon(Icons.show_chart_rounded, color: AppColors.accentCyan, size: 22),
+                      SizedBox(width: 8),
+                      Text(
+                        'Évolution & Normalisation Fiscale',
                         style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -84,24 +87,56 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                   ),
                 ],
               ),
-              if (explicitBonusRecords.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentEmerald.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.accentEmerald),
-                  ),
-                  child: Row(
-                    children: [
-                      const Text('🎁 Prime Détectée : ', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                      Text(
-                        '${explicitBonusRecords.last.netSalary.toStringAsFixed(2)} €',
-                        style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 12),
-                      ),
-                    ],
-                  ),
+              // Tax Toggle Selector
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.borderSubtle),
                 ),
+                child: Row(
+                  children: [
+                    InkWell(
+                      onTap: () => setState(() => _useNetSocialView = false),
+                      borderRadius: BorderRadius.circular(9),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: !_useNetSocialView ? AppColors.accentCyan : Colors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(
+                          '🏦 En Banque',
+                          style: TextStyle(
+                            color: !_useNetSocialView ? Colors.white : AppColors.textMuted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => setState(() => _useNetSocialView = true),
+                      borderRadius: BorderRadius.circular(9),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _useNetSocialView ? AppColors.accentPurple : Colors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(
+                          '📈 Avant Impôt',
+                          style: TextStyle(
+                            color: _useNetSocialView ? Colors.white : AppColors.textMuted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -127,6 +162,7 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                   records: sortedRecords,
                   averageNet: widget.averageNet,
                   selectedIndex: selectedIndex,
+                  useNetSocialView: _useNetSocialView,
                 ),
               ),
             ),
@@ -139,7 +175,11 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: _useNetSocialView
+                    ? AppColors.accentPurple.withValues(alpha: 0.4)
+                    : AppColors.accentCyan.withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -149,8 +189,8 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                     Container(
                       width: 10,
                       height: 10,
-                      decoration: const BoxDecoration(
-                        color: AppColors.accentCyan,
+                      decoration: BoxDecoration(
+                        color: _useNetSocialView ? AppColors.accentPurple : AppColors.accentCyan,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -191,15 +231,27 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                 ),
                 Row(
                   children: [
-                    Text(
-                      'Net : ${selectedRecord.netSalary.toStringAsFixed(2)} €',
-                      style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Brut : ${(selectedRecord.grossSalary ?? 0).toStringAsFixed(2)} €',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                    ),
+                    if (_useNetSocialView) ...[
+                      Text(
+                        'Net Social : ${selectedRecord.netSocial.toStringAsFixed(2)} €',
+                        style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Taux PAS : ${selectedRecord.incomeTaxRatePercent.toStringAsFixed(1)}%',
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      ),
+                    ] else ...[
+                      Text(
+                        'Net Banque : ${selectedRecord.netSalary.toStringAsFixed(2)} €',
+                        style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Impôt IR : ${selectedRecord.incomeTaxAmount != 0.0 ? selectedRecord.incomeTaxAmount.toStringAsFixed(2) : "0.00"} €',
+                        style: const TextStyle(color: AppColors.accentRose, fontSize: 12),
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -215,19 +267,24 @@ class _SalaryChartPainter extends CustomPainter {
   final List<SalaryRecord> records;
   final double averageNet;
   final int selectedIndex;
+  final bool useNetSocialView;
 
   _SalaryChartPainter({
     required this.records,
     required this.averageNet,
     required this.selectedIndex,
+    required this.useNetSocialView,
   });
+
+  double _getVal(SalaryRecord r) => useNetSocialView ? r.netSocial : r.netSalary;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (records.isEmpty) return;
 
-    final maxVal = records.map((r) => r.netSalary).reduce(max) * 1.05;
-    final minVal = max(0.0, records.map((r) => r.netSalary).reduce(min) * 0.9);
+    final values = records.map(_getVal).toList();
+    final maxVal = values.reduce(max) * 1.05;
+    final minVal = max(0.0, values.reduce(min) * 0.9);
     final valRange = max(1.0, maxVal - minVal);
 
     final double stepX = records.length > 1 ? size.width / (records.length - 1) : size.width;
@@ -235,15 +292,18 @@ class _SalaryChartPainter extends CustomPainter {
     List<Offset> points = [];
     for (int i = 0; i < records.length; i++) {
       final x = records.length > 1 ? i * stepX : size.width / 2;
-      final normalizedY = (records[i].netSalary - minVal) / valRange;
+      final normalizedY = (values[i] - minVal) / valRange;
       final y = size.height - (normalizedY * (size.height - 40)) - 20;
       points.add(Offset(x, y));
     }
 
     // 1. Draw Dashed Average Line
-    final avgY = size.height - (((averageNet - minVal) / valRange) * (size.height - 40)) - 20;
+    final effAverage = useNetSocialView ? (averageNet * 1.08) : averageNet;
+    final avgY = size.height - (((effAverage - minVal) / valRange) * (size.height - 40)) - 20;
+    final lineColor = useNetSocialView ? AppColors.accentPurple : AppColors.accentCyan;
+
     final avgPaint = Paint()
-      ..color = AppColors.accentCyan.withValues(alpha: 0.35)
+      ..color = lineColor.withValues(alpha: 0.35)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
@@ -256,8 +316,8 @@ class _SalaryChartPainter extends CustomPainter {
     // Label for Average Line
     final textPainterAvg = TextPainter(
       text: TextSpan(
-        text: 'Moyenne : ${averageNet.toStringAsFixed(0)} €',
-        style: TextStyle(color: AppColors.accentCyan.withValues(alpha: 0.7), fontSize: 10, fontWeight: FontWeight.bold),
+        text: 'Moyenne : ${effAverage.toStringAsFixed(0)} €',
+        style: TextStyle(color: lineColor.withValues(alpha: 0.8), fontSize: 10, fontWeight: FontWeight.bold),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -287,70 +347,42 @@ class _SalaryChartPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AppColors.accentEmerald.withValues(alpha: 0.35),
-            AppColors.accentCyan.withValues(alpha: 0.0),
+            lineColor.withValues(alpha: 0.25),
+            lineColor.withValues(alpha: 0.0),
           ],
         ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-
       canvas.drawPath(fillPath, fillPaint);
 
-      // Stroke Line
+      // Stroke Path
       final strokePaint = Paint()
-        ..color = AppColors.accentEmerald
-        ..strokeWidth = 3
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
-
+        ..color = lineColor
+        ..strokeWidth = 2.5
+        ..style = PaintingStyle.stroke;
       canvas.drawPath(path, strokePaint);
     }
 
-    // 3. Draw Data Node Points & Month Labels
+    // 3. Draw Data Points & Active Selection Highlight
     for (int i = 0; i < points.length; i++) {
       final pt = points[i];
-      final isSelected = i == selectedIndex;
-      final isExplicitBonus = records[i].hasExplicitBonus;
+      final isSel = i == selectedIndex;
+      final rec = records[i];
 
-      // Vertical guide line for selected point
-      if (isSelected) {
-        final guidePaint = Paint()
-          ..color = AppColors.accentCyan.withValues(alpha: 0.5)
-          ..strokeWidth = 1;
-        canvas.drawLine(Offset(pt.dx, 0), Offset(pt.dx, size.height), guidePaint);
+      final pointColor = rec.hasExplicitBonus ? AppColors.accentGold : lineColor;
+
+      if (isSel) {
+        final outerPaint = Paint()..color = pointColor.withValues(alpha: 0.3);
+        canvas.drawCircle(pt, 12, outerPaint);
+        final innerPaint = Paint()..color = pointColor;
+        canvas.drawCircle(pt, 6, innerPaint);
+        final corePaint = Paint()..color = Colors.white;
+        canvas.drawCircle(pt, 2.5, corePaint);
+      } else {
+        final dotPaint = Paint()..color = pointColor;
+        canvas.drawCircle(pt, rec.hasExplicitBonus ? 4.5 : 3.5, dotPaint);
       }
-
-      // Circle Point
-      final pointPaint = Paint()
-        ..color = isSelected ? Colors.white : (isExplicitBonus ? AppColors.accentEmerald : AppColors.accentCyan);
-
-      final outerPaint = Paint()
-        ..color = isSelected ? AppColors.accentCyan : (isExplicitBonus ? AppColors.accentEmerald.withValues(alpha: 0.4) : AppColors.cardBackground)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 3 : 2;
-
-      canvas.drawCircle(pt, isSelected ? 7 : 5, pointPaint);
-      canvas.drawCircle(pt, isSelected ? 7 : 5, outerPaint);
-
-      // Month Label under point
-      final labelText = records[i].periodLabel.split(' ')[0].substring(0, min(3, records[i].periodLabel.length));
-      final tpMonth = TextPainter(
-        text: TextSpan(
-          text: labelText,
-          style: TextStyle(
-            color: isSelected ? AppColors.accentCyan : AppColors.textMuted,
-            fontSize: 10,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tpMonth.paint(canvas, Offset(pt.dx - (tpMonth.width / 2), size.height - 14));
     }
   }
 
   @override
-  bool shouldRepaint(covariant _SalaryChartPainter oldDelegate) {
-    return oldDelegate.records != records ||
-        oldDelegate.selectedIndex != selectedIndex ||
-        oldDelegate.averageNet != averageNet;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

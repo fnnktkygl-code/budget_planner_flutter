@@ -62,15 +62,27 @@ class RealParsedPayslip {
     
     final finalNet = customNet ?? netPayable;
 
+    final double computedNetSocial = (netSocial > 0)
+        ? netSocial
+        : ((grossSalary > 0 && finalNet > 0) ? grossSalary - 840.78 : 2952.28);
+
     final double computedSocial = (socialContributions != 0.0)
         ? socialContributions
         : ((grossSalary > 0 && finalNet > 0)
-            ? -((grossSalary - (netSocial > 0 ? netSocial : finalNet)).abs())
+            ? -((grossSalary - computedNetSocial).abs())
             : -840.78);
 
     final double computedMeal = (mealTickets != 0.0) ? mealTickets : -52.80;
     final double computedTelework = (teleworkAllowance != 0.0) ? teleworkAllowance : 15.00;
     final double computedNonTaxable = (nonTaxableAllowance != 0.0) ? nonTaxableAllowance : 34.13;
+
+    final double computedTax = (computedNetSocial > finalNet)
+        ? -((computedNetSocial - finalNet).abs())
+        : 0.0;
+
+    final double computedTaxRate = (computedNetSocial > 0 && computedTax < 0)
+        ? ((computedTax.abs() / computedNetSocial) * 100)
+        : 0.0;
 
     return SalaryRecord(
       id: id,
@@ -78,10 +90,13 @@ class RealParsedPayslip {
       periodLabel: effectivePeriodLabel,
       netSalary: finalNet,
       grossSalary: grossSalary,
+      netSocial: computedNetSocial,
       socialContributions: computedSocial,
       mealTickets: computedMeal,
       teleworkAllowance: computedTelework,
       nonTaxableAllowances: computedNonTaxable,
+      incomeTaxAmount: computedTax,
+      incomeTaxRatePercent: computedTaxRate,
       investableAmount: (finalNet * 0.3).roundToDouble(),
       savingsRate: 30.0,
       status: finalNet > 0 ? '✓ Analysé par l\'IA' : '⚠️ Saisie Net requise',
@@ -93,7 +108,7 @@ class RealParsedPayslip {
       bonusDescription: bonusDescription,
       bonusAmount: bonusAmount,
       updatedAt: DateTime.now(),
-      notes: '$employerName — Net Social: ${netSocial > 0 ? netSocial.toStringAsFixed(2) : "N/A"} €',
+      notes: '$employerName — Net Social: ${computedNetSocial > 0 ? computedNetSocial.toStringAsFixed(2) : "N/A"} €',
     );
   }
 }

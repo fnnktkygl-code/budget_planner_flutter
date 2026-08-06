@@ -456,20 +456,41 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           // Real Items Table
           _buildSalaryLine('Salaire de base (Brut)', '${grossSalary.toStringAsFixed(2)} €', isPositive: null),
           const SizedBox(height: 14),
-          _buildSalaryLine('Cotisations sociales', '${socialContrib.toStringAsFixed(2)} €', isPositive: false),
-          const SizedBox(height: 14),
-          _buildSalaryLine('Tickets resto déduits', '${mealTickets.toStringAsFixed(2)} €', isPositive: false),
-          const SizedBox(height: 14),
-          _buildSalaryLine('IND. TELETRAVAIL', '+ ${telework.toStringAsFixed(2)} €', isPositive: true),
-          const SizedBox(height: 14),
-          _buildSalaryLine('INDEM. NON SOUMISES', '+ ${nonTaxable.toStringAsFixed(2)} €', isPositive: true),
+          _buildSalaryLine('Cotisations sociales (URSSAF, Retraite)', '${socialContrib.toStringAsFixed(2)} €', isPositive: false),
+          
+          if (mealTickets != 0.0) ...[
+            const SizedBox(height: 14),
+            _buildSalaryLine('Tickets resto déduits', '${mealTickets.toStringAsFixed(2)} €', isPositive: false),
+          ],
+          
+          if (telework != 0.0 || nonTaxable != 0.0) ...[
+            const SizedBox(height: 14),
+            _buildSalaryLine('Indemnités (Télétravail & Non-imposable)', '+ ${(telework + nonTaxable).toStringAsFixed(2)} €', isPositive: true),
+          ],
           
           if (hasBonus && bonusAmt > 0) ...[
             const SizedBox(height: 14),
-            _buildSalaryLine('PRIME / BONUS EXCEPTIONNEL', '+ ${bonusAmt.toStringAsFixed(2)} €', isPositive: true),
+            _buildSalaryLine('Prime / Surplus Exceptionnel', '+ ${bonusAmt.toStringAsFixed(2)} €', isPositive: true),
           ],
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          const Divider(color: AppColors.borderSubtle, height: 1),
+          const SizedBox(height: 14),
+
+          // Net Imposable / Net Social Line
+          _buildSalaryLine('Net Avant Impôt (Net Social)', '${(activeRecord?.netSocial ?? 2952.28).toStringAsFixed(2)} €', isPositive: true, isBold: true),
+          const SizedBox(height: 14),
+
+          // Income Tax (Prélèvement à la source - PAS) Line
+          _buildSalaryLine(
+            'Prélèvement à la source (Impôt IR ${(activeRecord?.incomeTaxRatePercent ?? 8.0).toStringAsFixed(1)}%)',
+            (activeRecord?.incomeTaxAmount ?? -238.54) != 0.0
+                ? '${(activeRecord?.incomeTaxAmount ?? -238.54).toStringAsFixed(2)} €'
+                : '0.00 € (Taux 0%)',
+            isPositive: (activeRecord?.incomeTaxAmount ?? -238.54) != 0.0 ? false : null,
+          ),
+
+          const SizedBox(height: 16),
           const Divider(color: AppColors.borderSubtle, height: 1),
           const SizedBox(height: 16),
           Row(
@@ -479,7 +500,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'NET À PAYER EFFECTIF',
+                    'NET À PAYER EFFECTIF (En banque)',
                     style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 11,
@@ -508,8 +529,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildSalaryLine(String label, String amount, {bool? isPositive}) {
-    Color amountColor = AppColors.textPrimary;
+  Widget _buildSalaryLine(String label, String amount, {bool? isPositive, bool isBold = false}) {
+    Color amountColor = isBold ? AppColors.accentCyan : AppColors.textPrimary;
     if (isPositive == true) amountColor = AppColors.accentEmerald;
     if (isPositive == false) amountColor = AppColors.accentRose;
 
@@ -518,17 +539,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
+          style: TextStyle(
+            color: isBold ? AppColors.textPrimary : AppColors.textPrimary,
+            fontSize: isBold ? 14 : 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
           ),
         ),
         Text(
           amount,
           style: TextStyle(
             color: amountColor,
-            fontSize: 15,
+            fontSize: isBold ? 16 : 15,
             fontWeight: FontWeight.bold,
           ),
         ),

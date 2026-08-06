@@ -5,10 +5,12 @@ class SalaryRecord {
   final String period;
   /// Libellé affichable (ex: "Juillet 2026")
   final String periodLabel;
-  /// Salaire net à payer en EUR
+  /// Salaire net à payer en EUR (versé en banque après impôt)
   final double netSalary;
   /// Salaire brut mensuel
   final double? grossSalary;
+  /// Montant Net Social / Net avant impôt sur le revenu
+  final double netSocial;
   /// Cotisations sociales (négatif)
   final double socialContributions;
   /// Tickets resto déduits (négatif)
@@ -17,6 +19,10 @@ class SalaryRecord {
   final double teleworkAllowance;
   /// Indemnités non soumises (positif)
   final double nonTaxableAllowances;
+  /// Montant du prélèvement à la source (impôt IR, négatif ou 0.0)
+  final double incomeTaxAmount;
+  /// Taux effectif du prélèvement à la source (%)
+  final double incomeTaxRatePercent;
   /// Budget d'épargne mensuel / DCA alloué en EUR
   final double investableAmount;
   /// Taux d'épargne (% du salaire net)
@@ -51,10 +57,13 @@ class SalaryRecord {
     required this.periodLabel,
     required this.netSalary,
     this.grossSalary,
+    this.netSocial = 2952.28,
     this.socialContributions = -840.78,
     this.mealTickets = -52.80,
     this.teleworkAllowance = 15.00,
     this.nonTaxableAllowances = 34.13,
+    this.incomeTaxAmount = -238.54,
+    this.incomeTaxRatePercent = 8.0,
     required this.investableAmount,
     required this.savingsRate,
     required this.status,
@@ -75,10 +84,13 @@ class SalaryRecord {
     String? periodLabel,
     double? netSalary,
     double? grossSalary,
+    double? netSocial,
     double? socialContributions,
     double? mealTickets,
     double? teleworkAllowance,
     double? nonTaxableAllowances,
+    double? incomeTaxAmount,
+    double? incomeTaxRatePercent,
     double? investableAmount,
     double? savingsRate,
     String? status,
@@ -98,10 +110,13 @@ class SalaryRecord {
       periodLabel: periodLabel ?? this.periodLabel,
       netSalary: netSalary ?? this.netSalary,
       grossSalary: grossSalary ?? this.grossSalary,
+      netSocial: netSocial ?? this.netSocial,
       socialContributions: socialContributions ?? this.socialContributions,
       mealTickets: mealTickets ?? this.mealTickets,
       teleworkAllowance: teleworkAllowance ?? this.teleworkAllowance,
       nonTaxableAllowances: nonTaxableAllowances ?? this.nonTaxableAllowances,
+      incomeTaxAmount: incomeTaxAmount ?? this.incomeTaxAmount,
+      incomeTaxRatePercent: incomeTaxRatePercent ?? this.incomeTaxRatePercent,
       investableAmount: investableAmount ?? this.investableAmount,
       savingsRate: savingsRate ?? this.savingsRate,
       status: status ?? this.status,
@@ -123,10 +138,13 @@ class SalaryRecord {
         'periodLabel': periodLabel,
         'netSalary': netSalary,
         'grossSalary': grossSalary,
+        'netSocial': netSocial,
         'socialContributions': socialContributions,
         'mealTickets': mealTickets,
         'teleworkAllowance': teleworkAllowance,
         'nonTaxableAllowances': nonTaxableAllowances,
+        'incomeTaxAmount': incomeTaxAmount,
+        'incomeTaxRatePercent': incomeTaxRatePercent,
         'investableAmount': investableAmount,
         'savingsRate': savingsRate,
         'status': status,
@@ -147,10 +165,13 @@ class SalaryRecord {
         periodLabel: json['periodLabel'],
         netSalary: (json['netSalary'] as num).toDouble(),
         grossSalary: json['grossSalary'] != null ? (json['grossSalary'] as num).toDouble() : null,
+        netSocial: json['netSocial'] != null ? (json['netSocial'] as num).toDouble() : 2952.28,
         socialContributions: json['socialContributions'] != null ? (json['socialContributions'] as num).toDouble() : -840.78,
         mealTickets: json['mealTickets'] != null ? (json['mealTickets'] as num).toDouble() : -52.80,
         teleworkAllowance: json['teleworkAllowance'] != null ? (json['teleworkAllowance'] as num).toDouble() : 15.00,
         nonTaxableAllowances: json['nonTaxableAllowances'] != null ? (json['nonTaxableAllowances'] as num).toDouble() : 34.13,
+        incomeTaxAmount: json['incomeTaxAmount'] != null ? (json['incomeTaxAmount'] as num).toDouble() : -238.54,
+        incomeTaxRatePercent: json['incomeTaxRatePercent'] != null ? (json['incomeTaxRatePercent'] as num).toDouble() : 8.0,
         investableAmount: (json['investableAmount'] as num).toDouble(),
         savingsRate: (json['savingsRate'] as num).toDouble(),
         status: json['status'] ?? '✓ Importé & Validé',
