@@ -20,6 +20,7 @@ dependencies:
   http: ^1.4.0
   intl: ^0.20.2
   file_picker: ^10.1.7
+  pdfx: ^2.9.2
 
 dev_dependencies:
   flutter_test:
