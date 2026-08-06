@@ -20,6 +20,7 @@ class RealParsedPayslip {
   final double nonTaxableAllowance;
   final bool hasExplicitBonus;
   final String? bonusDescription;
+  final double? bonusAmount;
   final bool isParsedFromDocument;
   final String? renderedImageBase64;
   final String? rawFileBase64;
@@ -41,6 +42,7 @@ class RealParsedPayslip {
     required this.nonTaxableAllowance,
     this.hasExplicitBonus = false,
     this.bonusDescription,
+    this.bonusAmount,
     required this.isParsedFromDocument,
     this.renderedImageBase64,
     this.rawFileBase64,
@@ -79,6 +81,7 @@ class RealParsedPayslip {
       isLatestActive: true,
       hasExplicitBonus: hasExplicitBonus,
       bonusDescription: bonusDescription,
+      bonusAmount: bonusAmount,
       updatedAt: DateTime.now(),
       notes: '$employerName — Net Social: ${netSocial > 0 ? netSocial.toStringAsFixed(2) : "N/A"} €',
     );
@@ -287,6 +290,7 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
         nonTaxableAllowance: 0.0,
         hasExplicitBonus: (aiJsonResult['hasExplicitBonus'] as bool?) ?? false,
         bonusDescription: aiJsonResult['bonusDescription'],
+        bonusAmount: (aiJsonResult['bonusAmount'] as num?)?.toDouble(),
         isParsedFromDocument: true,
         rawFileBase64: rawFileB64,
       );

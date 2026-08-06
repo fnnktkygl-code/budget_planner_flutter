@@ -35,10 +35,15 @@ class SalaryRecord {
   final bool hasExplicitBonus;
   /// Libellé de la prime si détectée (ex: "Prime de Vacances", "13ème Mois")
   final String? bonusDescription;
+  /// Montant de la prime si détectée
+  final double? bonusAmount;
   /// Date de mise à jour
   final DateTime updatedAt;
   /// Remarques additionnelles
   final String? notes;
+
+  /// Salaire net récurrent hors prime exceptionnel
+  double get regularNetSalary => netSalary - (bonusAmount ?? 0.0);
 
   SalaryRecord({
     required this.id,
@@ -59,6 +64,7 @@ class SalaryRecord {
     this.isLatestActive = false,
     this.hasExplicitBonus = false,
     this.bonusDescription,
+    this.bonusAmount,
     required this.updatedAt,
     this.notes,
   });
@@ -82,6 +88,7 @@ class SalaryRecord {
     bool? isLatestActive,
     bool? hasExplicitBonus,
     String? bonusDescription,
+    double? bonusAmount,
     DateTime? updatedAt,
     String? notes,
   }) {
@@ -104,6 +111,7 @@ class SalaryRecord {
       isLatestActive: isLatestActive ?? this.isLatestActive,
       hasExplicitBonus: hasExplicitBonus ?? this.hasExplicitBonus,
       bonusDescription: bonusDescription ?? this.bonusDescription,
+      bonusAmount: bonusAmount ?? this.bonusAmount,
       updatedAt: updatedAt ?? this.updatedAt,
       notes: notes ?? this.notes,
     );
@@ -128,6 +136,7 @@ class SalaryRecord {
         'isLatestActive': isLatestActive,
         'hasExplicitBonus': hasExplicitBonus,
         'bonusDescription': bonusDescription,
+        'bonusAmount': bonusAmount,
         'updatedAt': updatedAt.toIso8601String(),
         'notes': notes,
       };
@@ -151,6 +160,7 @@ class SalaryRecord {
         isLatestActive: json['isLatestActive'] ?? false,
         hasExplicitBonus: json['hasExplicitBonus'] ?? false,
         bonusDescription: json['bonusDescription'],
+        bonusAmount: json['bonusAmount'] != null ? (json['bonusAmount'] as num).toDouble() : null,
         updatedAt: DateTime.parse(json['updatedAt']),
         notes: json['notes'],
       );

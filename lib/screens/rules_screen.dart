@@ -8,6 +8,7 @@ class RuleCategoryItem {
   final String id;
   String name;
   double amount;
+  bool isPercentage;
   bool isLocked;
   final String iconType;
   final Color iconBgColor;
@@ -16,10 +17,24 @@ class RuleCategoryItem {
     required this.id,
     required this.name,
     required this.amount,
+    this.isPercentage = false,
     this.isLocked = true,
     required this.iconType,
     required this.iconBgColor,
   });
+
+  double getEffectiveAmount(double netSalary) {
+    if (isPercentage) {
+      return (netSalary * amount / 100);
+    }
+    return amount;
+  }
+
+  double getEffectivePercent(double netSalary) {
+    if (isPercentage) return amount;
+    if (netSalary <= 0) return 0.0;
+    return (amount / netSalary) * 100;
+  }
 }
 
 class RulesScreen extends ConsumerStatefulWidget {
@@ -31,133 +46,264 @@ class RulesScreen extends ConsumerStatefulWidget {
 
 class _RulesScreenState extends ConsumerState<RulesScreen> {
   final List<RuleCategoryItem> _savingsCategories = [
-    RuleCategoryItem(id: 'sav-1', name: 'Cible PEA', amount: 1000, iconType: 'chart', iconBgColor: AppColors.accentCyan),
-    RuleCategoryItem(id: 'sav-2', name: 'Livret A', amount: 200, iconType: 'shield', iconBgColor: AppColors.accentGold),
+    RuleCategoryItem(id: 'sav-1', name: 'Cible PEA', amount: 35.0, isPercentage: true, iconType: 'chart', iconBgColor: AppColors.accentCyan),
+    RuleCategoryItem(id: 'sav-2', name: 'Livret A', amount: 7.0, isPercentage: true, iconType: 'shield', iconBgColor: AppColors.accentGold),
   ];
 
   final List<RuleCategoryItem> _fixedChargesCategories = [
-    RuleCategoryItem(id: 'fix-1', name: 'Loyer', amount: 677, iconType: 'home', iconBgColor: AppColors.accentRose),
-    RuleCategoryItem(id: 'fix-2', name: 'Abonnement', amount: 41, iconType: 'video', iconBgColor: AppColors.accentRose),
-    RuleCategoryItem(id: 'fix-3', name: 'Tontine', amount: 300, iconType: 'people', iconBgColor: AppColors.accentPurple),
-    RuleCategoryItem(id: 'fix-4', name: 'Soutien', amount: 231, iconType: 'heart', iconBgColor: AppColors.accentRose),
+    RuleCategoryItem(id: 'fix-1', name: 'Loyer', amount: 677, isPercentage: false, iconType: 'home', iconBgColor: AppColors.accentRose),
+    RuleCategoryItem(id: 'fix-2', name: 'Abonnement', amount: 41, isPercentage: false, iconType: 'video', iconBgColor: AppColors.accentRose),
+    RuleCategoryItem(id: 'fix-3', name: 'Tontine', amount: 300, isPercentage: false, iconType: 'people', iconBgColor: AppColors.accentPurple),
+    RuleCategoryItem(id: 'fix-4', name: 'Soutien', amount: 231, isPercentage: false, iconType: 'heart', iconBgColor: AppColors.accentRose),
   ];
 
   final List<RuleCategoryItem> _dailyCategories = [
-    RuleCategoryItem(id: 'day-1', name: 'Revolut', amount: 200, iconType: 'card', iconBgColor: AppColors.accentCyan),
-    RuleCategoryItem(id: 'day-2', name: 'Tampon €', amount: 0, iconType: 'basket', iconBgColor: AppColors.accentEmerald),
+    RuleCategoryItem(id: 'day-1', name: 'Revolut (Reste à vivre)', amount: 7.0, isPercentage: true, iconType: 'card', iconBgColor: AppColors.accentCyan),
+    RuleCategoryItem(id: 'day-2', name: 'Tampon / Marge €', amount: 0, isPercentage: false, iconType: 'basket', iconBgColor: AppColors.accentEmerald),
   ];
 
   void _showAddCategoryDialog(List<RuleCategoryItem> targetList, String defaultGroup, Color color) {
     final titleController = TextEditingController();
-    final amountController = TextEditingController(text: '100');
+    final amountController = TextEditingController(text: '10');
+    bool isPercentage = true;
 
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: const [
-              Icon(Icons.add_circle_outline_rounded, color: AppColors.accentCyan),
-              SizedBox(width: 10),
-              Text('Nouvelle Catégorie', style: TextStyle(color: AppColors.textPrimary, fontSize: 18)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Nom de la catégorie',
-                  hintText: 'ex: Assurance, Transports',
-                ),
-                style: const TextStyle(color: AppColors.textPrimary),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: const [
+                  Icon(Icons.add_circle_outline_rounded, color: AppColors.accentCyan),
+                  SizedBox(width: 10),
+                  Text('Nouvelle Catégorie', style: TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+                ],
               ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Montant mensuel (€)',
-                  suffixText: '€',
-                ),
-                style: const TextStyle(color: AppColors.textPrimary),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () {
-                final title = titleController.text.trim().isEmpty ? 'Nouvelle Catégorie' : titleController.text.trim();
-                final amount = double.tryParse(amountController.text.trim()) ?? 100.0;
-                setState(() {
-                  targetList.add(
-                    RuleCategoryItem(
-                      id: 'cat-${DateTime.now().millisecondsSinceEpoch}',
-                      name: title,
-                      amount: amount,
-                      iconType: 'default',
-                      iconBgColor: color,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nom de la catégorie',
+                      hintText: 'ex: Assurance, Transports',
                     ),
-                  );
-                });
-                Navigator.pop(ctx);
-              },
-              child: const Text('Ajouter'),
-            ),
-          ],
+                    style: const TextStyle(color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Mode Selector: Nominal € vs Percentage %
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBackground,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setDialogState(() => isPercentage = false),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: !isPercentage ? AppColors.accentCyan : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Montant (€)',
+                                style: TextStyle(
+                                  color: !isPercentage ? Colors.white : AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setDialogState(() => isPercentage = true),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isPercentage ? AppColors.accentCyan : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Pourcentage (%)',
+                                style: TextStyle(
+                                  color: isPercentage ? Colors.white : AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: isPercentage ? 'Pourcentage du salaire (%)' : 'Montant mensuel (€)',
+                      suffixText: isPercentage ? '%' : '€',
+                    ),
+                    style: const TextStyle(color: AppColors.textPrimary),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    final title = titleController.text.trim().isEmpty ? 'Nouvelle Catégorie' : titleController.text.trim();
+                    final amount = double.tryParse(amountController.text.trim()) ?? 10.0;
+                    setState(() {
+                      targetList.add(
+                        RuleCategoryItem(
+                          id: 'cat-${DateTime.now().millisecondsSinceEpoch}',
+                          name: title,
+                          amount: amount,
+                          isPercentage: isPercentage,
+                          iconType: 'default',
+                          iconBgColor: color,
+                        ),
+                      );
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Ajouter'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
   void _showEditAmountDialog(RuleCategoryItem item) {
-    final amountController = TextEditingController(text: item.amount.toStringAsFixed(0));
+    final amountController = TextEditingController(text: item.amount.toStringAsFixed(item.isPercentage ? 1 : 0));
+    bool isPercentage = item.isPercentage;
 
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Modifier ${item.name}', style: const TextStyle(color: AppColors.textPrimary, fontSize: 18)),
-          content: TextField(
-            controller: amountController,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Nouveau montant (€)',
-              suffixText: '€',
-            ),
-            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan),
-              onPressed: () {
-                final newAmount = double.tryParse(amountController.text.trim()) ?? item.amount;
-                setState(() {
-                  item.amount = newAmount;
-                });
-                Navigator.pop(ctx);
-              },
-              child: const Text('Enregistrer'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text('Modifier ${item.name}', style: const TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Mode Selector: Nominal € vs Percentage %
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBackground,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setDialogState(() => isPercentage = false),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: !isPercentage ? AppColors.accentCyan : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Montant (€)',
+                                style: TextStyle(
+                                  color: !isPercentage ? Colors.white : AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setDialogState(() => isPercentage = true),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isPercentage ? AppColors.accentCyan : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Pourcentage (%)',
+                                style: TextStyle(
+                                  color: isPercentage ? Colors.white : AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: isPercentage ? 'Pourcentage (%)' : 'Montant mensuel (€)',
+                      suffixText: isPercentage ? '%' : '€',
+                    ),
+                    style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan),
+                  onPressed: () {
+                    final newAmount = double.tryParse(amountController.text.trim()) ?? item.amount;
+                    setState(() {
+                      item.amount = newAmount;
+                      item.isPercentage = isPercentage;
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Enregistrer'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -172,11 +318,11 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
   @override
   Widget build(BuildContext context) {
     final salary = ref.watch(salaryProvider);
-    final netSalary = salary.activeBaseline?.netSalary ?? 2861.26;
+    final netSalary = salary.activeBaseline?.netSalary ?? 2713.74;
 
-    final totalSavings = _savingsCategories.fold(0.0, (sum, c) => sum + c.amount);
-    final totalFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.amount);
-    final totalDaily = _dailyCategories.fold(0.0, (sum, c) => sum + c.amount);
+    final totalSavings = _savingsCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
+    final totalFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
+    final totalDaily = _dailyCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
 
     final resteAVivre = netSalary - totalSavings - totalFixed - totalDaily;
 
@@ -197,13 +343,13 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                 border: Border.all(color: AppColors.accentPurple.withValues(alpha: 0.4)),
               ),
               child: Row(
-                children: const [
-                  Icon(Icons.lightbulb_outline_rounded, color: AppColors.accentPurple, size: 20),
-                  SizedBox(width: 10),
+                children: [
+                  const Icon(Icons.lightbulb_outline_rounded, color: AppColors.accentPurple, size: 20),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Règles de répartition 50/30/20 basées sur votre revenu net de 2 861.26 €',
-                      style: TextStyle(
+                      'Règles dynamiques (% & Nominal €) basées sur votre revenu net de ${netSalary.toStringAsFixed(2)} €',
+                      style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -215,7 +361,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Radiant Gradient Card — RESTE À VIVRE ESTIMÉ (Matching Screenshot 5)
+            // Radiant Gradient Card — RESTE À VIVRE ESTIMÉ
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
@@ -337,8 +483,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             separatorBuilder: (_, __) => const Divider(color: AppColors.borderSubtle, height: 1),
             itemBuilder: (context, idx) {
               final cat = categories[idx];
-              final percent = netSalary > 0 ? (cat.amount / netSalary) * 100 : 0.0;
-              return _buildCategoryRow(cat, percent, allowDelete: allowDelete, onDelete: () => _deleteCategory(categories, cat.id));
+              return _buildCategoryRow(cat, netSalary, allowDelete: allowDelete, onDelete: () => _deleteCategory(categories, cat.id));
             },
           ),
           const Divider(color: AppColors.borderSubtle, height: 1),
@@ -375,10 +520,13 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
 
   Widget _buildCategoryRow(
     RuleCategoryItem item,
-    double percent, {
+    double netSalary, {
     required bool allowDelete,
     required VoidCallback onDelete,
   }) {
+    final effectiveAmt = item.getEffectiveAmount(netSalary);
+    final effectivePct = item.getEffectivePercent(netSalary);
+
     IconData getIcon(String type) {
       switch (type) {
         case 'chart':
@@ -417,22 +565,45 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
           ),
           const SizedBox(width: 14),
 
-          // Name & Percentage
+          // Name & Percentage / Amount Subtext
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.name,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      item.name,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: item.isPercentage ? AppColors.accentCyan.withValues(alpha: 0.2) : AppColors.surface,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: item.isPercentage ? AppColors.accentCyan.withValues(alpha: 0.5) : AppColors.borderSubtle),
+                      ),
+                      child: Text(
+                        item.isPercentage ? '% Ratio' : '€ Fixe',
+                        style: TextStyle(
+                          color: item.isPercentage ? AppColors.accentCyan : AppColors.textMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${percent.toStringAsFixed(1)}% du revenu',
+                  item.isPercentage
+                      ? 'Valeur calculée : ${effectiveAmt.toStringAsFixed(2)} €'
+                      : '${effectivePct.toStringAsFixed(1)}% du revenu',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
@@ -450,12 +621,12 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.5)),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.borderSubtle),
               ),
+              alignment: Alignment.centerRight,
               child: Text(
-                '${item.amount.toStringAsFixed(0)} €',
-                textAlign: TextAlign.center,
+                item.isPercentage ? '${item.amount.toStringAsFixed(1)} %' : '${item.amount.toStringAsFixed(0)} €',
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 15,
@@ -464,25 +635,11 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 10),
-
-          // Lock Icon Toggle
-          IconButton(
-            icon: Icon(
-              item.isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
-              color: item.isLocked ? AppColors.accentCyan : AppColors.textMuted,
-              size: 20,
-            ),
-            onPressed: () {
-              setState(() {
-                item.isLocked = !item.isLocked;
-              });
-            },
-          ),
 
           if (allowDelete) ...[
+            const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 20),
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 20),
               onPressed: onDelete,
             ),
           ],

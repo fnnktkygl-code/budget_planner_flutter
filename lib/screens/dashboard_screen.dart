@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
+import '../models/salary_record.dart';
 import '../widgets/donut_chart.dart';
 import '../widgets/notification_header.dart';
 
@@ -177,6 +178,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             const SizedBox(height: 20),
 
+            // Exceptional Bonus Action Dispatch Banner (Separated from regular salary)
+            if (activeBaseline != null && activeBaseline.hasExplicitBonus)
+              _buildBonusActionCard(activeBaseline),
+
             // Responsive Layout
             LayoutBuilder(
               builder: (context, constraints) {
@@ -186,7 +191,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     children: [
                       Expanded(child: _buildAllocationCard(segments)),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildNetIncomeCard(grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable)),
+                      Expanded(child: _buildNetIncomeCard(activeBaseline, grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable)),
                     ],
                   );
                 } else {
@@ -194,7 +199,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     children: [
                       _buildAllocationCard(segments),
                       const SizedBox(height: 16),
-                      _buildNetIncomeCard(grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable),
+                      _buildNetIncomeCard(activeBaseline, grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable),
                     ],
                   );
                 }
@@ -248,7 +253,114 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Widget _buildBonusActionCard(SalaryRecord record) {
+    final bonusName = record.bonusDescription ?? 'Prime Exceptionnelle';
+    final bonusAmt = record.bonusAmount ?? 0.0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E1B4B), Color(0xFF311B92)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.accentPurple.withValues(alpha: 0.6), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: AppColors.accentPurple.withValues(alpha: 0.25), blurRadius: 15, spreadRadius: 2),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: AppColors.accentGold.withValues(alpha: 0.2), shape: BoxShape.circle),
+                child: const Icon(Icons.stars_rounded, color: AppColors.accentGold, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '⚡ $bonusName Détectée !',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Montant net du bonus : + ${bonusAmt > 0 ? bonusAmt.toStringAsFixed(2) : "Inclus"} €',
+                      style: const TextStyle(color: AppColors.accentGold, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: AppColors.accentPurple, borderRadius: BorderRadius.circular(8)),
+                child: const Text('Surplus Hors Salaire', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Stratégie d\'allocation exceptionnelle séparée du budget récurrent :',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentCyan,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.rocket_launch_rounded, size: 16),
+                label: const Text('100% Boost PEA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('🚀 Prime de ${bonusAmt > 0 ? bonusAmt.toStringAsFixed(2) : "1 500"} € allouée à 100% sur la cible PEA !'),
+                      backgroundColor: AppColors.accentCyan,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentGold,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.security_rounded, size: 16),
+                label: const Text('Matelas Livret A', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('🛡️ Prime de ${bonusAmt > 0 ? bonusAmt.toStringAsFixed(2) : "1 500"} € versée sur l\'Épargne de Sécurité !'),
+                      backgroundColor: AppColors.accentGold,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildNetIncomeCard(
+    SalaryRecord? activeRecord,
     double grossSalary,
     double netSalary,
     double socialContrib,
@@ -256,6 +368,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     double telework,
     double nonTaxable,
   ) {
+    final hasBonus = activeRecord?.hasExplicitBonus ?? false;
+    final bonusAmt = activeRecord?.bonusAmount ?? 0.0;
+    final regularNet = activeRecord?.regularNetSalary ?? netSalary;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -312,19 +428,35 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           _buildSalaryLine('IND. TELETRAVAIL', '+ ${telework.toStringAsFixed(2)} €', isPositive: true),
           const SizedBox(height: 14),
           _buildSalaryLine('INDEM. NON SOUMISES', '+ ${nonTaxable.toStringAsFixed(2)} €', isPositive: true),
+          
+          if (hasBonus && bonusAmt > 0) ...[
+            const SizedBox(height: 14),
+            _buildSalaryLine('PRIME / BONUS EXCEPTIONNEL', '+ ${bonusAmt.toStringAsFixed(2)} €', isPositive: true),
+          ],
+
           const SizedBox(height: 20),
           const Divider(color: AppColors.borderSubtle, height: 1),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'NET À PAYER EFFECTIF',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'NET À PAYER EFFECTIF',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (hasBonus && bonusAmt > 0)
+                    Text(
+                      'Net Récurrent : ${regularNet.toStringAsFixed(2)} €',
+                      style: const TextStyle(color: AppColors.accentCyan, fontSize: 11),
+                    ),
+                ],
               ),
               Text(
                 '${netSalary.toStringAsFixed(2)} €',
