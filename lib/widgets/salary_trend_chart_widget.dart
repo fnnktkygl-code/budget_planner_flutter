@@ -312,7 +312,7 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
-                      'Net Social : ${selectedRecord.netSocial.toStringAsFixed(2)} €',
+                      'Net Social Base : ${selectedRecord.regularNetSocial.toStringAsFixed(2)} €',
                       style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                     const Text('➔', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
@@ -337,9 +337,23 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                     ),
                     const Text('➔', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
                     Text(
-                      'Net Banque : ${selectedRecord.netSalary.toStringAsFixed(2)} €',
+                      'Net Banque Base : ${selectedRecord.regularNetSalary.toStringAsFixed(2)} €',
                       style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
+                    if (selectedRecord.hasExplicitBonus && (selectedRecord.bonusAmount ?? 0) > 0) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentGold.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.accentGold.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          '+${selectedRecord.bonusAmount!.toStringAsFixed(2)} € (Prime) = Total ${selectedRecord.netSalary.toStringAsFixed(2)} €',
+                          style: const TextStyle(color: AppColors.accentGold, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],

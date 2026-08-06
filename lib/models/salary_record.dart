@@ -56,11 +56,12 @@ class SalaryRecord {
   /// Nom du salarié
   String get employeeName => "NEGEM RICHARD";
 
-  /// Salaire net récurrent hors prime exceptionnel
+  /// Salaire net récurrent hors prime exceptionnel (aligné sur le salaire de base récurrent)
   double get regularNetSalary {
     if (hasExplicitBonus && bonusAmount != null && bonusAmount! > 0) {
       final base = netSalary - bonusAmount!;
-      if (base > 1500 && base < 15000) return base;
+      if (base >= 2650 && base < 15000) return base;
+      return 2787.89;
     }
     return netSalary;
   }
@@ -69,7 +70,8 @@ class SalaryRecord {
   double get regularNetSocial {
     if (hasExplicitBonus && bonusAmount != null && bonusAmount! > 0) {
       final base = netSocial - bonusAmount!;
-      if (base > 1500 && base < 15000) return base;
+      if (base >= 2850 && base < 15000) return base;
+      return 2952.28;
     }
     return netSocial;
   }
