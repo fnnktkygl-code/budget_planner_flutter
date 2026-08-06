@@ -537,7 +537,7 @@ class _SalaryChartPainter extends CustomPainter {
         path.cubicTo(controlP1.dx, controlP1.dy, controlP2.dx, controlP2.dy, p1.dx, p1.dy);
       }
 
-      // Gradient Fill
+      // Gradient Fill under curve with rich surface color
       final fillPath = Path.from(path)
         ..lineTo(points.last.dx, size.height)
         ..lineTo(points.first.dx, size.height)
@@ -548,8 +548,12 @@ class _SalaryChartPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            lineColor.withValues(alpha: 0.25),
-            lineColor.withValues(alpha: 0.0),
+            lineColor.withValues(alpha: separateBonus ? 0.28 : 0.50),
+            if (!separateBonus)
+              AppColors.accentGold.withValues(alpha: 0.20)
+            else
+              lineColor.withValues(alpha: 0.10),
+            Colors.transparent,
           ],
         ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
       canvas.drawPath(fillPath, fillPaint);
@@ -565,7 +569,7 @@ class _SalaryChartPainter extends CustomPainter {
     // 4. Draw Data Points & Active Hover Highlight
     for (int i = 0; i < points.length; i++) {
       final pt = points[i];
-      final isSel = i == (hoverIndex ?? selectedIndex);
+      final isSel = hoverIndex != null && i == hoverIndex;
       final rec = records[i];
 
       final extraAmt = (rec.netSalary - rec.regularNetSalary).abs();
@@ -591,9 +595,9 @@ class _SalaryChartPainter extends CustomPainter {
       }
     }
 
-    // 5. Draw Floating Interactive Tooltip Box on Hover / Selection
-    final activeIdx = hoverIndex ?? selectedIndex;
-    if (activeIdx >= 0 && activeIdx < records.length) {
+    // 5. Draw Floating Interactive Tooltip Box ONLY on Active Mouse Hover
+    if (hoverIndex != null && hoverIndex! >= 0 && hoverIndex! < records.length) {
+      final activeIdx = hoverIndex!;
       final rec = records[activeIdx];
       final pt = points[activeIdx];
       final val = values[activeIdx];
