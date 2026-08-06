@@ -146,7 +146,7 @@ class SalaryRecord {
     );
   }
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson({bool includeBinary = true}) => {
         'id': id,
         'period': period,
         'periodLabel': periodLabel,
@@ -163,8 +163,8 @@ class SalaryRecord {
         'savingsRate': savingsRate,
         'status': status,
         'documentName': documentName,
-        'renderedImageBase64': renderedImageBase64,
-        'rawFileBase64': rawFileBase64,
+        if (includeBinary) 'renderedImageBase64': renderedImageBase64,
+        if (includeBinary) 'rawFileBase64': rawFileBase64,
         'isLatestActive': isLatestActive,
         'hasExplicitBonus': hasExplicitBonus,
         'bonusDescription': bonusDescription,

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/salary_record.dart';
@@ -184,17 +185,30 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
   }
 
   Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonStr = jsonEncode(state.records.map((r) => r.toJson()).toList());
-    prefs.setString('aura_salary_records_v3', jsonStr);
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    final taxJsonStr = jsonEncode(state.taxAdjustments.map((t) => t.toJson()).toList());
-    prefs.setString('aura_tax_adjustments_v1', taxJsonStr);
+      // Attempt to save full records first. If Web LocalStorage quota is exceeded due to heavy base64 files,
+      // fallback to lightweight JSON (excluding heavy binary images) so financial data is NEVER lost!
+      try {
+        final jsonStr = jsonEncode(state.records.map((r) => r.toJson(includeBinary: true)).toList());
+        await prefs.setString('aura_salary_records_v3', jsonStr);
+      } catch (e) {
+        debugPrint('[SalaryNotifier] Quota exceeded on full save, falling back to lightweight JSON without binaries: $e');
+        final cleanJsonStr = jsonEncode(state.records.map((r) => r.toJson(includeBinary: false)).toList());
+        await prefs.setString('aura_salary_records_v3', cleanJsonStr);
+      }
 
-    final tempJsonStr = jsonEncode(state.temporaryExpenses.map((e) => e.toJson()).toList());
-    prefs.setString('aura_temporary_expenses_v1', tempJsonStr);
+      final taxJsonStr = jsonEncode(state.taxAdjustments.map((t) => t.toJson()).toList());
+      await prefs.setString('aura_tax_adjustments_v1', taxJsonStr);
 
-    prefs.setDouble('aura_account_balance_v1', state.accountBalance);
+      final tempJsonStr = jsonEncode(state.temporaryExpenses.map((e) => e.toJson()).toList());
+      await prefs.setString('aura_temporary_expenses_v1', tempJsonStr);
+
+      await prefs.setDouble('aura_account_balance_v1', state.accountBalance);
+    } catch (e) {
+      debugPrint('[SalaryNotifier] Save exception: $e');
+    }
   }
 
   void addRecord(SalaryRecord record) {
