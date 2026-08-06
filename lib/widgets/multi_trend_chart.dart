@@ -59,10 +59,15 @@ class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
 
     final salaryValues = sorted.map((r) {
       if (!_includeIncomeTax) return r.regularNetSocial;
-      double pas = r.incomeTaxAmount.abs();
-      if (pas <= 1.0) {
-        final yearRecs = sorted.where((x) => x.year == r.year && x.incomeTaxAmount.abs() > 1.0).toList();
-        if (yearRecs.isNotEmpty) pas = yearRecs.first.incomeTaxAmount.abs();
+      final yearRecs = sorted.where((x) => x.year == r.year && x.incomeTaxAmount.abs() > 1.0).toList();
+      double pas = 0.0;
+      if (yearRecs.isNotEmpty) {
+        final normalPasRecs = yearRecs.where((x) => x.incomeTaxAmount.abs() < 400.0).toList();
+        if (normalPasRecs.isNotEmpty) {
+          pas = normalPasRecs.fold(0.0, (sum, x) => sum + x.incomeTaxAmount.abs()) / normalPasRecs.length;
+        } else {
+          pas = yearRecs.fold(0.0, (sum, x) => sum + x.incomeTaxAmount.abs()) / yearRecs.length;
+        }
       }
       return (r.regularNetSocial - pas).clamp(0.0, double.infinity);
     }).toList();

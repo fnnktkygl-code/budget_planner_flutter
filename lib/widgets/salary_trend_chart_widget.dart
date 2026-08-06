@@ -443,12 +443,15 @@ class _SalaryChartPainter extends CustomPainter {
   });
 
   double _getEffectivePasForYear(SalaryRecord r) {
-    if (r.incomeTaxAmount.abs() > 1.0) {
-      return r.incomeTaxAmount.abs();
-    }
     final yearRecs = records.where((x) => x.year == r.year && x.incomeTaxAmount.abs() > 1.0).toList();
     if (yearRecs.isNotEmpty) {
-      return yearRecs.first.incomeTaxAmount.abs();
+      final normalPasRecs = yearRecs.where((x) => x.incomeTaxAmount.abs() < 400.0).toList();
+      if (normalPasRecs.isNotEmpty) {
+        final totalPas = normalPasRecs.fold(0.0, (sum, x) => sum + x.incomeTaxAmount.abs());
+        return totalPas / normalPasRecs.length;
+      }
+      final totalPas = yearRecs.fold(0.0, (sum, x) => sum + x.incomeTaxAmount.abs());
+      return totalPas / yearRecs.length;
     }
     return 0.0;
   }
