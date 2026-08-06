@@ -31,6 +31,10 @@ class SalaryRecord {
   final String? rawFileBase64;
   /// Indique s'il s'agit du bulletin référent d'allocation actif
   final bool isLatestActive;
+  /// Présence d'une ligne de prime explicite sur le bulletin (ex: 13e mois, vacances, performance)
+  final bool hasExplicitBonus;
+  /// Libellé de la prime si détectée (ex: "Prime de Vacances", "13ème Mois")
+  final String? bonusDescription;
   /// Date de mise à jour
   final DateTime updatedAt;
   /// Remarques additionnelles
@@ -53,6 +57,8 @@ class SalaryRecord {
     this.renderedImageBase64,
     this.rawFileBase64,
     this.isLatestActive = false,
+    this.hasExplicitBonus = false,
+    this.bonusDescription,
     required this.updatedAt,
     this.notes,
   });
@@ -74,6 +80,8 @@ class SalaryRecord {
     String? renderedImageBase64,
     String? rawFileBase64,
     bool? isLatestActive,
+    bool? hasExplicitBonus,
+    String? bonusDescription,
     DateTime? updatedAt,
     String? notes,
   }) {
@@ -94,6 +102,8 @@ class SalaryRecord {
       renderedImageBase64: renderedImageBase64 ?? this.renderedImageBase64,
       rawFileBase64: rawFileBase64 ?? this.rawFileBase64,
       isLatestActive: isLatestActive ?? this.isLatestActive,
+      hasExplicitBonus: hasExplicitBonus ?? this.hasExplicitBonus,
+      bonusDescription: bonusDescription ?? this.bonusDescription,
       updatedAt: updatedAt ?? this.updatedAt,
       notes: notes ?? this.notes,
     );
@@ -116,6 +126,8 @@ class SalaryRecord {
         'renderedImageBase64': renderedImageBase64,
         'rawFileBase64': rawFileBase64,
         'isLatestActive': isLatestActive,
+        'hasExplicitBonus': hasExplicitBonus,
+        'bonusDescription': bonusDescription,
         'updatedAt': updatedAt.toIso8601String(),
         'notes': notes,
       };
@@ -137,6 +149,8 @@ class SalaryRecord {
         renderedImageBase64: json['renderedImageBase64'],
         rawFileBase64: json['rawFileBase64'],
         isLatestActive: json['isLatestActive'] ?? false,
+        hasExplicitBonus: json['hasExplicitBonus'] ?? false,
+        bonusDescription: json['bonusDescription'],
         updatedAt: DateTime.parse(json['updatedAt']),
         notes: json['notes'],
       );

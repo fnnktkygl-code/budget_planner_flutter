@@ -32,11 +32,23 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
     final sortedRecords = List<SalaryRecord>.from(widget.records)
       ..sort((a, b) => a.period.compareTo(b.period));
 
-    final maxNet = sortedRecords.map((r) => r.netSalary).reduce(max);
+    final explicitBonusRecords = sortedRecords.where((r) => r.hasExplicitBonus).toList();
 
-    final selectedRecord = _selectedIndex != null && _selectedIndex! < sortedRecords.length
-        ? sortedRecords[_selectedIndex!]
-        : sortedRecords.last;
+    final selectedIndex = _selectedIndex != null && _selectedIndex! < sortedRecords.length
+        ? _selectedIndex!
+        : sortedRecords.length - 1;
+    final selectedRecord = sortedRecords[selectedIndex];
+
+    // Detect if current selected record is a permanent salary increase vs previous month
+    bool isSalaryIncrease = false;
+    double growthPercent = 0.0;
+    if (selectedIndex > 0) {
+      final prevNet = sortedRecords[selectedIndex - 1].netSalary;
+      if (selectedRecord.netSalary > prevNet + 15.0 && !selectedRecord.hasExplicitBonus) {
+        isSalaryIncrease = true;
+        growthPercent = ((selectedRecord.netSalary - prevNet) / prevNet) * 100;
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -72,7 +84,7 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                   ),
                 ],
               ),
-              if (maxNet > widget.averageNet * 1.03)
+              if (explicitBonusRecords.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
@@ -82,9 +94,9 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                   ),
                   child: Row(
                     children: [
-                      const Text('🎁 Pic Prime : ', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                      const Text('🎁 Prime Détectée : ', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                       Text(
-                        '${maxNet.toStringAsFixed(2)} €',
+                        '${explicitBonusRecords.last.netSalary.toStringAsFixed(2)} €',
                         style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 12),
                       ),
                     ],
@@ -114,7 +126,7 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                 painter: _SalaryChartPainter(
                   records: sortedRecords,
                   averageNet: widget.averageNet,
-                  selectedIndex: _selectedIndex ?? sortedRecords.length - 1,
+                  selectedIndex: selectedIndex,
                 ),
               ),
             ),
@@ -147,7 +159,7 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                       selectedRecord.periodLabel,
                       style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
-                    if (selectedRecord.netSalary > widget.averageNet * 1.03) ...[
+                    if (selectedRecord.hasExplicitBonus) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -155,7 +167,24 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                           color: AppColors.accentEmerald,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text('🎁 Mois de Prime', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                        child: Text(
+                          '🎁 ${selectedRecord.bonusDescription ?? "Prime Extrait"}',
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ] else if (isSalaryIncrease) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentCyan.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.accentCyan),
+                        ),
+                        child: Text(
+                          '📈 Augmentation (${growthPercent > 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}%)',
+                          style: const TextStyle(color: AppColors.accentCyan, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ],
                   ],
@@ -279,7 +308,7 @@ class _SalaryChartPainter extends CustomPainter {
     for (int i = 0; i < points.length; i++) {
       final pt = points[i];
       final isSelected = i == selectedIndex;
-      final isBonus = records[i].netSalary > averageNet * 1.03;
+      final isExplicitBonus = records[i].hasExplicitBonus;
 
       // Vertical guide line for selected point
       if (isSelected) {
@@ -291,10 +320,10 @@ class _SalaryChartPainter extends CustomPainter {
 
       // Circle Point
       final pointPaint = Paint()
-        ..color = isSelected ? Colors.white : (isBonus ? AppColors.accentEmerald : AppColors.accentCyan);
+        ..color = isSelected ? Colors.white : (isExplicitBonus ? AppColors.accentEmerald : AppColors.accentCyan);
 
       final outerPaint = Paint()
-        ..color = isSelected ? AppColors.accentCyan : (isBonus ? AppColors.accentEmerald.withValues(alpha: 0.4) : AppColors.cardBackground)
+        ..color = isSelected ? AppColors.accentCyan : (isExplicitBonus ? AppColors.accentEmerald.withValues(alpha: 0.4) : AppColors.cardBackground)
         ..style = PaintingStyle.stroke
         ..strokeWidth = isSelected ? 3 : 2;
 
