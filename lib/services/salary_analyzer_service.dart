@@ -22,7 +22,7 @@ List<SalaryRecord> sortSalaryRecordsDescending(List<SalaryRecord> records) {
 
 /// RÈGLE MÉTIER PRINCIPALE :
 /// La répartition budgétaire active (base de calcul) se base EXCLUSIVEMENT
-/// sur le bulletin le plus récent en date ou désigné comme référent actif.
+/// sur le bulletin le plus récent en date ou désigné comme référent actif par l'utilisateur.
 SalaryRecord? getActiveBaselineSalary(List<SalaryRecord> records) {
   if (records.isEmpty) return null;
   final explicitActive = records.where((r) => r.isLatestActive).toList();
@@ -33,7 +33,7 @@ SalaryRecord? getActiveBaselineSalary(List<SalaryRecord> records) {
   return sorted.first;
 }
 
-/// Calcul du lissage salarial sur la période 2025-2026 (à titre indicatif/analytique).
+/// Calcul du lissage salarial sur les bulletins réels enregistrés par l'utilisateur.
 SalaryAnalytics computeSalaryAnalytics(List<SalaryRecord> records) {
   if (records.isEmpty) {
     return SalaryAnalytics(
@@ -104,33 +104,5 @@ SalaryAnalytics computeSalaryAnalytics(List<SalaryRecord> records) {
   );
 }
 
-final List<SalaryRecord> defaultSalaryRecords = [
-  SalaryRecord(
-    id: 'sal-2026-07',
-    period: '2026-07',
-    periodLabel: 'Juillet 2026',
-    netSalary: 2713.74,
-    grossSalary: 3776.67,
-    investableAmount: 1200,
-    savingsRate: 44.2,
-    status: '✓ Bulletin Réel Validé (Gemini IA)',
-    documentName: 'bulletin_negem_richard_juillet_2026.pdf',
-    isLatestActive: true,
-    updatedAt: DateTime(2026, 7, 31),
-    notes: 'VESTAS FRANCE SAS PEROLS — Net Social: 2 952.28 € — IBAN: FR76 4061 8803 7300 0403 1180 429',
-  ),
-  SalaryRecord(
-    id: 'sal-2025-05',
-    period: '2025-05',
-    periodLabel: 'Mai 2025',
-    netSalary: 2684.46,
-    grossSalary: 3666.67,
-    investableAmount: 1000,
-    savingsRate: 37.2,
-    status: '✓ Bulletin Réel Validé (Gemini IA)',
-    documentName: 'bulletin_negem_richard_mai_2025.pdf',
-    isLatestActive: false,
-    updatedAt: DateTime(2025, 5, 31),
-    notes: 'VESTAS FRANCE SAS PEROLS — Net Social: 2 860.89 € — NIR: 193109934108822',
-  ),
-];
+/// AUCUNE FAUSSE DONNÉE PAR DÉFAUT : la liste initiale est vide.
+final List<SalaryRecord> defaultSalaryRecords = [];

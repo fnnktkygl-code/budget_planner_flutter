@@ -15,7 +15,7 @@ class SalaryState {
 }
 
 class SalaryNotifier extends StateNotifier<SalaryState> {
-  SalaryNotifier() : super(SalaryState(records: defaultSalaryRecords)) {
+  SalaryNotifier() : super(SalaryState(records: [])) {
     init();
   }
 
@@ -28,10 +28,10 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
         final list = parsed.map((item) => SalaryRecord.fromJson(item)).toList();
         state = SalaryState(records: list);
       } catch (_) {
-        state = SalaryState(records: List.from(defaultSalaryRecords));
+        state = SalaryState(records: []);
       }
     } else {
-      state = SalaryState(records: List.from(defaultSalaryRecords));
+      state = SalaryState(records: []);
     }
   }
 
@@ -42,11 +42,14 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
   }
 
   void addRecord(SalaryRecord record) {
-    List<SalaryRecord> updated = List.from(state.records);
-    if (record.isLatestActive) {
-      updated = updated.map((r) => r.copyWith(isLatestActive: false)).toList();
-    }
-    updated.add(record);
+    // Remove existing record with same period if re-imported
+    List<SalaryRecord> updated = state.records
+        .where((r) => r.period != record.period)
+        .map((r) => r.copyWith(isLatestActive: false))
+        .toList();
+    
+    final activeRecord = record.copyWith(isLatestActive: true);
+    updated.add(activeRecord);
     state = SalaryState(records: updated);
     _save();
   }
@@ -73,6 +76,11 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
   void setActiveBaseline(String id) {
     final updated = state.records.map((r) => r.copyWith(isLatestActive: r.id == id)).toList();
     state = SalaryState(records: updated);
+    _save();
+  }
+
+  void clearAllRecords() {
+    state = SalaryState(records: []);
     _save();
   }
 }
