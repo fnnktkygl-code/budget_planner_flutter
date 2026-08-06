@@ -443,6 +443,10 @@ class _SalaryChartPainter extends CustomPainter {
   });
 
   double _getVal(SalaryRecord r) {
+    if (!separateBonus) {
+      if (viewMode == 1) return r.netSocial;
+      return r.netSalary;
+    }
     if (viewMode == 1) return r.regularNetSocial;
     if (viewMode == 2) {
       final currentYear = DateTime.now().year;
@@ -566,7 +570,13 @@ class _SalaryChartPainter extends CustomPainter {
 
       final extraAmt = (rec.netSalary - rec.regularNetSalary).abs();
       final bool isExtraMonth = rec.hasExplicitBonus || extraAmt > 10 || (rec.bonusAmount ?? 0) > 0;
-      final pointColor = isExtraMonth ? AppColors.accentGold : lineColor;
+      final bool hasPeeMonth = rec.companySavingsPEE > 0;
+
+      final pointColor = isExtraMonth
+          ? AppColors.accentGold
+          : hasPeeMonth
+              ? AppColors.accentCyan
+              : lineColor;
 
       if (isSel) {
         final outerPaint = Paint()..color = pointColor.withValues(alpha: 0.3);
@@ -577,7 +587,7 @@ class _SalaryChartPainter extends CustomPainter {
         canvas.drawCircle(pt, 2.5, corePaint);
       } else {
         final dotPaint = Paint()..color = pointColor;
-        canvas.drawCircle(pt, isExtraMonth ? 5.0 : 3.5, dotPaint);
+        canvas.drawCircle(pt, (isExtraMonth || hasPeeMonth) ? 5.0 : 3.5, dotPaint);
       }
     }
 
@@ -590,6 +600,7 @@ class _SalaryChartPainter extends CustomPainter {
 
       final extraAmt = (rec.netSalary - rec.regularNetSalary).abs();
       final bool isExtraMonth = rec.hasExplicitBonus || extraAmt > 10 || (rec.bonusAmount ?? 0) > 0;
+      final bool hasPeeMonth = rec.companySavingsPEE > 0;
 
       final String periodText = rec.periodLabel.isNotEmpty ? rec.periodLabel : rec.period;
       final double pasAmount = rec.incomeTaxAmount.abs();
@@ -606,7 +617,7 @@ class _SalaryChartPainter extends CustomPainter {
       }
 
       const tooltipWidth = 215.0;
-      final double tooltipHeight = isExtraMonth ? 116.0 : 92.0;
+      final double tooltipHeight = (isExtraMonth || hasPeeMonth) ? 116.0 : 92.0;
       double tooltipX = pt.dx + 12;
       if (tooltipX + tooltipWidth > size.width) {
         tooltipX = pt.dx - tooltipWidth - 12;
@@ -673,6 +684,9 @@ class _SalaryChartPainter extends CustomPainter {
         final desc = rec.bonusDescription ?? 'Extra / Rachat / Prime';
         final bonusTp = makeText('• 🎁 $desc: +${amt.toStringAsFixed(0)} €', AppColors.accentGold, isBold: true, fontSize: 10);
         bonusTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 82));
+      } else if (hasPeeMonth) {
+        final peeTp = makeText('• 🏦 Abondement PEE: +${rec.companySavingsPEE.toStringAsFixed(0)} €', AppColors.accentCyan, isBold: true, fontSize: 10);
+        peeTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 82));
       }
     }
   }

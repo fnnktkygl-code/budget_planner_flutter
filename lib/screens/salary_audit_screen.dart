@@ -2484,7 +2484,22 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                               style: const TextStyle(color: AppColors.accentGold, fontSize: 10, fontWeight: FontWeight.bold),
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
+                                          const SizedBox(width: 6),
+                                        ],
+                                        if (record.companySavingsPEE > 0) ...[
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.accentCyan.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+                                            ),
+                                            child: Text(
+                                              '+${record.companySavingsPEE.toStringAsFixed(2)} € (PEE)',
+                                              style: const TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
                                         ],
                                         Text(
                                           '${record.regularNetSalary.toStringAsFixed(2)} €',
