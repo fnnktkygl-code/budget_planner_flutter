@@ -226,13 +226,24 @@ class SalaryParserService {
                   'parts': [
                     {
                       'text': '''
-Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulletin et renvoie STRICTEMENT un JSON valide :
-- period (String format YYYY-MM ex: "2026-03" ou "2026-07")
-- grossSalary (double: Total salaire brut)
-- netSocial (double: Montant Net Social)
-- netPayable (double: STRICTEMENT le Salaire Net VERSÉ sur le compte bancaire APRÈS IMPÔT SUR LE REVENU / Prélèvement à la source. NE PRENDS PAS le Net avant impôt !)
-- hasExplicitBonus (boolean: true uniquement si une ligne de PRIME DE VACANCES, 13EME MOIS, BONUS ou PRIME EXCEPTIONNELLE est présente)
-- bonusDescription (String: Intitulé exact de la prime si présente, sinon null)
+Tu es un expert comptable français spécialisé dans l'analyse de bulletins de paie.
+Analyse ce bulletin de paie et renvoie STRICTEMENT un JSON valide :
+{
+  "period": "YYYY-MM (ex: 2025-10)",
+  "grossSalary": 3666.67,
+  "netSocial": 2860.89,
+  "netPayable": 2787.89,
+  "hasExplicitBonus": false,
+  "bonusDescription": null
+}
+
+CONSIGNES STRICTES DE LECTURE DU BULLETIN DE PAIE FRANÇAIS :
+1. netPayable (TRÈS IMPORTANT) : Ne fais AUCUN calcul mathématique (ne soustrais JAMAIS les cotisations du Net Social) !
+   Cherche l'encadré en bas du bulletin intitulé "NET A PAYER EN EUROS", "NET A PAYER", "NET PAYÉ", "NET A PAYER AVANT IMPOT SUR LE REVENU" ou "VIREMENT".
+   Extrais la valeur numérique exacte inscrite dans cette case (ex: 2787.89).
+2. grossSalary : Prends la valeur de la ligne "SALAIRE BRUT" ou "TOTAL BRUT" (ex: 3666.67).
+3. netSocial : Prends la valeur de la ligne "MONTANT NET SOCIAL" (ex: 2860.89).
+4. period : Période sous le format YYYY-MM (ex: 2025-10 pour Octobre 2025).
 '''
                     },
                     if (rawTextContent != null && rawTextContent.isNotEmpty)
@@ -298,14 +309,25 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
       final double parsedGross = (aiJsonResult['grossSalary'] as num?)?.toDouble() ?? 0.0;
       final double parsedSocial = (aiJsonResult['netSocial'] as num?)?.toDouble() ?? 0.0;
 
+      int finalYr = yr;
+      int finalMo = mo;
+
+      if (hasGeminiPeriod && parsedPeriod.contains('-')) {
+        final pParts = parsedPeriod.split('-');
+        if (pParts.length >= 2) {
+          finalYr = int.tryParse(pParts[0]) ?? finalYr;
+          finalMo = int.tryParse(pParts[1]) ?? finalMo;
+        }
+      }
+
       return RealParsedPayslip(
-        id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
+        id: 'payslip-$finalYr${finalMo < 10 ? "0$finalMo" : "$finalMo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
         employeeName: '[Caviardé]',
         employerName: aiJsonResult['employerName'] ?? 'Employeur',
         siret: 'XXXXXXXXXXXXXX',
         period: hasGeminiPeriod ? parsedPeriod : extractedPeriod,
         periodDetected: hasGeminiPeriod || periodDetected,
-        date: DateTime(yr, mo, 28),
+        date: DateTime(finalYr, finalMo, 28),
         grossSalary: parsedGross,
         netSocial: parsedSocial,
         netPayable: parsedNet,
