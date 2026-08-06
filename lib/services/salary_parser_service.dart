@@ -230,30 +230,13 @@ class SalaryParserService {
       }
     }
 
-    // PRIORITY 2: General NET A PAYER (if net after tax line wasn't matched explicitly above)
+    // PRIORITY 2: NET A PAYER strictly excluding AVANT IMPOT (ex: "NET A PAYER 1-2+3-4 2713 74")
     if (foundNet == null) {
       final netGeneralRegExp = RegExp(
-        r'(?:NET\s+A\s+PAYER|NET\s+PAYABLE|NET\s+FISCAL)[^\d]*' + numPattern,
+        r'(?:NET\s+A\s+PAYER(?!\s+AVANT\s+IMPOT)|NET\s+PAYABLE)[^\d]*' + numPattern,
         caseSensitive: false,
       );
       for (final match in netGeneralRegExp.allMatches(fullText)) {
-        final euros = match.group(1)!;
-        final centimes = match.group(2) ?? '00';
-        final val = double.tryParse('$euros.$centimes');
-        if (val != null && val >= 500.0 && val <= 30000.0) {
-          foundNet = val;
-          break;
-        }
-      }
-    }
-
-    // PRIORITY 3: NET A PAYER AVANT IMPOT (only as secondary fallback if net after tax is missing)
-    if (foundNet == null) {
-      final netBeforeTaxRegExp = RegExp(
-        r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT)[^\d]*' + numPattern,
-        caseSensitive: false,
-      );
-      for (final match in netBeforeTaxRegExp.allMatches(fullText)) {
         final euros = match.group(1)!;
         final centimes = match.group(2) ?? '00';
         final val = double.tryParse('$euros.$centimes');
