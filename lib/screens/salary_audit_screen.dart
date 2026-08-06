@@ -26,7 +26,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   final RedactorEngine _redactor = RedactorEngine();
   RedactionTool _selectedTool = RedactionTool.rect;
 
-  final TransformationController _transformationController = TransformationController();
+  double _zoomScale = 1.0; // 1.0 = 100%, 1.5 = 150%, 2.0 = 200%
 
   int _canvasTab = 0; // 0 = Canevas masqué, 1 = Rendu original
   bool _isProcessing = false;
@@ -52,31 +52,19 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
-  @override
-  void dispose() {
-    _transformationController.dispose();
-    super.dispose();
-  }
-
   void _resetZoom() {
-    setState(() {
-      _transformationController.value = Matrix4.identity();
-    });
+    setState(() => _zoomScale = 1.0);
   }
 
   void _zoomIn() {
     setState(() {
-      final Matrix4 matrix = _transformationController.value.clone();
-      matrix.scale(1.25, 1.25, 1.0);
-      _transformationController.value = matrix;
+      _zoomScale = (_zoomScale + 0.25).clamp(0.8, 3.0);
     });
   }
 
   void _zoomOut() {
     setState(() {
-      final Matrix4 matrix = _transformationController.value.clone();
-      matrix.scale(0.8, 0.8, 1.0);
-      _transformationController.value = matrix;
+      _zoomScale = (_zoomScale - 0.25).clamp(0.8, 3.0);
     });
   }
 
@@ -510,92 +498,116 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
     final Uint8List activeBytes = _renderedPdfImageBytes ?? _customFileBytes!;
 
-    // 3. UNIFIED PINCH-TO-ZOOM VIEWPORT (Document Image & Redaction Canvas combined)
-    return InteractiveViewer(
-      transformationController: _transformationController,
-      alignment: Alignment.topCenter,
-      minScale: 1.0,
-      maxScale: 4.0,
-      boundaryMargin: const EdgeInsets.symmetric(vertical: 300, horizontal: 100),
-      clipBehavior: Clip.hardEdge,
+    // 3. INDUSTRY STANDARD SCALABLE PDF CANVAS VIEWPORT
+    return GestureDetector(
+      onScaleUpdate: (details) {
+        if (details.scale != 1.0) {
+          setState(() {
+            _zoomScale = (_zoomScale * (details.scale > 1.0 ? 1.02 : 0.98)).clamp(0.8, 3.0);
+          });
+        }
+      },
       child: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        child: Stack(
-          alignment: Alignment.topCenter,
-          children: [
-            // PDF Document Image Page
-            Image.memory(
-              activeBytes,
-              fit: BoxFit.contain,
-            ),
+        scrollDirection: Axis.vertical,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Center(
+              child: Transform.scale(
+                scale: _zoomScale,
+                alignment: Alignment.topCenter,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 6)),
+                    ],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      // Document PDF Image Page
+                      Image.memory(
+                        activeBytes,
+                        fit: BoxFit.contain,
+                        width: double.infinity,
+                      ),
 
-            // Redaction Drawing Overlay
-            if (_canvasTab == 0 && hasFileLoaded)
-              Positioned.fill(
-                child: GestureDetector(
-                  onPanStart: (details) {
-                    final pos = details.localPosition;
-                    setState(() {
-                      _startDrag = pos;
-                      _currentDrag = pos;
-                      if (_selectedTool == RedactionTool.paint) {
-                        _currentPaintPoints = [pos];
-                      }
-                    });
-                  },
-                  onPanUpdate: (details) {
-                    final pos = details.localPosition;
-                    setState(() {
-                      _currentDrag = pos;
-                      if (_selectedTool == RedactionTool.paint) {
-                        _currentPaintPoints.add(pos);
-                      }
-                    });
-                  },
-                  onPanEnd: (_) {
-                    if (_startDrag != null && _currentDrag != null) {
-                      final rect = Rect.fromPoints(_startDrag!, _currentDrag!);
-                      setState(() {
-                        if (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle) {
-                          _redactor.addShape(
-                            RedactionShape(
-                              id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
-                              type: _selectedTool,
-                              rect: rect,
+                      // Redaction Mask Drawing Overlay
+                      if (_canvasTab == 0 && hasFileLoaded)
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onPanStart: (details) {
+                              final pos = details.localPosition;
+                              setState(() {
+                                _startDrag = pos;
+                                _currentDrag = pos;
+                                if (_selectedTool == RedactionTool.paint) {
+                                  _currentPaintPoints = [pos];
+                                }
+                              });
+                            },
+                            onPanUpdate: (details) {
+                              final pos = details.localPosition;
+                              setState(() {
+                                _currentDrag = pos;
+                                if (_selectedTool == RedactionTool.paint) {
+                                  _currentPaintPoints.add(pos);
+                                }
+                              });
+                            },
+                            onPanEnd: (_) {
+                              if (_startDrag != null && _currentDrag != null) {
+                                final rect = Rect.fromPoints(_startDrag!, _currentDrag!);
+                                setState(() {
+                                  if (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle) {
+                                    _redactor.addShape(
+                                      RedactionShape(
+                                        id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
+                                        type: _selectedTool,
+                                        rect: rect,
+                                      ),
+                                    );
+                                  } else if (_selectedTool == RedactionTool.paint && _currentPaintPoints.isNotEmpty) {
+                                    _redactor.addShape(
+                                      RedactionShape(
+                                        id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
+                                        type: RedactionTool.paint,
+                                        points: List.from(_currentPaintPoints),
+                                      ),
+                                    );
+                                  }
+                                  _startDrag = null;
+                                  _currentDrag = null;
+                                  _currentPaintPoints = [];
+                                });
+                              }
+                            },
+                            child: CustomPaint(
+                              size: Size.infinite,
+                              painter: RedactionCanvasPainter(
+                                shapes: _redactor.shapes,
+                                isMaskVisible: _isMaskVisible,
+                                currentDraftShape: _startDrag != null && _currentDrag != null && (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle)
+                                    ? RedactionShape(
+                                        id: 'draft',
+                                        type: _selectedTool,
+                                        rect: Rect.fromPoints(_startDrag!, _currentDrag!),
+                                      )
+                                    : null,
+                              ),
                             ),
-                          );
-                        } else if (_selectedTool == RedactionTool.paint && _currentPaintPoints.isNotEmpty) {
-                          _redactor.addShape(
-                            RedactionShape(
-                              id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
-                              type: RedactionTool.paint,
-                              points: List.from(_currentPaintPoints),
-                            ),
-                          );
-                        }
-                        _startDrag = null;
-                        _currentDrag = null;
-                        _currentPaintPoints = [];
-                      });
-                    }
-                  },
-                  child: CustomPaint(
-                    size: Size.infinite,
-                    painter: RedactionCanvasPainter(
-                      shapes: _redactor.shapes,
-                      isMaskVisible: _isMaskVisible,
-                      currentDraftShape: _startDrag != null && _currentDrag != null && (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle)
-                          ? RedactionShape(
-                              id: 'draft',
-                              type: _selectedTool,
-                              rect: Rect.fromPoints(_startDrag!, _currentDrag!),
-                            )
-                          : null,
-                    ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
-          ],
+            ),
+          ),
         ),
       ),
     );
@@ -767,11 +779,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                   ),
                 ),
 
-                // Zoom Control Buttons (+ / - / Reset)
+                // Industry Standard Zoom Controls (+ / - / % Badge)
                 if (hasFileLoaded) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppColors.cardBackground,
                       borderRadius: BorderRadius.circular(14),
@@ -780,18 +792,25 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     child: Row(
                       children: [
                         IconButton(
+                          icon: const Icon(Icons.zoom_out_rounded, color: AppColors.accentCyan, size: 20),
+                          tooltip: 'Dézoomer (-25%)',
+                          onPressed: _zoomOut,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            '${(_zoomScale * 100).round()}%',
+                            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                        IconButton(
                           icon: const Icon(Icons.zoom_in_rounded, color: AppColors.accentCyan, size: 20),
-                          tooltip: 'Zoomer +',
+                          tooltip: 'Zoomer (+25%)',
                           onPressed: _zoomIn,
                         ),
                         IconButton(
-                          icon: const Icon(Icons.zoom_out_rounded, color: AppColors.accentCyan, size: 20),
-                          tooltip: 'Dézoomer -',
-                          onPressed: _zoomOut,
-                        ),
-                        IconButton(
                           icon: const Icon(Icons.restart_alt_rounded, color: AppColors.textSecondary, size: 18),
-                          tooltip: 'Réinitialiser Zoom (100%)',
+                          tooltip: 'Réinitialiser 100%',
                           onPressed: _resetZoom,
                         ),
                       ],
@@ -804,14 +823,14 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
             // Real Interactive Canvas Viewport
             SizedBox(
-              height: 540,
+              height: 560,
               width: double.infinity,
               child: Stack(
                 children: [
-                  // Full Document Paper Card Container
+                  // Full Document Paper Card Container with Dual Scrollbars
                   Container(
                     width: double.infinity,
-                    height: 540,
+                    height: 560,
                     decoration: BoxDecoration(
                       color: AppColors.cardBackground,
                       borderRadius: BorderRadius.circular(20),
@@ -890,7 +909,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       ),
                     ),
 
-                  // Bottom-Right Action Buttons (Zoom Reset & Eye Toggle)
+                  // Bottom-Right Action Buttons (Remove & Eye Toggle)
                   if (hasFileLoaded)
                     Positioned(
                       bottom: 20,
