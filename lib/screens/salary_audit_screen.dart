@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
@@ -21,26 +23,168 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   bool _isProcessing = false;
   bool _isMaskVisible = true;
 
-  String _selectedDocId = 'payslip-2026-07'; // Default to Juillet 2026
+  Uint8List? _customFileBytes;
+  String? _customFileName;
+  String _activeSampleDocId = 'payslip-2026-07'; // 'payslip-2026-07' | 'payslip-2025-05' | 'custom'
 
   Offset? _startDrag;
   Offset? _currentDrag;
   List<Offset> _currentPaintPoints = [];
 
-  void _triggerAutoRgpdMasks() {
-    setState(() {
-      _redactor.generateRgpdAutoMasks(const Size(380, 480));
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('🛡️ Caviardage automatique RGPD appliqué : NIR, IBAN, Nom & Adresse masqués !'),
-        backgroundColor: AppColors.accentCyan,
-        behavior: SnackBarBehavior.floating,
-      ),
+  // Period Selector Fallback Dialog
+  int _selectedYear = 2026;
+  int _selectedMonth = 7;
+  final List<String> _monthsFr = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ];
+
+  Future<void> _pickUserPayslipFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        setState(() {
+          _customFileBytes = file.bytes;
+          _customFileName = file.name;
+          _activeSampleDocId = 'custom';
+          _redactor.clearAll();
+        });
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📄 Fichier importé : ${file.name} (${(file.size / 1024).toStringAsFixed(1)} KB)'),
+            backgroundColor: AppColors.accentEmerald,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[SalaryAuditScreen] Pick File Exception: $e');
+    }
+  }
+
+  void _showPeriodWarningDialog(BuildContext context, RealParsedPayslip parsed) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: Row(
+                children: const [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                  SizedBox(width: 10),
+                  Text('Date non détectée', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'La date ou période du bulletin est masquée ou illisible.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Veuillez indiquer le mois et l\'année de ce bulletin pour l\'enregistrer dans votre historique salarial :',
+                    style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Month Dropdown
+                  Row(
+                    children: [
+                      const Text('Mois :', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButton<int>(
+                          value: _selectedMonth,
+                          dropdownColor: AppColors.cardBackground,
+                          isExpanded: true,
+                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                          items: List.generate(12, (index) {
+                            return DropdownMenuItem(
+                              value: index + 1,
+                              child: Text(_monthsFr[index]),
+                            );
+                          }),
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => _selectedMonth = val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Year Dropdown
+                  Row(
+                    children: [
+                      const Text('Année :', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButton<int>(
+                          value: _selectedYear,
+                          dropdownColor: AppColors.cardBackground,
+                          isExpanded: true,
+                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                          items: [2024, 2025, 2026, 2027].map((yr) {
+                            return DropdownMenuItem(
+                              value: yr,
+                              child: Text('$yr'),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => _selectedYear = val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    final monthStr = _selectedMonth < 10 ? '0$_selectedMonth' : '$_selectedMonth';
+                    final customPeriodKey = '$_selectedYear-$monthStr';
+                    final customPeriodLabel = '${_monthsFr[_selectedMonth - 1]} $_selectedYear';
+
+                    final record = parsed.toSalaryRecord(
+                      customPeriod: customPeriodKey,
+                      customPeriodLabel: customPeriodLabel,
+                    );
+                    ref.read(salaryProvider.notifier).addRecord(record);
+
+                    Navigator.pop(ctx);
+                    _showSuccessDialog(context, parsed, customPeriodLabel);
+                  },
+                  child: const Text('Valider & Enregistrer dans l\'historique', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  void _showSuccessDialog(BuildContext context, RealParsedPayslip parsed) {
+  void _showSuccessDialog(BuildContext context, RealParsedPayslip parsed, String finalPeriodLabel) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -67,14 +211,14 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
-              Text(
-                'Les données réelles de M. ${parsed.employeeName} (${parsed.employerName}) ont été extraites avec succès.',
+              const Text(
+                'Les données financières de votre bulletin ont été extraites avec succès et ajoutées à votre historique.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
               ),
               const SizedBox(height: 20),
 
-              // Summary Box (Matching Screenshot 9 & Real Data)
+              // Summary Table
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -84,7 +228,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 ),
                 child: Column(
                   children: [
-                    _DialogRow(label: 'Période', value: parsed.period),
+                    _DialogRow(label: 'Période', value: finalPeriodLabel),
                     const SizedBox(height: 10),
                     _DialogRow(label: 'Salaire Brut', value: '${parsed.grossSalary.toStringAsFixed(2)} €'),
                     const SizedBox(height: 10),
@@ -108,10 +252,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Accéder au Tableau de Bord', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Fermer & Voir l\'Historique', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 ),
               ),
             ],
@@ -123,7 +265,9 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isJuillet2026 = _selectedDocId == 'payslip-2026-07';
+    final salaryState = ref.watch(salaryProvider);
+    final records = salaryState.records;
+    final analytics = salaryState.analytics;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -133,66 +277,82 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Document Selector Tabs Bar (Juillet 2026 vs Mai 2025)
+            // Top Importer Button Card
             Container(
-              padding: const EdgeInsets.all(4),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: AppColors.borderSubtle),
               ),
               child: Row(
                 children: [
                   Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedDocId = 'payslip-2026-07'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isJuillet2026 ? AppColors.accentCyan : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _customFileName != null ? 'Fichier sélectionné : $_customFileName' : 'Importer votre propre bulletin (PDF / Image)',
+                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                         ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Juillet 2026 (3 776.67 €)',
-                          style: TextStyle(
-                            color: isJuillet2026 ? Colors.white : AppColors.textSecondary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Vos données restent 100% locales et anonymisées avant l\'envoi à l\'IA.',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedDocId = 'payslip-2025-05'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: !isJuillet2026 ? AppColors.accentCyan : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Mai 2025 (3 666.67 €)',
-                          style: TextStyle(
-                            color: !isJuillet2026 ? Colors.white : AppColors.textSecondary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentCyan,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
+                    icon: const Icon(Icons.file_upload_outlined, size: 18),
+                    label: const Text('Importer', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: _pickUserPayslipFile,
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
-            // RGPD Indications Card
+            // Sample Documents Selector Bar
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _activeSampleDocId == 'payslip-2026-07' ? AppColors.accentCyan : AppColors.textSecondary,
+                      side: BorderSide(color: _activeSampleDocId == 'payslip-2026-07' ? AppColors.accentCyan : AppColors.borderSubtle),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () => setState(() => _activeSampleDocId = 'payslip-2026-07'),
+                    child: const Text('Démo : Juillet 2026', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _activeSampleDocId == 'payslip-2025-05' ? AppColors.accentCyan : AppColors.textSecondary,
+                      side: BorderSide(color: _activeSampleDocId == 'payslip-2025-05' ? AppColors.accentCyan : AppColors.borderSubtle),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () => setState(() => _activeSampleDocId = 'payslip-2025-05'),
+                    child: const Text('Démo : Mai 2025', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // User Guidance Checklist (PRIVACY FIRST)
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: AppColors.cardBackground,
                 borderRadius: BorderRadius.circular(18),
@@ -200,37 +360,26 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Indications de Caviardage RGPD',
-                        style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.accentCyan,
-                          side: const BorderSide(color: AppColors.accentCyan),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        icon: const Icon(Icons.auto_awesome_rounded, size: 14),
-                        label: const Text('Auto-Masquer RGPD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        onPressed: _triggerAutoRgpdMasks,
-                      ),
-                    ],
+                children: const [
+                  Text(
+                    '📌 Éléments recommandés à caviarder avant l\'analyse IA :',
+                    style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                   ),
-                  const SizedBox(height: 12),
-                  const _BulletPoint('Nom et Prénom de l\'employé (M. NEGEM RICHARD)'),
-                  const SizedBox(height: 8),
-                  const _BulletPoint('Adresse personnelle complète (33 BD GALLIENI 93360 NEUILLY PLAISANCE)'),
-                  const SizedBox(height: 8),
-                  const _BulletPoint('Numéro de Sécurité Sociale (NIR : 193109934108822)'),
-                  const SizedBox(height: 8),
-                  const _BulletPoint('Coordonnées bancaires (IBAN : FR76 4061 8803 7300 0403 1180 429)'),
-                  const SizedBox(height: 8),
-                  const _BulletPoint('Nom et SIRET de l\'entreprise (VESTAS FRANCE SAS PEROLS)'),
+                  SizedBox(height: 12),
+                  _BulletPoint('Nom et Prénom de l\'employé (ex: M. NEGEM RICHARD)'),
+                  SizedBox(height: 8),
+                  _BulletPoint('Adresse personnelle complète'),
+                  SizedBox(height: 8),
+                  _BulletPoint('Numéro de Sécurité Sociale (NIR)'),
+                  SizedBox(height: 8),
+                  _BulletPoint('Coordonnées bancaires (IBAN / BIC)'),
+                  SizedBox(height: 8),
+                  _BulletPoint('Raison Sociale & SIRET de l\'employeur'),
+                  SizedBox(height: 12),
+                  Text(
+                    '💡 Conseil : Laissez lisibles le Salaire Brut, les Cotisations et le Net à Payer.',
+                    style: TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
                 ],
               ),
             ),
@@ -250,16 +399,29 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 icon: _isProcessing
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.psychology_rounded, size: 22),
-                label: const Text('Masquer & Analyser via Gemini IA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                label: const Text('Lancer l\'Analyse IA du Document Caviardé', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 onPressed: () async {
                   setState(() => _isProcessing = true);
-                  final parsed = await SalaryParserService.parseDocument(targetDocumentId: _selectedDocId);
-                  ref.read(salaryProvider.notifier).addRecord(parsed.toSalaryRecord());
+                  final parsed = await SalaryParserService.parseDocument(
+                    fileBytes: _customFileBytes,
+                    fileName: _customFileName,
+                    sampleDocumentId: _activeSampleDocId,
+                  );
                   setState(() => _isProcessing = false);
 
                   if (!mounted) return;
-                  // ignore: use_build_context_synchronously
-                  _showSuccessDialog(context, parsed);
+
+                  // If period was detected
+                  if (parsed.periodDetected) {
+                    final record = parsed.toSalaryRecord();
+                    ref.read(salaryProvider.notifier).addRecord(record);
+                    // ignore: use_build_context_synchronously
+                    _showSuccessDialog(context, parsed, parsed.period);
+                  } else {
+                    // Prompt for custom month/year if period was redacted
+                    // ignore: use_build_context_synchronously
+                    _showPeriodWarningDialog(context, parsed);
+                  }
                 },
               ),
             ),
@@ -343,7 +505,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       borderRadius: BorderRadius.circular(20),
                       child: Stack(
                         children: [
-                          // Payslip Document Content (Matching Real Document)
+                          // Document Preview Content
                           SingleChildScrollView(
                             physics: const NeverScrollableScrollPhysics(),
                             padding: const EdgeInsets.all(18),
@@ -356,19 +518,21 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                   children: [
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: const [
-                                        Text('VESTAS FRANCE SAS PEROLS', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
-                                        Text('BAT LATITUDE PARC DE L AEROPORT', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                                        Text('34470 PEROLS', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                                        Text('SIRET : 44084901600066', style: TextStyle(color: Colors.black87, fontSize: 9)),
+                                      children: [
+                                        Text(
+                                          _customFileName != null ? 'DOCUMENT PERSONNALISÉ' : 'VESTAS FRANCE SAS PEROLS',
+                                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11),
+                                        ),
+                                        const Text('BAT LATITUDE PARC DE L AEROPORT', style: TextStyle(color: Colors.black87, fontSize: 10)),
+                                        const Text('34470 PEROLS', style: TextStyle(color: Colors.black87, fontSize: 10)),
+                                        const Text('SIRET : 44084901600066', style: TextStyle(color: Colors.black87, fontSize: 9)),
                                       ],
                                     ),
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
                                         const Text('BULLETIN DE PAIE', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-                                        Text(isJuillet2026 ? 'DU : 01 JUILLET 2026' : 'DU : 01 MAI 2025', style: const TextStyle(color: Colors.black87, fontSize: 10)),
-                                        Text(isJuillet2026 ? 'AU : 31 JUILLET 2026' : 'AU : 31 MAI 2025', style: const TextStyle(color: Colors.black87, fontSize: 10)),
+                                        Text(_activeSampleDocId == 'payslip-2025-05' ? 'DU : 01 MAI 2025' : 'DU : 01 JUILLET 2026', style: const TextStyle(color: Colors.black87, fontSize: 10)),
                                         const Text('NIR : 193109934108822', style: TextStyle(color: Colors.black87, fontSize: 9, fontWeight: FontWeight.bold)),
                                       ],
                                     ),
@@ -382,7 +546,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       const Text('SALARIÉ : NEGEM RICHARD', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
-                                      Text(isJuillet2026 ? 'SALAIRE BRUT : 3 776,67 €' : 'SALAIRE BRUT : 3 666,67 €', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
+                                      Text(_activeSampleDocId == 'payslip-2025-05' ? 'BRUT : 3 666,67 €' : 'BRUT : 3 776,67 €', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
                                     ],
                                   ),
                                 ),
@@ -398,18 +562,14 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(isJuillet2026 ? 'APPOINTEMENTS FORFAIT : 3 776.67 €' : 'APPOINTEMENTS FORFAIT : 3 666.67 €', style: const TextStyle(color: Colors.black, fontSize: 11)),
+                                            Text(_activeSampleDocId == 'payslip-2025-05' ? 'APPOINTEMENTS : 3 666.67 €' : 'APPOINTEMENTS : 3 776.67 €', style: const TextStyle(color: Colors.black, fontSize: 11)),
                                             const SizedBox(height: 4),
-                                            Text(isJuillet2026 ? 'COTISATIONS SALARIALES : - 840.78 €' : 'COTISATIONS SALARIALES : - 805.78 €', style: const TextStyle(color: Colors.black87, fontSize: 10)),
+                                            Text(_activeSampleDocId == 'payslip-2025-05' ? 'COTISATIONS : - 805.78 €' : 'COTISATIONS : - 840.78 €', style: const TextStyle(color: Colors.black87, fontSize: 10)),
                                             const SizedBox(height: 4),
-                                            Text(isJuillet2026 ? 'TITRES REPAS DÉDUITS : - 52.80 €' : 'TITRES REPAS DÉDUITS : - 92.40 €', style: const TextStyle(color: Colors.black87, fontSize: 10)),
-                                            if (isJuillet2026) ...[
-                                              const SizedBox(height: 4),
-                                              const Text('INDEMNITE TELETRAVAIL : + 15.00 €', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                                            ],
+                                            Text(_activeSampleDocId == 'payslip-2025-05' ? 'TITRES REPAS : - 92.40 €' : 'TITRES REPAS : - 52.80 €', style: const TextStyle(color: Colors.black87, fontSize: 10)),
                                             const SizedBox(height: 12),
-                                            Text(isJuillet2026 ? 'MONTANT NET SOCIAL : 2 952.28 €' : 'MONTANT NET SOCIAL : 2 860.89 €', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
-                                            Text(isJuillet2026 ? 'NET A PAYER : 2 713.74 €' : 'NET A PAYER : 2 684.46 €', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+                                            Text(_activeSampleDocId == 'payslip-2025-05' ? 'NET SOCIAL : 2 860.89 €' : 'NET SOCIAL : 2 952.28 €', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
+                                            Text(_activeSampleDocId == 'payslip-2025-05' ? 'NET A PAYER : 2 684.46 €' : 'NET A PAYER : 2 713.74 €', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
                                             const SizedBox(height: 8),
                                             const Text('IBAN : FR76 4061 8803 7300 0403 1180 429', style: TextStyle(color: Colors.black87, fontSize: 9, fontWeight: FontWeight.bold)),
                                           ],
@@ -422,7 +582,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                             ),
                           ),
 
-                          // Real Interactive Touch/Mouse Canvas Listener
+                          // Real Touch/Mouse Interactive Redaction Layer
                           if (_canvasTab == 0)
                             Positioned.fill(
                               child: GestureDetector(
@@ -493,7 +653,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
                   ),
 
-                  // Floating Toolbar Overlay (Matching Screenshot 7)
+                  // Floating Toolbar Overlay
                   Positioned(
                     top: 14,
                     left: 14,
@@ -545,7 +705,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
                   ),
 
-                  // Bottom-Right Floating Eye Button (Matching Screenshot 7)
+                  // Bottom-Right Floating Eye Button
                   Positioned(
                     bottom: 20,
                     right: 20,
@@ -560,6 +720,159 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       },
                       child: Icon(_isMaskVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded),
                     ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 28),
+
+            // Timeline & Smoothed Salary Card (Lissage & Historique)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Historique & Revenu Lissé',
+                            style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${records.length} bulletins analysés au cours du temps',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          'Moyenne : ${analytics.overallAverageNet.toStringAsFixed(2)} €/mois',
+                          style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Growth Trend Badge
+                  if (analytics.growthTrendPercent != 0)
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentCyan.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.trending_up_rounded, color: AppColors.accentCyan, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Progression du salaire : +${analytics.growthTrendPercent.toStringAsFixed(1)}% sur l\'historique',
+                            style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+
+                  // Records Table / List
+                  Column(
+                    children: records.map((record) {
+                      final isBaseline = record.isLatestActive;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isBaseline ? AppColors.accentCyan.withValues(alpha: 0.1) : AppColors.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isBaseline ? AppColors.accentCyan : AppColors.borderSubtle,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Radio<String>(
+                              value: record.id,
+                              groupValue: salaryState.activeBaseline?.id,
+                              activeColor: AppColors.accentCyan,
+                              onChanged: (id) {
+                                if (id != null) {
+                                  ref.read(salaryProvider.notifier).setActiveBaseline(id);
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        record.periodLabel,
+                                        style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+                                      ),
+                                      if (isBaseline) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.accentCyan,
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text('Référent Actif', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    record.notes ?? record.status,
+                                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${record.netSalary.toStringAsFixed(2)} €',
+                                  style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                Text(
+                                  'Brut : ${(record.grossSalary ?? 0).toStringAsFixed(2)} €',
+                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                                ),
+                              ],
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
+                              onPressed: () {
+                                ref.read(salaryProvider.notifier).deleteRecord(record.id);
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ],
               ),
