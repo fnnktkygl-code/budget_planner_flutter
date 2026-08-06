@@ -36,7 +36,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   final ScrollController _horizontalScrollController = ScrollController();
   final ScrollController _verticalScrollController = ScrollController();
 
-  double _zoomScale = 1.0; // 1.0 = 100%, 1.5 = 150%, 2.0 = 200%
 
   int _canvasTab = 0; // 0 = Canevas masqué, 1 = Rendu original
   bool _isProcessing = false;
@@ -69,15 +68,20 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
+  final TransformationController _transformationController = TransformationController();
+
   @override
   void dispose() {
     _horizontalScrollController.dispose();
     _verticalScrollController.dispose();
+    _transformationController.dispose();
     super.dispose();
   }
 
   void _resetZoom() {
-    setState(() => _zoomScale = 1.0);
+    setState(() {
+      _transformationController.value = Matrix4.identity();
+    });
   }
 
   void _clearCanvasDocument() {
@@ -862,158 +866,108 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
     final Uint8List activeBytes = _renderedPdfImageBytes ?? _customFileBytes!;
 
-    // 3. CENTERED CANVAS VIEWPORT WITH MOUSE WHEEL HORIZONTAL SCROLL
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GestureDetector(
-          onScaleUpdate: (details) {
-            if (details.scale != 1.0) {
-              setState(() {
-                _zoomScale = (_zoomScale * (details.scale > 1.0 ? 1.02 : 0.98)).clamp(0.8, 3.0);
-              });
-            }
-          },
-          child: Listener(
-            onPointerSignal: (pointerSignal) {
-              if (pointerSignal is PointerScrollEvent) {
-                if (pointerSignal.scrollDelta.dx != 0) {
-                  if (_horizontalScrollController.hasClients) {
-                    final target = (_horizontalScrollController.offset + pointerSignal.scrollDelta.dx).clamp(
-                      0.0,
-                      _horizontalScrollController.position.maxScrollExtent,
-                    );
-                    _horizontalScrollController.jumpTo(target);
-                  }
-                } else if (HardwareKeyboard.instance.isShiftPressed && pointerSignal.scrollDelta.dy != 0) {
-                  if (_horizontalScrollController.hasClients) {
-                    final target = (_horizontalScrollController.offset + pointerSignal.scrollDelta.dy).clamp(
-                      0.0,
-                      _horizontalScrollController.position.maxScrollExtent,
-                    );
-                    _horizontalScrollController.jumpTo(target);
-                  }
-                }
-              }
-            },
-            child: Scrollbar(
-              controller: _verticalScrollController,
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                controller: _verticalScrollController,
-                scrollDirection: Axis.vertical,
-                child: Scrollbar(
-                  controller: _horizontalScrollController,
-                  thumbVisibility: true,
-                  child: SingleChildScrollView(
-                    controller: _horizontalScrollController,
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
-                          child: Transform.scale(
-                            scale: _zoomScale,
-                            alignment: Alignment.topCenter,
-                            child: Container(
-                              constraints: const BoxConstraints(maxWidth: 680),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 6)),
-                                ],
-                              ),
-                              child: Stack(
-                                alignment: Alignment.topCenter,
-                                children: [
-                                  // Document PDF Image Page
-                                  Image.memory(
-                                    activeBytes,
-                                    fit: BoxFit.contain,
-                                    width: double.infinity,
-                                  ),
+    // 3. CENTERED INTERACTIVE CANVAS VIEWPORT (WITH NATIVE PINCH-TO-ZOOM & PANNING TO ALL EDGES)
+    return InteractiveViewer(
+      transformationController: _transformationController,
+      minScale: 0.8,
+      maxScale: 3.5,
+      boundaryMargin: const EdgeInsets.all(500),
+      panEnabled: _selectedTool == RedactionTool.move || _canvasTab == 1,
+      scaleEnabled: true,
+      onInteractionUpdate: (_) => setState(() {}),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 680),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 6)),
+              ],
+            ),
+            child: Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                // Document PDF Image Page
+                Image.memory(
+                  activeBytes,
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                ),
 
-                                  // Redaction Mask Drawing Overlay
-                                  if (_canvasTab == 0 && hasFileLoaded)
-                                    Positioned.fill(
-                                      child: GestureDetector(
-                                        onPanStart: (details) {
-                                          final pos = details.localPosition;
-                                          setState(() {
-                                            _startDrag = pos;
-                                            _currentDrag = pos;
-                                            if (_selectedTool == RedactionTool.paint) {
-                                              _currentPaintPoints = [pos];
-                                            }
-                                          });
-                                        },
-                                        onPanUpdate: (details) {
-                                          final pos = details.localPosition;
-                                          setState(() {
-                                            _currentDrag = pos;
-                                            if (_selectedTool == RedactionTool.paint) {
-                                              _currentPaintPoints.add(pos);
-                                            }
-                                          });
-                                        },
-                                        onPanEnd: (_) {
-                                          if (_startDrag != null && _currentDrag != null) {
-                                            final rect = Rect.fromPoints(_startDrag!, _currentDrag!);
-                                            setState(() {
-                                              if (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle) {
-                                                _redactor.addShape(
-                                                  RedactionShape(
-                                                    id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
-                                                    type: _selectedTool,
-                                                    rect: rect,
-                                                  ),
-                                                );
-                                              } else if (_selectedTool == RedactionTool.paint && _currentPaintPoints.isNotEmpty) {
-                                                _redactor.addShape(
-                                                  RedactionShape(
-                                                    id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
-                                                    type: RedactionTool.paint,
-                                                    points: List.from(_currentPaintPoints),
-                                                  ),
-                                                );
-                                              }
-                                              _startDrag = null;
-                                              _currentDrag = null;
-                                              _currentPaintPoints = [];
-                                            });
-                                          }
-                                        },
-                                        child: CustomPaint(
-                                          size: Size.infinite,
-                                          painter: RedactionCanvasPainter(
-                                            shapes: _redactor.shapes,
-                                            isMaskVisible: _isMaskVisible,
-                                            currentDraftShape: _startDrag != null && _currentDrag != null && (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle)
-                                                ? RedactionShape(
-                                                    id: 'draft',
-                                                    type: _selectedTool,
-                                                    rect: Rect.fromPoints(_startDrag!, _currentDrag!),
-                                                  )
-                                                : null,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
+                // Redaction Mask Drawing Overlay
+                if (_canvasTab == 0 && hasFileLoaded)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onPanStart: (details) {
+                        final pos = details.localPosition;
+                        setState(() {
+                          _startDrag = pos;
+                          _currentDrag = pos;
+                          if (_selectedTool == RedactionTool.paint) {
+                            _currentPaintPoints = [pos];
+                          }
+                        });
+                      },
+                      onPanUpdate: (details) {
+                        final pos = details.localPosition;
+                        setState(() {
+                          _currentDrag = pos;
+                          if (_selectedTool == RedactionTool.paint) {
+                            _currentPaintPoints.add(pos);
+                          }
+                        });
+                      },
+                      onPanEnd: (_) {
+                        if (_startDrag != null && _currentDrag != null) {
+                          final rect = Rect.fromPoints(_startDrag!, _currentDrag!);
+                          setState(() {
+                            if (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle) {
+                              _redactor.addShape(
+                                RedactionShape(
+                                  id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
+                                  type: _selectedTool,
+                                  rect: rect,
+                                ),
+                              );
+                            } else if (_selectedTool == RedactionTool.paint && _currentPaintPoints.isNotEmpty) {
+                              _redactor.addShape(
+                                RedactionShape(
+                                  id: 'shape-${DateTime.now().millisecondsSinceEpoch}',
+                                  type: RedactionTool.paint,
+                                  points: List.from(_currentPaintPoints),
+                                ),
+                              );
+                            }
+                            _startDrag = null;
+                            _currentDrag = null;
+                            _currentPaintPoints = [];
+                          });
+                        }
+                      },
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: RedactionCanvasPainter(
+                          shapes: _redactor.shapes,
+                          isMaskVisible: _isMaskVisible,
+                          currentDraftShape: _startDrag != null && _currentDrag != null && (_selectedTool == RedactionTool.rect || _selectedTool == RedactionTool.circle)
+                              ? RedactionShape(
+                                  id: 'draft',
+                                  type: _selectedTool,
+                                  rect: Rect.fromPoints(_startDrag!, _currentDrag!),
+                                )
+                              : null,
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1969,17 +1923,27 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                         IconButton(
                           icon: const Icon(Icons.zoom_out_rounded, color: AppColors.textSecondary, size: 18),
                           onPressed: () {
-                            if (_zoomScale > 0.75) setState(() => _zoomScale -= 0.25);
+                            final currentScale = _transformationController.value.getMaxScaleOnAxis();
+                            if (currentScale > 0.8) {
+                              final newScale = (currentScale - 0.25).clamp(0.8, 3.5);
+                              _transformationController.value = Matrix4.diagonal3Values(newScale, newScale, 1.0);
+                              setState(() {});
+                            }
                           },
                         ),
                         Text(
-                          '${(_zoomScale * 100).round()}%',
+                          '${(_transformationController.value.getMaxScaleOnAxis() * 100).round()}%',
                           style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 11),
                         ),
                         IconButton(
                           icon: const Icon(Icons.zoom_in_rounded, color: AppColors.textSecondary, size: 18),
                           onPressed: () {
-                            if (_zoomScale < 2.5) setState(() => _zoomScale += 0.25);
+                            final currentScale = _transformationController.value.getMaxScaleOnAxis();
+                            if (currentScale < 3.5) {
+                              final newScale = (currentScale + 0.25).clamp(0.8, 3.5);
+                              _transformationController.value = Matrix4.diagonal3Values(newScale, newScale, 1.0);
+                              setState(() {});
+                            }
                           },
                         ),
                       ],
