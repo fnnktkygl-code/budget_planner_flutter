@@ -144,7 +144,10 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
       try {
         final base64Pdf = base64Encode(bytes);
         js.context.callMethod('extractPdfTextWithCallback', [base64Pdf, 'onPdfTextExtracted']);
-        return await completer.future;
+        return await completer.future.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => null,
+        );
       } catch (e) {
         debugPrint('[SalaryAuditScreen] JS PDF Text Extraction Exception: $e');
         return null;
