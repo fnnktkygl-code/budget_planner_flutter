@@ -1786,16 +1786,29 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                               ),
                             ],
                           ),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentCyan,
-                              foregroundColor: Colors.white,
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            icon: const Icon(Icons.add_rounded, size: 16),
-                            label: const Text('Déclarer un Avis', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                            onPressed: () => _showAddTaxAdjustmentDialog(context),
+                          Row(
+                            children: [
+                              if (salaryState.taxAdjustments.isNotEmpty) ...[
+                                TextButton.icon(
+                                  style: TextButton.styleFrom(foregroundColor: AppColors.accentRose),
+                                  icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                                  label: const Text('Nettoyer', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  onPressed: () => ref.read(salaryProvider.notifier).clearTaxAdjustments(),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.accentCyan,
+                                  foregroundColor: Colors.white,
+                                  elevation: 2,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                icon: const Icon(Icons.add_rounded, size: 16),
+                                label: const Text('Déclarer un Avis', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                onPressed: () => _showAddTaxAdjustmentDialog(context),
+                              ),
+                            ],
                           ),
                         ],
                       ),

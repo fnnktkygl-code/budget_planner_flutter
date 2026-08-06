@@ -21,6 +21,26 @@ class TaxAdjustment {
 
   double get monthlyInstallment => monthsCount > 0 ? netTaxDue / monthsCount : netTaxDue;
 
+  bool isActiveForPeriod(String period) {
+    try {
+      final parts = startPeriod.split('-');
+      final startY = int.parse(parts[0]);
+      final startM = int.parse(parts[1]);
+
+      final curParts = period.split('-');
+      final curY = int.parse(curParts[0]);
+      final curM = int.parse(curParts[1]);
+
+      final startTotalMonths = startY * 12 + startM;
+      final curTotalMonths = curY * 12 + curM;
+      final endTotalMonths = startTotalMonths + monthsCount - 1;
+
+      return curTotalMonths >= startTotalMonths && curTotalMonths <= endTotalMonths;
+    } catch (_) {
+      return true;
+    }
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'label': label,

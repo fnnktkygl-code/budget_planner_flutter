@@ -25,8 +25,14 @@ class SalaryState {
 
   double get activeTaxAdjustmentMonthlyInstallment {
     double total = 0;
+    final now = DateTime.now();
+    final mStr = now.month < 10 ? '0${now.month}' : '${now.month}';
+    final currentPeriod = '${now.year}-$mStr';
+
     for (var adj in taxAdjustments) {
-      total += adj.monthlyInstallment;
+      if (adj.isActiveForPeriod(currentPeriod)) {
+        total += adj.monthlyInstallment;
+      }
     }
     return total;
   }
@@ -254,7 +260,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
   }
 
   void addTaxAdjustment(TaxAdjustment adjustment) {
-    final updated = state.taxAdjustments.where((t) => t.id != adjustment.id).toList();
+    final updated = state.taxAdjustments.where((t) => t.id != adjustment.id && t.taxYear != adjustment.taxYear).toList();
     updated.add(adjustment);
     state = state.copyWith(taxAdjustments: updated);
     _save();
@@ -263,6 +269,11 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
   void deleteTaxAdjustment(String id) {
     final updated = state.taxAdjustments.where((t) => t.id != id).toList();
     state = state.copyWith(taxAdjustments: updated);
+    _save();
+  }
+
+  void clearTaxAdjustments() {
+    state = state.copyWith(taxAdjustments: []);
     _save();
   }
 
