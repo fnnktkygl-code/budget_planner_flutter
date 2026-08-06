@@ -17,6 +17,7 @@ import '../services/redactor_engine.dart';
 import '../services/salary_parser_service.dart';
 import '../widgets/notification_header.dart';
 import '../widgets/salary_trend_chart_widget.dart';
+import '../widgets/shimmer_loading.dart';
 
 class SalaryAuditScreen extends ConsumerStatefulWidget {
   const SalaryAuditScreen({super.key});
@@ -288,19 +289,21 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                               final isCurrent = idx == batchRecords.length && processedCount < files.length;
                               final record = isDone ? batchRecords[idx] : null;
 
+                              if (isCurrent) {
+                                return ShimmerQueueRow(fileName: f.name);
+                              }
+
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 6),
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: isCurrent ? AppColors.accentCyan.withValues(alpha: 0.1) : Colors.transparent,
+                                  color: Colors.transparent,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
                                   children: [
                                     if (isDone)
                                       const Icon(Icons.check_circle_rounded, color: AppColors.accentEmerald, size: 18)
-                                    else if (isCurrent)
-                                      const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentCyan))
                                     else
                                       const Icon(Icons.radio_button_unchecked_rounded, color: AppColors.textMuted, size: 18),
                                     const SizedBox(width: 10),
@@ -310,9 +313,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                          color: isDone || isCurrent ? AppColors.textPrimary : AppColors.textMuted,
+                                          color: isDone ? AppColors.textPrimary : AppColors.textMuted,
                                           fontSize: 12,
-                                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                                         ),
                                       ),
                                     ),
@@ -320,11 +322,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                       Text(
                                         '${record.netSalary.toStringAsFixed(2)} €',
                                         style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 12),
-                                      )
-                                    else if (isCurrent)
-                                      const Text(
-                                        'Analyse IA...',
-                                        style: TextStyle(color: AppColors.accentCyan, fontSize: 11, fontStyle: FontStyle.italic),
                                       ),
                                   ],
                                 ),
@@ -1160,6 +1157,12 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       child: _buildCanvasContent(hasFileLoaded),
                     ),
                   ),
+
+                  // High Tech Shimmer AI Analysis Overlay
+                  if (_isProcessing)
+                    const Positioned.fill(
+                      child: ShimmerAnalysisOverlay(),
+                    ),
 
                   // Draggable Redaction Toolbar Overlay
                   if (hasFileLoaded)
