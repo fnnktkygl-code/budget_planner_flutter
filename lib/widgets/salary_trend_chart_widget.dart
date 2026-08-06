@@ -25,6 +25,7 @@ class SalaryTrendChartWidget extends StatefulWidget {
 class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
   int? _hoverIndex;
   int _viewMode = 0; // 0: En Banque (Net), 1: Avant Impôt (Net Social), 2: Réel Après DGFiP
+  bool _separateBonus = true;
 
   double _getRetroactiveNet(SalaryRecord record) {
     if (widget.taxAdjustments == null || widget.taxAdjustments!.isEmpty) {
@@ -113,20 +114,59 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                   ),
                 ],
               ),
-              // Tax Toggle Selector
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.borderSubtle),
-                ),
-                child: Row(
-                  children: [
-                    _buildModeButton(0, '🏦 Banque'),
-                    _buildModeButton(1, '📈 Brut Social'),
-                    _buildModeButton(2, '⚖️ Réel DGFiP'),
-                  ],
-                ),
+              Row(
+                children: [
+                  InkWell(
+                    onTap: () => setState(() => _separateBonus = !_separateBonus),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _separateBonus
+                            ? AppColors.accentEmerald.withValues(alpha: 0.15)
+                            : AppColors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _separateBonus ? AppColors.accentEmerald : AppColors.borderSubtle,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _separateBonus ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                            color: _separateBonus ? AppColors.accentEmerald : AppColors.textMuted,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Séparer les primes',
+                            style: TextStyle(
+                              color: _separateBonus ? AppColors.accentEmerald : AppColors.textMuted,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Tax Toggle Selector
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        _buildModeButton(0, '🏦 Banque'),
+                        _buildModeButton(1, '📈 Brut Social'),
+                        _buildModeButton(2, '⚖️ Réel DGFiP'),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -165,6 +205,7 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                         selectedIndex: hoverIndex,
                         hoverIndex: _hoverIndex,
                         viewMode: _viewMode,
+                        separateBonus: _separateBonus,
                         taxAdjustments: widget.taxAdjustments,
                       ),
                     ),
@@ -319,6 +360,7 @@ class _SalaryChartPainter extends CustomPainter {
   final int selectedIndex;
   final int? hoverIndex;
   final int viewMode;
+  final bool separateBonus;
   final List<TaxAdjustment>? taxAdjustments;
 
   _SalaryChartPainter({
@@ -327,21 +369,28 @@ class _SalaryChartPainter extends CustomPainter {
     required this.selectedIndex,
     this.hoverIndex,
     required this.viewMode,
+    required this.separateBonus,
     this.taxAdjustments,
   });
 
   double _getVal(SalaryRecord r) {
-    if (viewMode == 1) return r.netSocial;
+    double val = r.netSalary;
+    if (viewMode == 1) val = r.netSocial;
     if (viewMode == 2) {
-      if (taxAdjustments == null || taxAdjustments!.isEmpty) return r.netSalary;
-      final yearStr = r.period.split('-').first;
-      final year = int.tryParse(yearStr) ?? 0;
-      final adjList = taxAdjustments!.where((t) => t.taxYear == year).toList();
-      if (adjList.isEmpty) return r.netSalary;
-      final monthlyRealTax = adjList.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear);
-      return max(0.0, r.netSocial - monthlyRealTax);
+      if (taxAdjustments != null && taxAdjustments!.isNotEmpty) {
+        final year = r.year;
+        final adjList = taxAdjustments!.where((t) => t.taxYear == year).toList();
+        if (adjList.isNotEmpty) {
+          final monthlyRealTax = adjList.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear);
+          val = max(0.0, r.netSocial - monthlyRealTax);
+        }
+      }
     }
-    return r.netSalary;
+    if (separateBonus && r.hasExplicitBonus) {
+      final bonus = r.bonusAmount ?? 0.0;
+      val = max(0.0, val - bonus);
+    }
+    return val;
   }
 
   @override

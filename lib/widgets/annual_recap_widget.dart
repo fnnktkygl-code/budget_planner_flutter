@@ -48,6 +48,7 @@ class _AnnualRecapWidgetState extends State<AnnualRecapWidget> {
     final double basePctOfNet = totalNetBanque > 0 ? (totalBaseNet / totalNetBanque * 100) : 0.0;
     final double primePctOfNet = totalNetBanque > 0 ? (totalPrimes / totalNetBanque * 100) : 0.0;
     final double pasPctOfNetSocial = totalNetSocial > 0 ? (totalPAS / totalNetSocial * 100) : 0.0;
+    final double pasPctOfGross = totalGross > 0 ? (totalPAS / totalGross * 100) : 0.0;
     final double cotiPctOfGross = totalGross > 0 ? (totalCotisations / totalGross * 100) : 0.0;
 
     final bool hasTaxAdj = widget.taxAdjustments != null && widget.taxAdjustments!.isNotEmpty;
@@ -231,36 +232,50 @@ class _AnnualRecapWidgetState extends State<AnnualRecapWidget> {
               2: FlexColumnWidth(1.4),
             },
             children: [
-              _buildTableRow(
-                'Salaire Net de Base Cumulé',
-                '${totalBaseNet.toStringAsFixed(2)} €',
-                '${basePctOfNet.toStringAsFixed(1)}% du Net',
-                AppColors.textPrimary,
-              ),
-              _buildTableRow(
-                'Primes & Variable Explicites',
-                '${totalPrimes.toStringAsFixed(2)} €',
-                '${primePctOfNet.toStringAsFixed(1)}% du Net',
-                AppColors.accentEmerald,
-              ),
-              _buildTableRow(
-                'Épargne Salariale PEE (Intéressement)',
-                '${totalPEE.toStringAsFixed(2)} €',
-                totalPEE > 0 ? '${(totalPEE / totalGlobalComp * 100).toStringAsFixed(1)}% Global' : '0.0%',
-                AppColors.accentGold,
-              ),
+              if (totalGross > 0)
+                _buildTableRow(
+                  'Salaire Brut Total Cumulé',
+                  '${totalGross.toStringAsFixed(2)} €',
+                  '100.0% du Brut',
+                  AppColors.textPrimary,
+                ),
+              if (totalGross > 0)
+                _buildTableRow(
+                  'Cotisations & Charges Sociales',
+                  '${totalCotisations.toStringAsFixed(2)} €',
+                  '${cotiPctOfGross.toStringAsFixed(1)}% du Brut',
+                  AppColors.accentPurple,
+                ),
               _buildTableRow(
                 'Net Social Avant Impôt (CSG/CRDS)',
                 '${totalNetSocial.toStringAsFixed(2)} €',
                 totalGross > 0 ? '${(totalNetSocial / totalGross * 100).toStringAsFixed(1)}% du Brut' : '100.0%',
-                AppColors.accentPurple,
+                AppColors.textPrimary,
               ),
-              if (totalGross > 0)
+              _buildTableRow(
+                'Retenue Impôt sur le Revenu (PAS Prlevé)',
+                '${totalPAS.toStringAsFixed(2)} €',
+                '${pasPctOfNetSocial.toStringAsFixed(1)}% du Social • ${pasPctOfGross.toStringAsFixed(1)}% Brut',
+                AppColors.accentRose,
+              ),
+              _buildTableRow(
+                'Salaire Net de Base Récurrent',
+                '${totalBaseNet.toStringAsFixed(2)} €',
+                '${basePctOfNet.toStringAsFixed(1)}% du Net Versé',
+                AppColors.accentEmerald,
+              ),
+              _buildTableRow(
+                'Primes & Variable Explicites',
+                '${totalPrimes.toStringAsFixed(2)} €',
+                '${primePctOfNet.toStringAsFixed(1)}% du Net Versé',
+                AppColors.accentGold,
+              ),
+              if (totalPEE > 0)
                 _buildTableRow(
-                  'Cotisations & Charges Sociales (Brut - Net Social)',
-                  '${totalCotisations.toStringAsFixed(2)} €',
-                  '${cotiPctOfGross.toStringAsFixed(1)}% du Brut',
-                  AppColors.textMuted,
+                  'Épargne Salariale PEE (Intéressement)',
+                  '${totalPEE.toStringAsFixed(2)} €',
+                  '${(totalPEE / totalGlobalComp * 100).toStringAsFixed(1)}% Global',
+                  AppColors.accentCyan,
                 ),
             ],
           ),
