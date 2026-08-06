@@ -1,0 +1,51 @@
+final Map<String, Map<String, String>> localizedValues = {
+  'fr': {
+    'app_title': 'AuraBudget Pro',
+    'dashboard': 'Tableau de bord',
+    'savings': 'Architecture Épargne',
+    'crisis': 'Simulation de Crise',
+    'clic': 'CLIC Financements',
+    'rules': 'Règles 50/30/20',
+    'redactor': 'Anonymisation IA',
+    'settings': 'Paramètres',
+    'salary_audit': 'Audit Bulletins de Salaire',
+    'available_budget': 'Budget Mensuel Disponible',
+    'connected_bank': 'Banque Connectée',
+    'connect_bank': 'Connecter une banque',
+    'sync_bank': 'Synchroniser TrueLayer',
+    'active_ref_salary': 'Base Répartition Active',
+    'smoothed_salary': 'Moyenne Lissée (Analyse)',
+    'recent_transactions': 'Transactions Récentes',
+    'no_transactions': 'Aucune transaction synchronisée',
+    'add_payslip': 'Ajouter un bulletin',
+    'save': 'Enregistrer',
+    'cancel': 'Annuler',
+  },
+  'en': {
+    'app_title': 'AuraBudget Pro',
+    'dashboard': 'Dashboard',
+    'savings': 'Savings Architecture',
+    'crisis': 'Crisis Simulation',
+    'clic': 'CLIC Financing',
+    'rules': '50/30/20 Rules',
+    'redactor': 'AI Redactor',
+    'settings': 'Settings',
+    'salary_audit': 'Payslip Audit',
+    'available_budget': 'Available Monthly Budget',
+    'connected_bank': 'Connected Bank',
+    'connect_bank': 'Connect Bank',
+    'sync_bank': 'Sync TrueLayer',
+    'active_ref_salary': 'Active Allocation Baseline',
+    'smoothed_salary': 'Smoothed Average (Analytics)',
+    'recent_transactions': 'Recent Transactions',
+    'no_transactions': 'No synced transactions',
+    'add_payslip': 'Add Payslip',
+    'save': 'Save',
+    'cancel': 'Cancel',
+  },
+};
+
+String t(String key, String langCode) {
+  final lang = localizedValues[langCode] ?? localizedValues['fr']!;
+  return lang[key] ?? key;
+}
