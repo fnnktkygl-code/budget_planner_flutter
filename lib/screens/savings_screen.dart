@@ -1,90 +1,80 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
-import '../core/providers/budget_provider.dart';
+import '../widgets/notification_header.dart';
 
 class SavingsScreen extends ConsumerWidget {
   const SavingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final budget = ref.watch(budgetProvider);
-    final emergencyTarget = budget.monthlyFixedExpenses * budget.emergencyFundTargetMonths;
-
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: const Text('Architecture de Sécurité & Épargne', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18)),
-      ),
+      appBar: const NotificationHeaderWidget(title: 'Entonnoir d\'Épargne'),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Matelas de Sécurité Card
+            // Top Section Banner Notification
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4), width: 1.5),
+                color: AppColors.accentCyan.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('MATELAS DE SÉCURITÉ RECOMMANDÉ', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: AppColors.accentEmerald.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                        child: Text('${budget.emergencyFundTargetMonths.toStringAsFixed(0)} Mois de charges', style: const TextStyle(color: AppColors.accentEmerald, fontSize: 11, fontWeight: FontWeight.bold)),
+              child: Row(
+                children: const [
+                  Icon(Icons.savings_rounded, color: AppColors.accentCyan, size: 20),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Entonnoir d\'épargne automatique : Priorisation Sécurité -> PEA -> Immo',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Text('${emergencyTarget.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.textPrimary, fontSize: 28, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Text('Basé sur des charges fixes mensuelles de ${budget.monthlyFixedExpenses.toStringAsFixed(0)} € / mois', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-            const Text('Objectifs & Plans d\'Épargne DCA', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-
-            _buildSavingsTile(
-              title: 'PEA (Plan d\'Épargne en Actions)',
-              subtitle: 'Stratégie ETF World & S&P 500 — DCA 800 € / mois',
-              amount: '15 400 €',
-              target: '50 000 €',
-              progress: 0.30,
-              icon: Icons.show_chart_rounded,
-              color: AppColors.accentCyan,
-            ),
-            const SizedBox(height: 12),
-            _buildSavingsTile(
-              title: 'Livret A (Épargne de Précaution)',
-              subtitle: 'Fonds d\'urgence 6 mois immédiatement disponible',
-              amount: '11 100 €',
-              target: '11 100 €',
-              progress: 1.0,
-              icon: Icons.shield_rounded,
-              color: AppColors.accentEmerald,
-            ),
-            const SizedBox(height: 12),
-            _buildSavingsTile(
-              title: 'PER (Plan Épargne Retraite)',
-              subtitle: 'Défiscalisation & Versement Volontaire Annuel',
-              amount: '6 800 €',
-              target: '20 000 €',
-              progress: 0.34,
-              icon: Icons.lock_clock_rounded,
+            // Savings Cards
+            _buildFunnelStepCard(
+              stepNumber: 1,
+              title: 'Épargne de Précaution (Livret A / LDD)',
+              targetAmount: '6 000.00 €',
+              currentAmount: '4 200.00 €',
+              progress: 0.70,
               color: AppColors.accentGold,
+              icon: Icons.shield_rounded,
+              context: context,
+            ),
+            const SizedBox(height: 16),
+            _buildFunnelStepCard(
+              stepNumber: 2,
+              title: 'Épargne Long Terme (PEA / ETF World)',
+              targetAmount: '20 000.00 €',
+              currentAmount: '12 500.00 €',
+              progress: 0.625,
+              color: AppColors.accentCyan,
+              icon: Icons.show_chart_rounded,
+              context: context,
+            ),
+            const SizedBox(height: 16),
+            _buildFunnelStepCard(
+              stepNumber: 3,
+              title: 'Projets Immobiliers & Apport',
+              targetAmount: '15 000.00 €',
+              currentAmount: '3 000.00 €',
+              progress: 0.20,
+              color: AppColors.accentEmerald,
+              icon: Icons.home_work_rounded,
+              context: context,
             ),
           ],
         ),
@@ -92,18 +82,23 @@ class SavingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSavingsTile({
+  Widget _buildFunnelStepCard({
+    required int stepNumber,
     required String title,
-    required String subtitle,
-    required String amount,
-    required String target,
+    required String targetAmount,
+    required String currentAmount,
     required double progress,
-    required IconData icon,
     required Color color,
+    required IconData icon,
+    required BuildContext context,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppColors.cardBackground, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderSubtle)),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -111,7 +106,10 @@ class SavingsScreen extends ConsumerWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Icon(icon, color: color, size: 22),
               ),
               const SizedBox(width: 14),
@@ -119,24 +117,59 @@ class SavingsScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(
+                      'Étape $stepNumber',
+                      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    Text(
+                      title,
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 18),
+          LinearProgressIndicator(
+            value: progress,
+            backgroundColor: AppColors.surface,
+            color: color,
+            minHeight: 10,
+            borderRadius: BorderRadius.circular(5),
+          ),
           const SizedBox(height: 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('$amount accumulés', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
-              Text('Cible: $target', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              Text('Actuel : $currentAmount', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+              Text('Cible : $targetAmount', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
             ],
           ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(value: progress, backgroundColor: AppColors.surfaceVariant, color: color, minHeight: 6),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: color,
+                side: BorderSide(color: color.withValues(alpha: 0.4)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Alimenter cette poche d\'épargne'),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Virement automatique programmé vers $title !'),
+                    backgroundColor: color,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );

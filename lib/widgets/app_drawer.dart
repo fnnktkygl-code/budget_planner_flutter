@@ -5,10 +5,12 @@ import '../core/providers/settings_provider.dart';
 import '../widgets/banking_modal.dart';
 
 class AppDrawerWidget extends ConsumerWidget {
+  final int currentIndex;
   final Function(int)? onSelectScreen;
 
   const AppDrawerWidget({
     super.key,
+    this.currentIndex = 0,
     this.onSelectScreen,
   });
 
@@ -23,9 +25,9 @@ class AppDrawerWidget extends ConsumerWidget {
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                 children: [
-                  // Logo & Brand Header (Matching Screenshot 2)
+                  // Logo & Brand Header
                   Row(
                     children: [
                       Container(
@@ -44,7 +46,7 @@ class AppDrawerWidget extends ConsumerWidget {
                         child: const Icon(
                           Icons.circle_outlined,
                           color: Colors.white,
-                          size: 28,
+                          size: 26,
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -56,17 +58,16 @@ class AppDrawerWidget extends ConsumerWidget {
                               'AuraBudget Pro',
                               style: TextStyle(
                                 color: AppColors.textPrimary,
-                                fontSize: 20,
+                                fontSize: 19,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'Synchronisation bancaire & Intelligence Artificielle',
+                              'Synchronisation bancaire & IA',
                               style: TextStyle(
                                 color: AppColors.textSecondary,
                                 fontSize: 11,
-                                height: 1.3,
                               ),
                             ),
                           ],
@@ -74,60 +75,115 @@ class AppDrawerWidget extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
-                  const Divider(color: AppColors.borderSubtle, height: 1),
                   const SizedBox(height: 24),
+                  const Divider(color: AppColors.borderSubtle, height: 1),
+                  const SizedBox(height: 20),
 
-                  // Section 1: OUTILS D'ANALYSE & ÉPARGNE
+                  // Section: NAVIGATION PRINCIPALE
+                  const Text(
+                    'NAVIGATION PRINCIPALE',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  _buildDrawerTile(
+                    icon: Icons.dashboard_outlined,
+                    activeIcon: Icons.dashboard_rounded,
+                    title: 'Tableau de bord',
+                    index: 0,
+                    context: context,
+                  ),
+                  const SizedBox(height: 4),
+
+                  _buildDrawerTile(
+                    icon: Icons.account_tree_outlined,
+                    activeIcon: Icons.account_tree_rounded,
+                    title: 'Règles de Répartition',
+                    index: 1,
+                    context: context,
+                  ),
+                  const SizedBox(height: 4),
+
+                  _buildDrawerTile(
+                    icon: Icons.document_scanner_outlined,
+                    activeIcon: Icons.document_scanner_rounded,
+                    title: 'Analyseur de bulletin de paie',
+                    index: 2,
+                    context: context,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Section: OUTILS D'ANALYSE & ÉPARGNE
                   const Text(
                     'OUTILS D\'ANALYSE & ÉPARGNE',
                     style: TextStyle(
                       color: AppColors.textSecondary,
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
 
                   _buildDrawerTile(
                     icon: Icons.savings_outlined,
+                    activeIcon: Icons.savings_rounded,
                     title: 'Entonnoir d\'épargne',
-                    onTap: () {
-                      Navigator.pop(context);
-                      if (onSelectScreen != null) onSelectScreen!(2);
-                    },
+                    index: 3,
+                    context: context,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
 
                   _buildDrawerTile(
-                    icon: Icons.tune_rounded,
-                    title: 'Simulateurs',
-                    onTap: () {
-                      Navigator.pop(context);
-                      if (onSelectScreen != null) onSelectScreen!(3);
-                    },
+                    icon: Icons.warning_amber_rounded,
+                    activeIcon: Icons.warning_rounded,
+                    title: 'Simulateur de Crise',
+                    index: 4,
+                    context: context,
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 4),
 
-                  // Section 2: PRÉFÉRENCES
+                  _buildDrawerTile(
+                    icon: Icons.credit_score_outlined,
+                    activeIcon: Icons.credit_score_rounded,
+                    title: 'Crédit & Financement',
+                    index: 5,
+                    context: context,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Section: PRÉFÉRENCES & CONFIGURATION
                   const Text(
-                    'PRÉFÉRENCES',
+                    'PRÉFÉRENCES & CONFIG',
                     style: TextStyle(
                       color: AppColors.textSecondary,
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
                     ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  _buildDrawerTile(
+                    icon: Icons.settings_outlined,
+                    activeIcon: Icons.settings_rounded,
+                    title: 'Configuration System',
+                    index: 6,
+                    context: context,
                   ),
                   const SizedBox(height: 14),
 
                   // Language Dropdown Card
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppColors.cardBackground,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppColors.borderSubtle),
                     ),
                     child: DropdownButtonHideUnderline(
@@ -141,9 +197,9 @@ class AppDrawerWidget extends ConsumerWidget {
                             value: 'fr',
                             child: Row(
                               children: [
-                                Text('🇫🇷 ', style: TextStyle(fontSize: 16)),
+                                Text('🇫🇷 ', style: TextStyle(fontSize: 15)),
                                 SizedBox(width: 8),
-                                Text('Français', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+                                Text('Français', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
                               ],
                             ),
                           ),
@@ -151,9 +207,9 @@ class AppDrawerWidget extends ConsumerWidget {
                             value: 'en',
                             child: Row(
                               children: [
-                                Text('🇬🇧 ', style: TextStyle(fontSize: 16)),
+                                Text('🇬🇧 ', style: TextStyle(fontSize: 15)),
                                 SizedBox(width: 8),
-                                Text('English', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+                                Text('English', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
                               ],
                             ),
                           ),
@@ -166,12 +222,14 @@ class AppDrawerWidget extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
 
                   // Auto Sync Bank Button
                   GestureDetector(
                     onTap: () {
-                      Navigator.pop(context);
+                      if (Scaffold.of(context).isDrawerOpen) {
+                        Navigator.pop(context);
+                      }
                       showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
@@ -180,24 +238,23 @@ class AppDrawerWidget extends ConsumerWidget {
                       );
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: AppColors.accentCyan.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.5)),
                       ),
                       child: Row(
                         children: const [
-                          Icon(Icons.account_balance_rounded, color: AppColors.accentCyan, size: 22),
-                          SizedBox(width: 12),
+                          Icon(Icons.account_balance_rounded, color: AppColors.accentCyan, size: 20),
+                          SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Synchroniser\nautomatiquement',
+                              'Synchroniser Banque (TrueLayer)',
                               style: TextStyle(
                                 color: AppColors.accentCyan,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                                height: 1.3,
+                                fontSize: 12,
                               ),
                             ),
                           ),
@@ -211,16 +268,11 @@ class AppDrawerWidget extends ConsumerWidget {
 
             // Footer Version Tag
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 children: const [
                   Text(
-                    'AuraBudget Pro',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 11),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Version 1.0.0',
+                    'AuraBudget Pro — v1.0.0',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                   ),
                 ],
@@ -234,22 +286,39 @@ class AppDrawerWidget extends ConsumerWidget {
 
   Widget _buildDrawerTile({
     required IconData icon,
+    required IconData activeIcon,
     required String title,
-    required VoidCallback onTap,
+    required int index,
+    required BuildContext context,
   }) {
+    final isSelected = currentIndex == index;
+
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      leading: Icon(icon, color: AppColors.textSecondary, size: 22),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      selected: isSelected,
+      selectedTileColor: AppColors.accentCyan.withValues(alpha: 0.15),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      leading: Icon(
+        isSelected ? activeIcon : icon,
+        color: isSelected ? AppColors.accentCyan : AppColors.textSecondary,
+        size: 20,
+      ),
       title: Text(
         title,
-        style: const TextStyle(
-          color: AppColors.textPrimary,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
+        style: TextStyle(
+          color: isSelected ? AppColors.accentCyan : AppColors.textPrimary,
+          fontSize: 13,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
         ),
       ),
-      onTap: onTap,
+      onTap: () {
+        if (Scaffold.of(context).isDrawerOpen) {
+          Navigator.pop(context);
+        }
+        if (onSelectScreen != null) {
+          onSelectScreen!(index);
+        }
+      },
     );
   }
 }

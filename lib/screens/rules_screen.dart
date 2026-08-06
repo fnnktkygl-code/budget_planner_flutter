@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
+import '../widgets/notification_header.dart';
 
 class RuleCategoryItem {
   final String id;
-  final String name;
-  final double amount;
+  String name;
+  double amount;
+  bool isLocked;
   final String iconType;
   final Color iconBgColor;
 
@@ -14,6 +16,7 @@ class RuleCategoryItem {
     required this.id,
     required this.name,
     required this.amount,
+    this.isLocked = true,
     required this.iconType,
     required this.iconBgColor,
   });
@@ -44,18 +47,120 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     RuleCategoryItem(id: 'day-2', name: 'Tampon €', amount: 0, iconType: 'basket', iconBgColor: AppColors.accentEmerald),
   ];
 
-  void _addCategory(List<RuleCategoryItem> targetList, String defaultTitle, Color color) {
-    setState(() {
-      targetList.add(
-        RuleCategoryItem(
-          id: 'cat-${DateTime.now().millisecondsSinceEpoch}',
-          name: '$defaultTitle ${targetList.length + 1}',
-          amount: 100,
-          iconType: 'default',
-          iconBgColor: color,
-        ),
-      );
-    });
+  void _showAddCategoryDialog(List<RuleCategoryItem> targetList, String defaultGroup, Color color) {
+    final titleController = TextEditingController();
+    final amountController = TextEditingController(text: '100');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.add_circle_outline_rounded, color: AppColors.accentCyan),
+              SizedBox(width: 10),
+              Text('Nouvelle Catégorie', style: TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Nom de la catégorie',
+                  hintText: 'ex: Assurance, Transports',
+                ),
+                style: const TextStyle(color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Montant mensuel (€)',
+                  suffixText: '€',
+                ),
+                style: const TextStyle(color: AppColors.textPrimary),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                final title = titleController.text.trim().isEmpty ? 'Nouvelle Catégorie' : titleController.text.trim();
+                final amount = double.tryParse(amountController.text.trim()) ?? 100.0;
+                setState(() {
+                  targetList.add(
+                    RuleCategoryItem(
+                      id: 'cat-${DateTime.now().millisecondsSinceEpoch}',
+                      name: title,
+                      amount: amount,
+                      iconType: 'default',
+                      iconBgColor: color,
+                    ),
+                  );
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Ajouter'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showEditAmountDialog(RuleCategoryItem item) {
+    final amountController = TextEditingController(text: item.amount.toStringAsFixed(0));
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Modifier ${item.name}', style: const TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+          content: TextField(
+            controller: amountController,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Nouveau montant (€)',
+              suffixText: '€',
+            ),
+            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan),
+              onPressed: () {
+                final newAmount = double.tryParse(amountController.text.trim()) ?? item.amount;
+                setState(() {
+                  item.amount = newAmount;
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _deleteCategory(List<RuleCategoryItem> targetList, String id) {
@@ -77,35 +182,39 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary, size: 24),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
-        title: Row(
-          children: const [
-            Text(
-              'Règles de Répartition',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(width: 8),
-            Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 18),
-          ],
-        ),
-      ),
+      appBar: const NotificationHeaderWidget(title: 'Règles de Répartition'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Notification Status Banner (Section Header Notification)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.accentPurple.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.accentPurple.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.lightbulb_outline_rounded, color: AppColors.accentPurple, size: 20),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Règles de répartition 50/30/20 basées sur votre revenu net de 2 861.26 €',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
             // Radiant Gradient Card — RESTE À VIVRE ESTIMÉ (Matching Screenshot 5)
             Container(
               width: double.infinity,
@@ -172,21 +281,21 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             // Section 1: ALLOCATION MENSUELLE D'ÉPARGNE
             _buildSectionHeader('ALLOCATION MENSUELLE D\'ÉPARGNE'),
             const SizedBox(height: 12),
-            _buildCategoryGroupCard(_savingsCategories, netSalary, allowDelete: false, onAdd: () => _addCategory(_savingsCategories, 'Épargne', AppColors.accentCyan)),
+            _buildCategoryGroupCard(_savingsCategories, netSalary, allowDelete: false, onAdd: () => _showAddCategoryDialog(_savingsCategories, 'Épargne', AppColors.accentCyan)),
 
             const SizedBox(height: 24),
 
             // Section 2: CHARGES FIXES INCOMPRESSIBLES
             _buildSectionHeader('CHARGES FIXES INCOMPRESSIBLES'),
             const SizedBox(height: 12),
-            _buildCategoryGroupCard(_fixedChargesCategories, netSalary, allowDelete: true, onAdd: () => _addCategory(_fixedChargesCategories, 'Charge', AppColors.accentRose)),
+            _buildCategoryGroupCard(_fixedChargesCategories, netSalary, allowDelete: true, onAdd: () => _showAddCategoryDialog(_fixedChargesCategories, 'Charge', AppColors.accentRose)),
 
             const SizedBox(height: 24),
 
             // Section 3: DÉPENSES QUOTIDIENNES
             _buildSectionHeader('DÉPENSES QUOTIDIENNES'),
             const SizedBox(height: 12),
-            _buildCategoryGroupCard(_dailyCategories, netSalary, allowDelete: true, onAdd: () => _addCategory(_dailyCategories, 'Dépense', AppColors.accentEmerald)),
+            _buildCategoryGroupCard(_dailyCategories, netSalary, allowDelete: true, onAdd: () => _showAddCategoryDialog(_dailyCategories, 'Dépense', AppColors.accentEmerald)),
 
             const SizedBox(height: 40),
           ],
@@ -234,7 +343,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
           ),
           const Divider(color: AppColors.borderSubtle, height: 1),
 
-          // Add Category Button (Matching Screenshots 3 & 5)
+          // Add Category Button
           InkWell(
             onTap: onAdd,
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -333,34 +442,47 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             ),
           ),
 
-          // Amount Box (Matching Screenshots 3 & 5)
-          Container(
-            width: 110,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.borderSubtle),
-            ),
-            child: Text(
-              '${item.amount.toStringAsFixed(0)} €',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
+          // Amount Box (Tap to edit amount)
+          GestureDetector(
+            onTap: () => _showEditAmountDialog(item),
+            child: Container(
+              width: 110,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                '${item.amount.toStringAsFixed(0)} €',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
 
-          // Lock Icon
-          const Icon(Icons.lock_outline_rounded, color: AppColors.textMuted, size: 18),
+          // Lock Icon Toggle
+          IconButton(
+            icon: Icon(
+              item.isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+              color: item.isLocked ? AppColors.accentCyan : AppColors.textMuted,
+              size: 20,
+            ),
+            onPressed: () {
+              setState(() {
+                item.isLocked = !item.isLocked;
+              });
+            },
+          ),
 
           if (allowDelete) ...[
-            const SizedBox(width: 10),
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 18),
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 20),
               onPressed: onDelete,
             ),
           ],

@@ -8,10 +8,10 @@ import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/rules_screen.dart';
 import 'screens/salary_audit_screen.dart';
-import 'screens/settings_screen.dart';
 import 'screens/savings_screen.dart';
 import 'screens/crisis_screen.dart';
 import 'screens/clic_screen.dart';
+import 'screens/settings_screen.dart';
 import 'widgets/app_drawer.dart';
 
 void main() {
@@ -70,14 +70,22 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = const [
-    DashboardScreen(),
-    RulesScreen(),
-    SalaryAuditScreen(),
-    SettingsScreen(),
-    SavingsScreen(),
-    CrisisScreen(),
-    ClicScreen(),
+    DashboardScreen(),     // Index 0
+    RulesScreen(),         // Index 1
+    SalaryAuditScreen(),   // Index 2
+    SavingsScreen(),       // Index 3
+    CrisisScreen(),        // Index 4
+    ClicScreen(),          // Index 5
+    SettingsScreen(),      // Index 6
   ];
+
+  // Map bottom nav destination index to screen index
+  static const List<int> _bottomNavToScreenIndex = [0, 1, 2, 3, 6];
+
+  int _getBottomNavIndex() {
+    final navIdx = _bottomNavToScreenIndex.indexOf(_currentIndex);
+    return navIdx != -1 ? navIdx : 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,8 +100,9 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             body: Row(
               children: [
                 SizedBox(
-                  width: 280,
+                  width: 270,
                   child: AppDrawerWidget(
+                    currentIndex: _currentIndex,
                     onSelectScreen: (index) {
                       setState(() {
                         _currentIndex = index;
@@ -112,10 +121,11 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
             ),
           );
         } else {
-          // Mobile Layout: Drawer + Bottom Navigation Bar (Matching Screenshots)
+          // Mobile Layout: Drawer + Bottom Navigation Bar
           return Scaffold(
             backgroundColor: AppColors.background,
             drawer: AppDrawerWidget(
+              currentIndex: _currentIndex,
               onSelectScreen: (index) {
                 setState(() {
                   _currentIndex = index;
@@ -127,30 +137,34 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
               children: _screens,
             ),
             bottomNavigationBar: NavigationBar(
-              selectedIndex: _currentIndex < 4 ? _currentIndex : 0,
+              selectedIndex: _getBottomNavIndex(),
               backgroundColor: AppColors.surface,
               indicatorColor: AppColors.accentCyan.withValues(alpha: 0.2),
-              onDestinationSelected: (index) {
+              onDestinationSelected: (navIndex) {
                 setState(() {
-                  _currentIndex = index;
+                  _currentIndex = _bottomNavToScreenIndex[navIndex];
                 });
               },
               destinations: const [
                 NavigationDestination(
                   icon: Icon(Icons.grid_view_rounded),
-                  label: 'Tableau de bord',
+                  label: 'Tableau',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.account_tree_outlined),
-                  label: 'Règles de Répartition',
+                  label: 'Règles',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.document_scanner_outlined),
-                  label: 'Analyseur de bulletin...',
+                  label: 'Bulletin',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.savings_outlined),
+                  label: 'Épargne',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.settings_outlined),
-                  label: 'Configuration',
+                  label: 'Config',
                 ),
               ],
             ),

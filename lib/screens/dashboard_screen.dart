@@ -3,12 +3,79 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
 import '../widgets/donut_chart.dart';
+import '../widgets/notification_header.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  String? _selectedCategoryFilter;
+
+  void _showPdfExporterDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.picture_as_pdf_rounded, color: AppColors.accentRose),
+              SizedBox(width: 10),
+              Text('Exporter Rapport PDF', style: TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text(
+                'Génération du rapport financier mensuel complet avec :',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+              SizedBox(height: 12),
+              Text('• Allocation des actifs & Donut Chart', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+              Text('• Décomposition du Revenu Net Lissé', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+              Text('• Audit Salarial & Cotisations 2026', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+              Text('• Synchronisation Bancaire TrueLayer', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: const Text('Télécharger PDF'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('📄 Rapport PDF téléchargé avec succès !'),
+                    backgroundColor: AppColors.accentEmerald,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final salary = ref.watch(salaryProvider);
     final activeBaseline = salary.activeBaseline;
 
@@ -24,71 +91,88 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary, size: 24),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
-        title: Row(
-          children: const [
-            Text(
-              'Tableau de bord',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(width: 8),
-            Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 18),
-          ],
-        ),
-      ),
+      appBar: const NotificationHeaderWidget(title: 'Tableau de bord'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title & Exporter PDF Action Button (Matching Screenshot 1)
+            // Top Notification Bar Banner (Matching User Requirement)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.accentCyan.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.bolt_rounded, color: AppColors.accentCyan, size: 20),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Synchro bancaire active | Dernier relevé : Aujourd\'hui 10:45',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentEmerald.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'En ligne',
+                      style: TextStyle(color: AppColors.accentEmerald, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Title & Exporter PDF Action Button
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Tableau de bord',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Vue d\'ensemble',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Répartition mensuelle & Revenu Lissé',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ],
                 ),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textSecondary,
+                    foregroundColor: AppColors.textPrimary,
                     side: const BorderSide(color: AppColors.borderSubtle),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                  icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.accentRose, size: 18),
                   label: const Text('Exporter PDF', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Génération du rapport PDF en cours...'),
-                        backgroundColor: AppColors.accentCyan,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
+                  onPressed: () => _showPdfExporterDialog(context),
                 ),
               ],
             ),
             const SizedBox(height: 20),
 
-            // Responsive Layout: Grid on Desktop (width >= 900), Stack on Mobile
+            // Responsive Layout: Grid on Desktop (width >= 900), Column on Mobile
             LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth >= 900) {
@@ -129,17 +213,27 @@ class DashboardScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: const [
-              Text(
-                'Allocation d\'actifs',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: const [
+                  Text(
+                    'Allocation d\'actifs',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 16),
+                ],
               ),
-              SizedBox(width: 8),
-              Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 16),
+              if (_selectedCategoryFilter != null)
+                TextButton(
+                  onPressed: () => setState(() => _selectedCategoryFilter = null),
+                  child: const Text('Réinitialiser', style: TextStyle(color: AppColors.accentCyan, fontSize: 11)),
+                ),
             ],
           ),
           const SizedBox(height: 20),
@@ -196,7 +290,7 @@ class DashboardScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
 
-          // Items Table (Matching Screenshot 1)
+          // Items Table
           _buildSalaryLine('Salaire de base (Brut)', '${grossSalary.toStringAsFixed(2)} €', isPositive: null),
           const SizedBox(height: 14),
           _buildSalaryLine('Cotisations sociales', '- 860.78 €', isPositive: false),

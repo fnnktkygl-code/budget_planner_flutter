@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
+import '../widgets/notification_header.dart';
 
 class SalaryAuditScreen extends ConsumerStatefulWidget {
   const SalaryAuditScreen({super.key});
@@ -16,40 +17,114 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   bool _isProcessing = false;
   String? _uploadedDocName;
 
+  void _showDigiposteModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.mail_outline_rounded, color: AppColors.accentCyan),
+                      SizedBox(width: 10),
+                      Text('Connexion Digiposte', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Récupération automatique du dernier bulletin de paie archivé sur votre coffre-fort numérique Digiposte La Poste.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.cloud_download_rounded),
+                  label: const Text('Importer mon bulletin Digiposte'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _uploadedDocName = 'bulletin_digiposte_juin_2026.pdf';
+                      _currentStep = 2;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('📄 Bulletin Digiposte récupéré et prêt à être analysé !'),
+                        backgroundColor: AppColors.accentEmerald,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary, size: 24),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
-        title: Row(
-          children: const [
-            Text(
-              'Analyseur de bulletin de paie',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(width: 8),
-            Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 18),
-          ],
-        ),
-      ),
+      appBar: const NotificationHeaderWidget(title: 'Analyseur de bulletin de paie'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 3-Step Stepper Header (Matching Screenshot 4)
+            // Top Notification Bar Banner
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.accentCyan.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.shield_rounded, color: AppColors.accentCyan, size: 20),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Diagnostic salarial & Caviardage RGPD des données personnelles',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // 3-Step Stepper Header (Interactive)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
               decoration: BoxDecoration(
@@ -60,17 +135,26 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildStepItem(1, 'Importer', _currentStep >= 1),
+                  GestureDetector(
+                    onTap: () => setState(() => _currentStep = 1),
+                    child: _buildStepItem(1, 'Importer', _currentStep >= 1),
+                  ),
                   const Text('—', style: TextStyle(color: AppColors.borderSubtle, fontWeight: FontWeight.bold)),
-                  _buildStepItem(2, 'Masquer', _currentStep >= 2),
+                  GestureDetector(
+                    onTap: () => setState(() => _currentStep = 2),
+                    child: _buildStepItem(2, 'Masquer', _currentStep >= 2),
+                  ),
                   const Text('—', style: TextStyle(color: AppColors.borderSubtle, fontWeight: FontWeight.bold)),
-                  _buildStepItem(3, 'Analyser', _currentStep >= 3),
+                  GestureDetector(
+                    onTap: () => setState(() => _currentStep = 3),
+                    child: _buildStepItem(3, 'Analyser', _currentStep >= 3),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
 
-            // Card 1: Cloud Upload Box (Matching Screenshot 4)
+            // Card 1: Cloud Upload Box
             GestureDetector(
               onTap: () {
                 setState(() {
@@ -91,7 +175,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.borderSubtle),
+                  border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
                 ),
                 child: Column(
                   children: [
@@ -126,55 +210,58 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
             ),
             const SizedBox(height: 14),
 
-            // Card 2: Digiposte Import Card (Matching Screenshot 4)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E2B4D),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentCyan.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
+            // Card 2: Digiposte Import Card
+            GestureDetector(
+              onTap: () => _showDigiposteModal(context),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E2B4D),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentCyan.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.mail_outline_rounded, color: AppColors.accentCyan, size: 24),
                     ),
-                    child: const Icon(Icons.mail_outline_rounded, color: AppColors.accentCyan, size: 24),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          'Importer depuis Digiposte',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Importer depuis Digiposte',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Connectez-vous et récupérez votre bulletin',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
+                          SizedBox(height: 2),
+                          Text(
+                            'Connectez-vous et récupérez votre bulletin',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
-                ],
+                    const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 20),
 
-            // Card 3: Indications de Caviardage Accordion (Matching Screenshot 4)
+            // Card 3: Indications de Caviardage Accordion
             Container(
               decoration: BoxDecoration(
                 color: AppColors.cardBackground,
@@ -236,8 +323,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.cardBackground,
-                  foregroundColor: AppColors.textSecondary,
-                  side: const BorderSide(color: AppColors.borderSubtle),
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.accentCyan),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 icon: _isProcessing
@@ -246,7 +333,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentCyan),
                       )
-                    : const Icon(Icons.settings_suggest_rounded, size: 20),
+                    : const Icon(Icons.settings_suggest_rounded, color: AppColors.accentCyan, size: 20),
                 label: const Text(
                   'Masquer & Analyser le document',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
@@ -256,7 +343,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                   setState(() {
                     _isProcessing = true;
                   });
-                  Future.delayed(const Duration(seconds: 2), () {
+                  Future.delayed(const Duration(seconds: 1), () {
                     if (!mounted) return;
                     setState(() {
                       _isProcessing = false;
@@ -264,7 +351,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     });
                     messenger.showSnackBar(
                       const SnackBar(
-                        content: Text('Analyse IA du bulletin effectuée avec succès !'),
+                        content: Text('✅ Analyse IA du bulletin effectuée avec succès !'),
                         backgroundColor: AppColors.accentEmerald,
                         behavior: SnackBarBehavior.floating,
                       ),
@@ -275,7 +362,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Canvas Toggle Tabs: Canevas masqué vs Rendu original (Matching Screenshot 4)
+            // Canvas Toggle Tabs: Canevas masqué vs Rendu original
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
