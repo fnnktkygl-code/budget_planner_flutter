@@ -1,5 +1,8 @@
-import 'dart:typed_data';
+// ignore_for_file: avoid_web_libraries_in_flutter
+import 'dart:convert';
+import 'dart:js' as js;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
@@ -44,6 +47,36 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
+  Future<Uint8List?> _renderPdfToImageBytes(Uint8List pdfBytes) async {
+    if (kIsWeb) {
+      try {
+        final dataUrl = js.context.callMethod('renderPdfBytesToDataUrl', [pdfBytes]);
+        if (dataUrl != null && dataUrl is String && dataUrl.startsWith('data:image')) {
+          final base64Str = dataUrl.split(',')[1];
+          return base64Decode(base64Str);
+        }
+      } catch (e) {
+        debugPrint('[SalaryAuditScreen] JS PDF Render Error: $e');
+      }
+    }
+
+    // 2. Fallback to pdfx native rendering
+    try {
+      final pdfDoc = await PdfDocument.openData(pdfBytes);
+      final page = await pdfDoc.getPage(1);
+      final pageImage = await page.render(
+        width: page.width * 2,
+        height: page.height * 2,
+        format: PdfPageImageFormat.jpeg,
+      );
+      await pdfDoc.close();
+      return pageImage?.bytes;
+    } catch (e) {
+      debugPrint('[SalaryAuditScreen] Pdfx Render Error: $e');
+      return null;
+    }
+  }
+
   Future<void> _processUploadedFile(Uint8List bytes, String fileName) async {
     setState(() {
       _customFileBytes = bytes;
@@ -55,28 +88,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     final isPdf = fileName.toLowerCase().endsWith('.pdf');
     if (isPdf) {
       setState(() => _isRenderingPdf = true);
-      try {
-        final pdfDoc = await PdfDocument.openData(bytes);
-        final page = await pdfDoc.getPage(1);
-        final pageImage = await page.render(
-          width: page.width * 2,
-          height: page.height * 2,
-          format: PdfPageImageFormat.jpeg,
-        );
-        await pdfDoc.close();
-
-        if (pageImage != null) {
-          setState(() {
-            _renderedPdfImageBytes = pageImage.bytes;
-            _isRenderingPdf = false;
-          });
-        } else {
-          setState(() => _isRenderingPdf = false);
-        }
-      } catch (e) {
-        debugPrint('[SalaryAuditScreen] Error rendering PDF: $e');
-        setState(() => _isRenderingPdf = false);
-      }
+      final imageBytes = await _renderPdfToImageBytes(bytes);
+      setState(() {
+        _renderedPdfImageBytes = imageBytes;
+        _isRenderingPdf = false;
+      });
     }
   }
 
@@ -359,7 +375,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
       );
     }
 
-    // 3. RENDERED PDF IMAGE PAGE
+    // 3. RENDERED PDF IMAGE PAGE (Via pdf.js canvas renderer)
     if (_renderedPdfImageBytes != null) {
       return InteractiveViewer(
         maxScale: 4.0,

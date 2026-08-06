@@ -31,6 +31,34 @@
 
   <title>budget_planner_flutter</title>
   <link rel="manifest" href="manifest.json">
+  <!-- pdf.js library for Flutter Web PDF rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    window.renderPdfBytesToDataUrl = async function(pdfBytes) {
+      try {
+        const uint8Array = new Uint8Array(pdfBytes);
+        const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 2.0 });
+        
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+        return canvas.toDataURL('image/png');
+      } catch (err) {
+        console.error('PDF Render Error:', err);
+        return null;
+      }
+    };
+  </script>
 </head>
 <body>
   <!--
