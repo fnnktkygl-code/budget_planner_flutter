@@ -20,6 +20,7 @@ class RealParsedPayslip {
   final double nonTaxableAllowance;
   final bool hasExplicitBonus;
   final String? bonusDescription;
+  final bool isParsedFromDocument;
   final String? renderedImageBase64;
   final String? rawFileBase64;
 
@@ -40,6 +41,7 @@ class RealParsedPayslip {
     required this.nonTaxableAllowance,
     this.hasExplicitBonus = false,
     this.bonusDescription,
+    required this.isParsedFromDocument,
     this.renderedImageBase64,
     this.rawFileBase64,
   });
@@ -69,7 +71,7 @@ class RealParsedPayslip {
       nonTaxableAllowances: nonTaxableAllowance,
       investableAmount: (finalNet * 0.3).roundToDouble(),
       savingsRate: 30.0,
-      status: '✓ Bulletin Analysé avec Succès',
+      status: isParsedFromDocument ? '✓ Extrait du bulletin' : '⚠️ Vérifié par l\'utilisateur',
       documentName: customFileName ?? 'bulletin_$id.pdf',
       renderedImageBase64: imageBase64 ?? renderedImageBase64,
       rawFileBase64: fileBase64 ?? rawFileBase64,
@@ -88,7 +90,6 @@ class SalaryParserService {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
-  // Model Failover Rotation List
   static const List<String> _geminiModels = [
     'gemini-1.5-flash',
     'gemini-1.5-pro',
@@ -141,7 +142,7 @@ class SalaryParserService {
     return null;
   }
 
-  /// Scans raw text / PDF byte stream for French payslip financial figures & EXPLICIT bonus lines
+  /// Scans raw text / PDF byte stream for real French payslip financial figures
   static Map<String, dynamic>? _scanPdfTextForFinancials(Uint8List? fileBytes) {
     if (fileBytes == null || fileBytes.isEmpty) return null;
 
@@ -169,7 +170,7 @@ class SalaryParserService {
         bonusDesc = 'Prime de Performance';
       }
 
-      // 1. Net à payer versé sur le compte / Net payable
+      // 1. Net à payer / Net versé sur le compte / Net payable
       final netMatch = RegExp(
         r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
         caseSensitive: false,
@@ -199,7 +200,7 @@ class SalaryParserService {
         foundGross = double.tryParse(valStr);
       }
 
-      if (foundNet != null || foundNetSocial != null || foundGross != null || hasExplicitBonus) {
+      if (foundNet != null || foundNetSocial != null || foundGross != null) {
         return {
           if (foundNet != null) 'net': foundNet,
           if (foundGross != null) 'gross': foundGross,
@@ -211,30 +212,6 @@ class SalaryParserService {
     } catch (_) {}
 
     return null;
-  }
-
-  /// Generates dynamic, realistic monthly salary variations around standard net baseline (~2 713,74 €)
-  static Map<String, dynamic> _generateDynamicMonthlySalary(int yr, int mo, String? fileName) {
-    final seed = (yr * 12 + mo + (fileName?.hashCode ?? 0)).abs();
-    
-    // Strict baseline net salary around 2 713.74 €
-    double baseNet = 2713.74;
-    double baseGross = 3776.67;
-
-    // Small realistic monthly variation (-22.50€ to +25.40€)
-    final monthlyVariation = ((seed % 48) - 22.50);
-
-    final netPayable = double.parse((baseNet + monthlyVariation).toStringAsFixed(2));
-    final grossSalary = double.parse((baseGross + (monthlyVariation * 1.35)).toStringAsFixed(2));
-    final netSocial = double.parse((netPayable * 1.088).toStringAsFixed(2));
-
-    return {
-      'net': netPayable,
-      'gross': grossSalary,
-      'netSocial': netSocial,
-      'hasExplicitBonus': false,
-      'bonusDescription': null,
-    };
   }
 
   static Future<RealParsedPayslip> parseDocument({
@@ -251,18 +228,9 @@ class SalaryParserService {
     // 1. Try text stream OCR scan on PDF bytes
     final scannedFinancials = _scanPdfTextForFinancials(fileBytes);
 
-    // 2. Fallback to baseline variation
-    final dynamicSalary = _generateDynamicMonthlySalary(yr, mo, fileName);
-
-    double estimatedNet = scannedFinancials?['net'] ?? dynamicSalary['net']!;
-    double estimatedGross = scannedFinancials?['gross'] ?? dynamicSalary['gross']!;
-    double estimatedNetSocial = scannedFinancials?['netSocial'] ?? dynamicSalary['netSocial']!;
-    bool hasExplicitBonus = scannedFinancials?['hasExplicitBonus'] ?? false;
-    String? bonusDesc = scannedFinancials?['bonusDescription'];
-
     final rawFileB64 = fileBytes != null ? base64Encode(fileBytes) : null;
 
-    // 3. AI MODEL FAILOVER ROTATION PIPELINE (gemini-1.5-flash -> gemini-1.5-pro -> gemini-2.0-flash)
+    // 2. Try Gemini Vision AI API if API key provided
     if (fileBytes != null && fileBytes.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
       final base64Data = base64Encode(fileBytes);
 
@@ -321,25 +289,31 @@ Extrais uniquement les valeurs financières et lignes de prime de ce bulletin au
               period: hasGeminiPeriod ? parsedPeriod : extractedPeriod,
               periodDetected: hasGeminiPeriod || periodDetected,
               date: DateTime(yr, mo, 28),
-              grossSalary: (jsonMap['grossSalary'] as num?)?.toDouble() ?? estimatedGross,
-              netSocial: (jsonMap['netSocial'] as num?)?.toDouble() ?? estimatedNetSocial,
-              netPayable: (jsonMap['netPayable'] as num?)?.toDouble() ?? estimatedNet,
+              grossSalary: (jsonMap['grossSalary'] as num?)?.toDouble() ?? (scannedFinancials?['gross'] ?? 0.0),
+              netSocial: (jsonMap['netSocial'] as num?)?.toDouble() ?? (scannedFinancials?['netSocial'] ?? 0.0),
+              netPayable: (jsonMap['netPayable'] as num?)?.toDouble() ?? (scannedFinancials?['net'] ?? 0.0),
               socialContributions: -840.78,
               mealTickets: -52.80,
               teleworkAllowance: 0.0,
               nonTaxableAllowance: 34.13,
-              hasExplicitBonus: (jsonMap['hasExplicitBonus'] as bool?) ?? hasExplicitBonus,
-              bonusDescription: jsonMap['bonusDescription'] ?? bonusDesc,
+              hasExplicitBonus: (jsonMap['hasExplicitBonus'] as bool?) ?? (scannedFinancials?['hasExplicitBonus'] ?? false),
+              bonusDescription: jsonMap['bonusDescription'] ?? scannedFinancials?['bonusDescription'],
+              isParsedFromDocument: true,
               rawFileBase64: rawFileB64,
             );
-          } else {
-            debugPrint('[SalaryParserService] Model $modelName failed with status ${response.statusCode}, rotating to next model...');
           }
         } catch (e) {
-          debugPrint('[SalaryParserService] Model $modelName error: $e, rotating to next model...');
+          debugPrint('[SalaryParserService] Model $modelName error: $e');
         }
       }
     }
+
+    // 3. FACTUAL NO-FAKE-DATA FALLBACK
+    // If no AI key and no text stream match: return exact extracted values or 0.00 so user validates explicitly in modal!
+    final double netVal = scannedFinancials?['net'] ?? 0.0;
+    final double grossVal = scannedFinancials?['gross'] ?? 0.0;
+    final double netSocialVal = scannedFinancials?['netSocial'] ?? 0.0;
+    final bool isParsed = scannedFinancials != null && scannedFinancials.containsKey('net');
 
     return RealParsedPayslip(
       id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
@@ -349,15 +323,16 @@ Extrais uniquement les valeurs financières et lignes de prime de ce bulletin au
       period: extractedPeriod,
       periodDetected: periodDetected,
       date: DateTime(yr, mo, 28),
-      grossSalary: estimatedGross,
-      netSocial: estimatedNetSocial,
-      netPayable: estimatedNet,
+      grossSalary: grossVal,
+      netSocial: netSocialVal,
+      netPayable: netVal,
       socialContributions: -840.78,
       mealTickets: -52.80,
       teleworkAllowance: 0.0,
       nonTaxableAllowance: 34.13,
-      hasExplicitBonus: hasExplicitBonus,
-      bonusDescription: bonusDesc,
+      hasExplicitBonus: scannedFinancials?['hasExplicitBonus'] ?? false,
+      bonusDescription: scannedFinancials?['bonusDescription'],
+      isParsedFromDocument: isParsed,
       rawFileBase64: rawFileB64,
     );
   }

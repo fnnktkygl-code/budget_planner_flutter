@@ -427,11 +427,35 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Vérifiez et ajustez si besoin les montants de votre bulletin avant validation :',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
-                    ),
-                    const SizedBox(height: 16),
+                    if (parsed.netPayable == 0.0 || !parsed.isParsedFromDocument) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentRose.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.accentRose),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: AppColors.accentRose, size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Veuillez saisir le montant Net à payer versé sur votre compte pour ce bulletin :',
+                                style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      const Text(
+                        'Vérifiez et ajustez si besoin les montants de votre bulletin avant validation :',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
                     Row(
                       children: [
