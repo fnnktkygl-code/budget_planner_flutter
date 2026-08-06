@@ -16,65 +16,6 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String? _selectedCategoryFilter;
 
-  void _showPdfExporterDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: const [
-              Icon(Icons.picture_as_pdf_rounded, color: AppColors.accentRose),
-              SizedBox(width: 10),
-              Text('Exporter Rapport PDF', style: TextStyle(color: AppColors.textPrimary, fontSize: 18)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text(
-                'Génération du rapport financier mensuel complet avec :',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-              ),
-              SizedBox(height: 12),
-              Text('• Bulletins NEGEM RICHARD (Juillet 2026 & Mai 2025)', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-              Text('• Allocation des actifs & Donut Chart', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-              Text('• Décomposition du Revenu Net Lissé', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-              Text('• Synchronisation Bancaire TrueLayer', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: const Icon(Icons.download_rounded, size: 18),
-              label: const Text('Télécharger PDF'),
-              onPressed: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('📄 Rapport PDF téléchargé avec succès !'),
-                    backgroundColor: AppColors.accentEmerald,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final salaryState = ref.watch(salaryProvider);
@@ -176,7 +117,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Title & Exporter PDF Action Button
+            // Title Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -193,21 +134,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Répartition mensuelle & Revenu Lissé',
+                      'Répartition mensuelle & Flux de Rémunération',
                       style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                     ),
                   ],
-                ),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
-                    side: const BorderSide(color: AppColors.borderSubtle),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.accentRose, size: 18),
-                  label: const Text('Exporter PDF', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  onPressed: () => _showPdfExporterDialog(context),
                 ),
               ],
             ),
@@ -261,8 +191,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
-                children: const [
-                  Text(
+                children: [
+                  const Text(
                     'Allocation d\'actifs',
                     style: TextStyle(
                       color: AppColors.textPrimary,
@@ -270,8 +200,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(width: 8),
-                  Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 16),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.info_outline_rounded, color: AppColors.accentCyan, size: 18),
+                    tooltip: 'En savoir plus sur l\'Allocation d\'actifs',
+                    onPressed: () {
+                      _showExplanationModal(
+                        context,
+                        title: '📊 Allocation d\'Actifs & Répartition',
+                        content: 'Cette roue présente la ventilation stratégique de votre salaire net en banque selon vos règles budgétaires configurées (Charges fixes, Cible d\'investissement PEA, Épargne liquide Livret A et Reste à vivre).\n\nVous pouvez cliquer sur chaque segment ou élément de légende pour afficher la décomposition exacte des sous-postes.',
+                      );
+                    },
+                  ),
                 ],
               ),
               if (_selectedCategoryFilter != null)
@@ -281,10 +221,52 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           DonutChartWidget(segments: segments, netSalary: netSalary),
         ],
       ),
+    );
+  }
+
+  void _showExplanationModal(BuildContext context, {required String title, required String content}) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textMuted),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                content,
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.5),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -421,8 +403,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
-                children: const [
-                  Text(
+                children: [
+                  const Text(
                     'Revenu net mensuel',
                     style: TextStyle(
                       color: AppColors.accentEmerald,
@@ -430,8 +412,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(width: 8),
-                  Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 16),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.info_outline_rounded, color: AppColors.accentEmerald, size: 18),
+                    tooltip: 'Détails du Revenu Net',
+                    onPressed: () {
+                      _showExplanationModal(
+                        context,
+                        title: '🧾 Décomposition du Revenu Net Mensuel',
+                        content: 'Cette carte restitue l\'analyse financière exacte extraite de votre bulletin de salaire actif (${activeRecord?.periodLabel ?? "Juillet 2026"}) par l\'IA Gemini.\n\nElle présente le passage rigoureux du Salaire Brut aux cotisations sociales, au Net Social (Net avant impôt) puis au Prélèvement à la source (Impôt IR) jusqu\'au montant net final crédité sur votre compte bancaire.',
+                      );
+                    },
+                  ),
                 ],
               ),
               Container(
@@ -440,9 +432,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   color: AppColors.accentEmerald.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
-                  'Données Lissées (Historique)',
-                  style: TextStyle(
+                child: Text(
+                  activeRecord != null ? 'Bulletin Actif (${activeRecord.periodLabel})' : 'Données Extraintes IA',
+                  style: const TextStyle(
                     color: AppColors.accentEmerald,
                     fontSize: 11,
                     fontWeight: FontWeight.bold,

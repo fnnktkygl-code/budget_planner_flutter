@@ -187,34 +187,43 @@ class NotificationHeaderWidget extends StatelessWidget implements PreferredSizeW
       actions: [
         if (actions != null) ...actions!,
         
-        // Synchro Bank Status Indicator Button
-        InkWell(
-          onTap: () {
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (_) => const BankingModalContent(),
-            );
-          },
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.accentEmerald.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.circle, color: AppColors.accentEmerald, size: 8),
-                SizedBox(width: 6),
-                Text(
-                  'Synchro OK',
-                  style: TextStyle(color: AppColors.accentEmerald, fontSize: 11, fontWeight: FontWeight.bold),
-                ),
-              ],
+        // Synchro Bank Status Indicator Button with Dark Theme Tooltip
+        Tooltip(
+          message: 'Synchronisation Open Banking TrueLayer active (BoursoBank & Revolut)',
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.5)),
+          ),
+          textStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.w600),
+          child: InkWell(
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const BankingModalContent(),
+              );
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.circle, color: AppColors.accentEmerald, size: 8),
+                  SizedBox(width: 6),
+                  Text(
+                    'Synchro OK',
+                    style: TextStyle(color: AppColors.accentEmerald, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
