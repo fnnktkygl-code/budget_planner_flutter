@@ -21,7 +21,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final rawJson = prefs.getString('aura_salary_records_v2');
+    final rawJson = prefs.getString('aura_salary_records_v3');
     if (rawJson != null && rawJson.isNotEmpty) {
       try {
         final List<dynamic> parsed = jsonDecode(rawJson);
@@ -31,29 +31,27 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
         state = SalaryState(records: []);
       }
     } else {
-      // Clean start for fresh user documents
       state = SalaryState(records: []);
-      // Clear legacy storage key
       prefs.remove('aura_salary_records');
+      prefs.remove('aura_salary_records_v2');
     }
   }
 
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = jsonEncode(state.records.map((r) => r.toJson()).toList());
-    prefs.setString('aura_salary_records_v2', jsonStr);
+    prefs.setString('aura_salary_records_v3', jsonStr);
   }
 
   void addRecord(SalaryRecord record) {
-    // Remove any existing record with the exact same period to prevent duplicates
+    // Preserve ALL existing records, set isLatestActive to false for older entries
     List<SalaryRecord> updated = state.records
-        .where((r) => r.period != record.period && r.periodLabel != record.periodLabel)
         .map((r) => r.copyWith(isLatestActive: false))
         .toList();
 
     final activeRecord = record.copyWith(isLatestActive: true);
     updated.add(activeRecord);
-    
+
     // Sort descending by period
     updated.sort((a, b) => b.period.compareTo(a.period));
 
@@ -89,6 +87,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
   void clearAllRecords() async {
     state = SalaryState(records: []);
     final prefs = await SharedPreferences.getInstance();
+    prefs.remove('aura_salary_records_v3');
     prefs.remove('aura_salary_records_v2');
     prefs.remove('aura_salary_records');
   }

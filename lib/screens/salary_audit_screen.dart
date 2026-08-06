@@ -143,6 +143,10 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   }
 
   void _showExtractionConfirmationDialog(BuildContext context, RealParsedPayslip parsed) {
+    // Synchronize selected month & year with parsed document date!
+    _selectedYear = parsed.date.year;
+    _selectedMonth = parsed.date.month;
+
     final netController = TextEditingController(text: parsed.netPayable.toStringAsFixed(2));
     final grossController = TextEditingController(text: parsed.grossSalary.toStringAsFixed(2));
     final netSocialController = TextEditingController(text: parsed.netSocial.toStringAsFixed(2));
