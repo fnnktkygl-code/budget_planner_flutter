@@ -283,11 +283,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                             padding: const EdgeInsets.all(8),
                             itemBuilder: (context, idx) {
                               final f = files[idx];
-                              final isDone = idx < batchRecords.length;
-                              final isCurrent = idx == batchRecords.length && processedCount < files.length;
-                              final record = isDone ? batchRecords[idx] : null;
+                              final isDone = idx < batchRecords.length || idx < processedCount;
+                              final isCurrent = idx >= processedCount && idx < (processedCount + 5) && idx < files.length;
+                              final record = idx < batchRecords.length ? batchRecords[idx] : null;
 
-                              if (isCurrent) {
+                              if (isCurrent && !isDone) {
                                 return ShimmerQueueRow(fileName: f.name);
                               }
 
@@ -295,7 +295,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                 margin: const EdgeInsets.only(bottom: 6),
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: Colors.transparent,
+                                  color: isDone ? AppColors.accentEmerald.withValues(alpha: 0.08) : Colors.transparent,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
@@ -312,6 +312,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                           color: isDone ? AppColors.textPrimary : AppColors.textMuted,
+                                          fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -320,6 +321,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                       Text(
                                         '${record.netSalary.toStringAsFixed(2)} €',
                                         style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 12),
+                                      )
+                                    else if (isDone)
+                                      const Text(
+                                        '✓ Validé',
+                                        style: TextStyle(color: AppColors.accentEmerald, fontSize: 11, fontWeight: FontWeight.bold),
                                       ),
                                   ],
                                 ),
@@ -367,6 +373,25 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
           apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
           onBatchProgress: (pCount, total, msg) {
             processedCount = pCount;
+            modalStateSetter?.call(() {});
+          },
+          onChunkParsed: (chunkParsed) {
+            for (var parsed in chunkParsed) {
+              final idx = batchRecords.length;
+              if (idx < files.length) {
+                final file = files[idx];
+                final renderedImg = renderedImages[idx];
+                final renderedB64 = renderedImg != null ? base64Encode(renderedImg) : null;
+                final fileB64 = base64Encode(file.bytes!);
+
+                final record = parsed.toSalaryRecord(
+                  customFileName: file.name,
+                  imageBase64: renderedB64,
+                  fileBase64: fileB64,
+                );
+                batchRecords.add(record);
+              }
+            }
             modalStateSetter?.call(() {});
           },
         );

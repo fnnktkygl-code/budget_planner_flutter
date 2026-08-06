@@ -349,6 +349,7 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
     required List<PayslipBatchItem> items,
     String? apiKey,
     void Function(int processedCount, int totalCount, String statusMessage)? onBatchProgress,
+    void Function(List<RealParsedPayslip> chunkResults)? onChunkParsed,
   }) async {
     if (items.isEmpty) return [];
 
@@ -361,6 +362,7 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
         rawTextContent: items[0].rawTextContent,
       );
       onBatchProgress?.call(1, 1, 'Terminé');
+      onChunkParsed?.call([single]);
       return [single];
     }
 
@@ -380,6 +382,7 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
 
       final chunkResults = await _processMicroBatch(chunk: chunk, apiKey: apiKey);
       results.addAll(chunkResults);
+      onChunkParsed?.call(chunkResults);
 
       onBatchProgress?.call(
         results.length,
