@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
+import '../models/salary_record.dart';
 import '../services/redactor_engine.dart';
 import '../services/salary_parser_service.dart';
 import '../widgets/notification_header.dart';
@@ -42,8 +43,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   Offset _toolbarPos = const Offset(14, 14);
 
   // Period Selector Dialog State
-  int _selectedYear = 2025;
-  int _selectedMonth = 5;
+  int _selectedYear = 2026;
+  int _selectedMonth = 3;
   final List<String> _monthsFr = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
@@ -141,7 +142,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     }
   }
 
-  void _showPeriodWarningDialog(BuildContext context, RealParsedPayslip parsed) {
+  void _showExtractionConfirmationDialog(BuildContext context, RealParsedPayslip parsed) {
+    final netController = TextEditingController(text: parsed.netPayable.toStringAsFixed(2));
+    final grossController = TextEditingController(text: parsed.grossSalary.toStringAsFixed(2));
+    final netSocialController = TextEditingController(text: parsed.netSocial.toStringAsFixed(2));
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -152,80 +157,133 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               backgroundColor: AppColors.surface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               title: Row(
-                children: const [
-                  Icon(Icons.calendar_month_rounded, color: AppColors.accentCyan, size: 28),
-                  SizedBox(width: 10),
-                  Text('Indiquer la période du bulletin', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                children: [
+                  const Icon(Icons.tune_rounded, color: AppColors.accentCyan, size: 26),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Validation des montants — ${parsed.period}',
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Veuillez indiquer le mois et l\'année exacts de ce bulletin pour l\'enregistrer dans votre historique salarial :',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
-                  ),
-                  const SizedBox(height: 16),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Vérifiez et ajustez si besoin les montants de votre bulletin avant validation :',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
 
-                  Row(
-                    children: [
-                      const Text('Mois :', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButton<int>(
-                          value: _selectedMonth,
-                          dropdownColor: AppColors.cardBackground,
-                          isExpanded: true,
-                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
-                          items: List.generate(12, (index) {
-                            return DropdownMenuItem(
-                              value: index + 1,
-                              child: Text(_monthsFr[index]),
-                            );
-                          }),
-                          onChanged: (val) {
-                            if (val != null) setDialogState(() => _selectedMonth = val);
-                          },
+                    // Période Dropdown
+                    Row(
+                      children: [
+                        const Text('Mois :', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButton<int>(
+                            value: _selectedMonth,
+                            dropdownColor: AppColors.cardBackground,
+                            isExpanded: true,
+                            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                            items: List.generate(12, (index) {
+                              return DropdownMenuItem(
+                                value: index + 1,
+                                child: Text(_monthsFr[index]),
+                              );
+                            }),
+                            onChanged: (val) {
+                              if (val != null) setDialogState(() => _selectedMonth = val);
+                            },
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
+                        const SizedBox(width: 12),
+                        const Text('Année :', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButton<int>(
+                            value: _selectedYear,
+                            dropdownColor: AppColors.cardBackground,
+                            isExpanded: true,
+                            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                            items: [2023, 2024, 2025, 2026, 2027].map((yr) {
+                              return DropdownMenuItem(
+                                value: yr,
+                                child: Text('$yr'),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) setDialogState(() => _selectedYear = val);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
 
-                  Row(
-                    children: [
-                      const Text('Année :', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButton<int>(
-                          value: _selectedYear,
-                          dropdownColor: AppColors.cardBackground,
-                          isExpanded: true,
-                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
-                          items: [2023, 2024, 2025, 2026, 2027].map((yr) {
-                            return DropdownMenuItem(
-                              value: yr,
-                              child: Text('$yr'),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) setDialogState(() => _selectedYear = val);
-                          },
-                        ),
+                    // Net à Payer Field
+                    TextField(
+                      controller: netController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 16),
+                      decoration: InputDecoration(
+                        labelText: 'Net à payer (€)',
+                        labelStyle: const TextStyle(color: AppColors.accentEmerald),
+                        filled: true,
+                        fillColor: AppColors.cardBackground,
+                        prefixIcon: const Icon(Icons.payments_rounded, color: AppColors.accentEmerald),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderSubtle)),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Salaire Brut Field
+                    TextField(
+                      controller: grossController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: 'Salaire Brut (€)',
+                        labelStyle: const TextStyle(color: AppColors.textSecondary),
+                        filled: true,
+                        fillColor: AppColors.cardBackground,
+                        prefixIcon: const Icon(Icons.account_balance_wallet_rounded, color: AppColors.accentCyan),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderSubtle)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Net Social Field
+                    TextField(
+                      controller: netSocialController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: 'Montant Net Social (€)',
+                        labelStyle: const TextStyle(color: AppColors.textSecondary),
+                        filled: true,
+                        fillColor: AppColors.cardBackground,
+                        prefixIcon: const Icon(Icons.receipt_long_rounded, color: AppColors.accentCyan),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderSubtle)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
+                    backgroundColor: AppColors.accentEmerald,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
+                    final customNet = double.tryParse(netController.text.replaceAll(',', '.')) ?? parsed.netPayable;
                     final monthStr = _selectedMonth < 10 ? '0$_selectedMonth' : '$_selectedMonth';
                     final customPeriodKey = '$_selectedYear-$monthStr';
                     final customPeriodLabel = '${_monthsFr[_selectedMonth - 1]} $_selectedYear';
@@ -233,11 +291,13 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     final record = parsed.toSalaryRecord(
                       customPeriod: customPeriodKey,
                       customPeriodLabel: customPeriodLabel,
+                      customNet: customNet,
                     );
+
                     ref.read(salaryProvider.notifier).addRecord(record);
 
                     Navigator.pop(ctx);
-                    _showSuccessDialog(context, parsed, customPeriodLabel);
+                    _showSuccessDialog(context, record);
                   },
                   child: const Text('Valider & Enregistrer dans l\'historique', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
@@ -249,7 +309,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     );
   }
 
-  void _showSuccessDialog(BuildContext context, RealParsedPayslip parsed, String finalPeriodLabel) {
+  void _showSuccessDialog(BuildContext context, SalaryRecord record) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -272,7 +332,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               ),
               const SizedBox(height: 18),
               Text(
-                'Bulletin $finalPeriodLabel Analysé !',
+                'Bulletin ${record.periodLabel} Enregistré !',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
               ),
@@ -293,13 +353,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 ),
                 child: Column(
                   children: [
-                    _DialogRow(label: 'Période Validée', value: finalPeriodLabel),
+                    _DialogRow(label: 'Période Validée', value: record.periodLabel),
                     const SizedBox(height: 10),
-                    _DialogRow(label: 'Salaire Brut', value: '${parsed.grossSalary.toStringAsFixed(2)} €'),
+                    _DialogRow(label: 'Salaire Net à Payer', value: '${record.netSalary.toStringAsFixed(2)} €'),
                     const SizedBox(height: 10),
-                    _DialogRow(label: 'Montant Net Social', value: '${parsed.netSocial.toStringAsFixed(2)} €'),
-                    const SizedBox(height: 10),
-                    _DialogRow(label: 'Net à Payer (Après Impôt)', value: '${parsed.netPayable.toStringAsFixed(2)} €'),
+                    _DialogRow(label: 'Salaire Brut', value: '${(record.grossSalary ?? 0).toStringAsFixed(2)} €'),
                   ],
                 ),
               ),
@@ -499,16 +557,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                         setState(() => _isProcessing = false);
 
                         if (!mounted) return;
-
-                        if (parsed.periodDetected) {
-                          final record = parsed.toSalaryRecord();
-                          ref.read(salaryProvider.notifier).addRecord(record);
-                          // ignore: use_build_context_synchronously
-                          _showSuccessDialog(context, parsed, parsed.period);
-                        } else {
-                          // ignore: use_build_context_synchronously
-                          _showPeriodWarningDialog(context, parsed);
-                        }
+                        _showExtractionConfirmationDialog(context, parsed);
                       }
                     : null,
               ),
@@ -594,7 +643,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       borderRadius: BorderRadius.circular(20),
                       child: Stack(
                         children: [
-                          // Real Converted PDF Image (Zero Mockup!)
+                          // Real Converted PDF Image
                           Positioned.fill(child: _buildRealDocumentView()),
 
                           // Interactive Redaction Canvas
@@ -772,7 +821,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Historique & Revenu Lissé',
+                            'Historique & Revenu Lissée',
                             style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 2),
