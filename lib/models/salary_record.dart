@@ -60,7 +60,11 @@ class SalaryRecord {
   double get regularNetSalary {
     if (hasExplicitBonus && bonusAmount != null && bonusAmount! > 0) {
       final base = netSalary - bonusAmount!;
-      if (base >= 2650 && base < 15000) return base;
+      if (base >= 2650 && base < 3200) return base;
+      return 2787.89;
+    }
+    // Clamping pour isoler les rachats de congés/RTT et extras exceptionnels (ex: Décembre 2025 > 3300 €)
+    if (netSalary > 3300) {
       return 2787.89;
     }
     return netSalary;
@@ -70,7 +74,10 @@ class SalaryRecord {
   double get regularNetSocial {
     if (hasExplicitBonus && bonusAmount != null && bonusAmount! > 0) {
       final base = netSocial - bonusAmount!;
-      if (base >= 2850 && base < 15000) return base;
+      if (base >= 2850 && base < 3400) return base;
+      return 2952.28;
+    }
+    if (netSocial > 3400) {
       return 2952.28;
     }
     return netSocial;

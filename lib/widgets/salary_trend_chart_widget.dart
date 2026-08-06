@@ -648,7 +648,7 @@ class _SalaryChartPainter extends CustomPainter {
       final titleTp = makeText(periodText, AppColors.textPrimary, isBold: true, fontSize: 12);
       titleTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 8));
 
-      final netSocTp = makeText('• Net Social: ${rec.netSocial.toStringAsFixed(2)} €', AppColors.accentPurple, isBold: true);
+      final netSocTp = makeText('• Net Social Base: ${rec.regularNetSocial.toStringAsFixed(2)} €', AppColors.accentPurple, isBold: true);
       netSocTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 28));
 
       final taxText = viewMode == 2
@@ -659,12 +659,15 @@ class _SalaryChartPainter extends CustomPainter {
 
       final effText = viewMode == 2
           ? '• Net Réel Ajusté: ${val.toStringAsFixed(2)} €'
-          : '• Net Banque: ${rec.netSalary.toStringAsFixed(2)} €';
+          : '• Net Banque Base: ${rec.regularNetSalary.toStringAsFixed(2)} €';
       final effTp = makeText(effText, AppColors.accentCyan, isBold: true);
       effTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 64));
 
-      if (rec.hasExplicitBonus) {
-        final bonusTp = makeText('• Prime: +${rec.bonusAmount!.toStringAsFixed(0)} €', AppColors.accentGold, isBold: true, fontSize: 10);
+      final extraAmt = rec.netSalary - rec.regularNetSalary;
+      if (rec.hasExplicitBonus || extraAmt > 10) {
+        final amt = rec.bonusAmount ?? extraAmt;
+        final desc = rec.bonusDescription ?? 'Extra / Rachat / Prime';
+        final bonusTp = makeText('• 🎁 $desc: +${amt.toStringAsFixed(0)} €', AppColors.accentGold, isBold: true, fontSize: 10);
         bonusTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 82));
       }
     }
