@@ -53,6 +53,13 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   // Draggable Toolbar Position State
   Offset _toolbarPos = const Offset(14, 14);
 
+  // Main Screen Navigation Sub-Tabs
+  int _mainTab = 0; // 0: Importation & Caviardage, 1: Évolutions & Bilan, 2: Historique
+  String _historySearchQuery = '';
+  int _selectedHistoryYear = 0; // 0 = Tous
+  int _historyPage = 1;
+  final int _itemsPerPage = 5;
+
   // Period Selector Dialog State
   int _selectedYear = 2026;
   int _selectedMonth = 7;
@@ -70,18 +77,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
   void _resetZoom() {
     setState(() => _zoomScale = 1.0);
-  }
-
-  void _zoomIn() {
-    setState(() {
-      _zoomScale = (_zoomScale + 0.25).clamp(0.8, 3.0);
-    });
-  }
-
-  void _zoomOut() {
-    setState(() {
-      _zoomScale = (_zoomScale - 0.25).clamp(0.8, 3.0);
-    });
   }
 
   void _clearCanvasDocument() {
@@ -923,12 +918,152 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     );
   }
 
+  Widget _buildCanvasWorkspaceCard(BuildContext context, bool hasFileLoaded) {
+    return SizedBox(
+      height: 560,
+      width: double.infinity,
+      child: Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            height: 560,
+            decoration: BoxDecoration(
+              color: AppColors.cardBackground,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 4)),
+              ],
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: _buildCanvasContent(hasFileLoaded),
+            ),
+          ),
+          if (_isProcessing)
+            const Positioned.fill(
+              child: ShimmerAnalysisOverlay(),
+            ),
+          if (hasFileLoaded)
+            Positioned(
+              top: _toolbarPos.dy,
+              left: _toolbarPos.dx,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 10, offset: const Offset(0, 4)),
+                  ],
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onPanUpdate: (details) {
+                        setState(() {
+                          _toolbarPos += details.delta;
+                        });
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4),
+                        child: Icon(Icons.drag_indicator_rounded, color: AppColors.accentCyan, size: 22),
+                      ),
+                    ),
+                    const VerticalDivider(color: AppColors.borderSubtle, width: 1, indent: 6, endIndent: 6),
+                    IconButton(
+                      icon: Icon(Icons.touch_app_rounded, color: _selectedTool == RedactionTool.move ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
+                      onPressed: () => setState(() => _selectedTool = RedactionTool.move),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.edit_rounded, color: _selectedTool == RedactionTool.paint ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
+                      onPressed: () => setState(() => _selectedTool = RedactionTool.paint),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.crop_square_rounded, color: _selectedTool == RedactionTool.rect ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
+                      onPressed: () => setState(() => _selectedTool = RedactionTool.rect),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.circle_outlined, color: _selectedTool == RedactionTool.circle ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
+                      onPressed: () => setState(() => _selectedTool = RedactionTool.circle),
+                    ),
+                    const VerticalDivider(color: AppColors.borderSubtle, width: 1, indent: 6, endIndent: 6),
+                    IconButton(
+                      icon: Icon(Icons.undo_rounded, color: _redactor.canUndo ? AppColors.textPrimary : AppColors.textMuted, size: 20),
+                      onPressed: _redactor.canUndo ? () => setState(() => _redactor.undo()) : null,
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.redo_rounded, color: _redactor.canRedo ? AppColors.textPrimary : AppColors.textMuted, size: 20),
+                      onPressed: _redactor.canRedo ? () => setState(() => _redactor.redo()) : null,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded, color: AppColors.accentRose, size: 20),
+                      onPressed: () => setState(() => _redactor.clearAll()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (hasFileLoaded)
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Row(
+                children: [
+                  FloatingActionButton.small(
+                    heroTag: 'clearCanvasBtn',
+                    backgroundColor: AppColors.accentRose.withValues(alpha: 0.85),
+                    foregroundColor: Colors.white,
+                    tooltip: 'Retirer le bulletin du canevas',
+                    onPressed: _clearCanvasDocument,
+                    child: const Icon(Icons.close_rounded, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  FloatingActionButton(
+                    heroTag: 'eyeToggleBtn',
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    elevation: 6,
+                    onPressed: () {
+                      setState(() {
+                        _isMaskVisible = !_isMaskVisible;
+                      });
+                    },
+                    child: Icon(_isMaskVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final salaryState = ref.watch(salaryProvider);
     final records = salaryState.records;
     final analytics = salaryState.analytics;
     final hasFileLoaded = _customFileBytes != null && _customFileBytes!.isNotEmpty;
+
+    // Filter history records
+    final filteredRecords = records.where((r) {
+      final matchesQuery = _historySearchQuery.isEmpty ||
+          r.periodLabel.toLowerCase().contains(_historySearchQuery.toLowerCase()) ||
+          r.employerName.toLowerCase().contains(_historySearchQuery.toLowerCase()) ||
+          r.netSalary.toString().contains(_historySearchQuery);
+
+      final year = int.tryParse(r.period.split('-').first) ?? 0;
+      final matchesYear = _selectedHistoryYear == 0 || year == _selectedHistoryYear;
+
+      return matchesQuery && matchesYear;
+    }).toList();
+
+    final totalPages = (filteredRecords.length / _itemsPerPage).ceil().clamp(1, 999);
+    final currentPage = _historyPage.clamp(1, totalPages);
+    final paginatedRecords = filteredRecords.skip((currentPage - 1) * _itemsPerPage).take(_itemsPerPage).toList();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -938,575 +1073,643 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // User Guidance Checklist & Batch File Button
+            // Top Main Navigation Segmented Sub-Tabs
             Container(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppColors.borderSubtle),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          '📌 Éléments recommandés à caviarder avant l\'analyse IA :',
-                          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          if (hasFileLoaded) ...[
-                            IconButton(
-                              icon: const Icon(Icons.close_rounded, color: AppColors.accentRose, size: 22),
-                              tooltip: 'Retirer le bulletin du canevas',
-                              onPressed: _clearCanvasDocument,
-                            ),
-                            const SizedBox(width: 4),
-                          ],
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentCyan,
-                              foregroundColor: Colors.white,
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            icon: const Icon(Icons.file_upload_outlined, size: 16),
-                            label: Text(_customFileName ?? 'Importer bulletins (Lot / Unitaire)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                            onPressed: _pickUserPayslipFiles,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const _BulletPoint('Nom et Prénom de l\'employé'),
-                  const SizedBox(height: 8),
-                  const _BulletPoint('Adresse personnelle complète'),
-                  const SizedBox(height: 8),
-                  const _BulletPoint('Numéro de Sécurité Sociale (NIR)'),
-                  const SizedBox(height: 8),
-                  const _BulletPoint('Coordonnées bancaires (IBAN/BIC)'),
-                  const SizedBox(height: 8),
-                  const _BulletPoint('Nom et SIRET de l\'entreprise'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Main Action Button: Masquer & Analyser le document
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: hasFileLoaded ? AppColors.accentCyan : AppColors.cardBackground,
-                  foregroundColor: hasFileLoaded ? Colors.white : AppColors.textMuted,
-                  elevation: hasFileLoaded ? 3 : 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                icon: _isProcessing
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.psychology_rounded, size: 22),
-                label: const Text('Masquer & Analyser le document', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                onPressed: hasFileLoaded
-                    ? () async {
-                        setState(() => _isProcessing = true);
-                        String? extractedText;
-                        if (_customFileBytes != null && (_customFileName ?? '').toLowerCase().endsWith('.pdf')) {
-                          extractedText = await _extractPdfTextFromBytes(_customFileBytes!);
-                        }
-                        final parsed = await SalaryParserService.parseDocument(
-                          fileBytes: _customFileBytes,
-                          fileName: _customFileName,
-                          apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
-                          rawTextContent: extractedText,
-                        );
-                        setState(() => _isProcessing = false);
-
-                        if (!mounted) return;
-                        _showExtractionConfirmationDialog(context, parsed);
-                      }
-                    : null,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Canvas Toggle Tabs & Zoom Controls Header
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: AppColors.cardBackground,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.borderSubtle),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _canvasTab = 0),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                color: _canvasTab == 0 ? AppColors.accentCyan : Colors.transparent,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                'Canevas masqué (${_redactor.shapes.length})',
-                                style: TextStyle(
-                                  color: _canvasTab == 0 ? Colors.white : AppColors.textSecondary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _canvasTab = 1),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                color: _canvasTab == 1 ? AppColors.accentCyan : Colors.transparent,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                'Rendu original',
-                                style: TextStyle(
-                                  color: _canvasTab == 1 ? Colors.white : AppColors.textSecondary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Industry Standard Zoom Controls (+ / - / % Badge)
-                if (hasFileLoaded) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.cardBackground,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.borderSubtle),
-                    ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.zoom_out_rounded, color: AppColors.accentCyan, size: 20),
-                          tooltip: 'Dézoomer (-25%)',
-                          onPressed: _zoomOut,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(
-                            '${(_zoomScale * 100).round()}%',
-                            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.zoom_in_rounded, color: AppColors.accentCyan, size: 20),
-                          tooltip: 'Zoomer (+25%)',
-                          onPressed: _zoomIn,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.restart_alt_rounded, color: AppColors.textSecondary, size: 18),
-                          tooltip: 'Réinitialiser 100%',
-                          onPressed: _resetZoom,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Real Interactive Canvas Viewport
-            SizedBox(
-              height: 560,
-              width: double.infinity,
-              child: Stack(
-                children: [
-                  // Full Document Paper Card Container with Dual Scrollbars
-                  Container(
-                    width: double.infinity,
-                    height: 560,
-                    decoration: BoxDecoration(
-                      color: AppColors.cardBackground,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 4)),
-                      ],
-                      border: Border.all(color: AppColors.borderSubtle),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: _buildCanvasContent(hasFileLoaded),
-                    ),
-                  ),
-
-                  // High Tech Shimmer AI Analysis Overlay
-                  if (_isProcessing)
-                    const Positioned.fill(
-                      child: ShimmerAnalysisOverlay(),
-                    ),
-
-                  // Draggable Redaction Toolbar Overlay
-                  if (hasFileLoaded)
-                    Positioned(
-                      top: _toolbarPos.dy,
-                      left: _toolbarPos.dx,
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _mainTab = 0),
+                      borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
-                          color: AppColors.cardBackground,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 10, offset: const Offset(0, 4)),
-                          ],
-                          border: Border.all(color: AppColors.borderSubtle),
+                          color: _mainTab == 0 ? AppColors.accentCyan : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
                         ),
+                        alignment: Alignment.center,
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            GestureDetector(
-                              onPanUpdate: (details) {
-                                setState(() {
-                                  _toolbarPos += details.delta;
-                                });
-                              },
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 4),
-                                child: Icon(Icons.drag_indicator_rounded, color: AppColors.accentCyan, size: 22),
+                            Icon(Icons.upload_file_rounded, size: 16, color: _mainTab == 0 ? Colors.white : AppColors.textSecondary),
+                            const SizedBox(width: 6),
+                            Text(
+                              '1. Import & Masquage',
+                              style: TextStyle(
+                                color: _mainTab == 0 ? Colors.white : AppColors.textSecondary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
                               ),
                             ),
-                            const VerticalDivider(color: AppColors.borderSubtle, width: 1, indent: 6, endIndent: 6),
-                            IconButton(
-                              icon: Icon(Icons.touch_app_rounded, color: _selectedTool == RedactionTool.move ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
-                              onPressed: () => setState(() => _selectedTool = RedactionTool.move),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.edit_rounded, color: _selectedTool == RedactionTool.paint ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
-                              onPressed: () => setState(() => _selectedTool = RedactionTool.paint),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.crop_square_rounded, color: _selectedTool == RedactionTool.rect ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
-                              onPressed: () => setState(() => _selectedTool = RedactionTool.rect),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.circle_outlined, color: _selectedTool == RedactionTool.circle ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
-                              onPressed: () => setState(() => _selectedTool = RedactionTool.circle),
-                            ),
-                            const VerticalDivider(color: AppColors.borderSubtle, width: 1, indent: 6, endIndent: 6),
-                            IconButton(
-                              icon: Icon(Icons.undo_rounded, color: _redactor.canUndo ? AppColors.textPrimary : AppColors.textMuted, size: 20),
-                              onPressed: _redactor.canUndo ? () => setState(() => _redactor.undo()) : null,
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.redo_rounded, color: _redactor.canRedo ? AppColors.textPrimary : AppColors.textMuted, size: 20),
-                              onPressed: _redactor.canRedo ? () => setState(() => _redactor.redo()) : null,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.accentRose, size: 20),
-                              onPressed: () => setState(() => _redactor.clearAll()),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _mainTab = 1),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _mainTab == 1 ? AppColors.accentCyan : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.query_stats_rounded, size: 16, color: _mainTab == 1 ? Colors.white : AppColors.textSecondary),
+                            const SizedBox(width: 6),
+                            Text(
+                              '2. Évolutions & Bilan',
+                              style: TextStyle(
+                                color: _mainTab == 1 ? Colors.white : AppColors.textSecondary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ),
-
-                  // Bottom-Right Action Buttons (Remove & Eye Toggle)
-                  if (hasFileLoaded)
-                    Positioned(
-                      bottom: 20,
-                      right: 20,
-                      child: Row(
-                        children: [
-                          FloatingActionButton.small(
-                            heroTag: 'clearCanvasBtn',
-                            backgroundColor: AppColors.accentRose.withValues(alpha: 0.85),
-                            foregroundColor: Colors.white,
-                            tooltip: 'Retirer le bulletin du canevas',
-                            onPressed: _clearCanvasDocument,
-                            child: const Icon(Icons.close_rounded, size: 20),
-                          ),
-                          const SizedBox(width: 10),
-                          FloatingActionButton(
-                            heroTag: 'eyeToggleBtn',
-                            backgroundColor: AppColors.accentCyan,
-                            foregroundColor: Colors.white,
-                            elevation: 6,
-                            onPressed: () {
-                              setState(() {
-                                _isMaskVisible = !_isMaskVisible;
-                              });
-                            },
-                            child: Icon(_isMaskVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded),
-                          ),
-                        ],
+                  ),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _mainTab = 2),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _mainTab == 2 ? AppColors.accentCyan : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.folder_shared_rounded, size: 16, color: _mainTab == 2 ? Colors.white : AppColors.textSecondary),
+                            const SizedBox(width: 6),
+                            Text(
+                              '3. Historique (${records.length})',
+                              style: TextStyle(
+                                color: _mainTab == 2 ? Colors.white : AppColors.textSecondary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
 
-            // Feature 2: Interactive Salary Trend & Bonus Chart Section
-            if (records.isNotEmpty) ...[
-              SalaryTrendChartWidget(
-                records: records,
-                averageNet: analytics.overallAverageNet,
-                onRecordTap: (record) {
-                  _switchDisplayedRecord(record);
-                },
-              ),
-              const SizedBox(height: 28),
-            ],
-
-            // Timeline & Smoothed Salary Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.borderSubtle),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Historique & Revenu Lissée',
-                            style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+            // TAB 0: IMPORTATION & CANEVAS DE MASQUAGE
+            if (_mainTab == 0) ...[
+              // User Guidance Checklist & Batch File Button
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            '📌 Éléments recommandés à caviarder avant l\'analyse IA :',
+                            style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            records.isNotEmpty
-                                ? '${records.length} bulletins enregistrés dans votre compte'
-                                : 'Aucun bulletin enregistré pour l\'instant',
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                      if (records.isNotEmpty)
-                        TextButton.icon(
-                          style: TextButton.styleFrom(foregroundColor: AppColors.accentRose),
-                          icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-                          label: const Text('Vider l\'historique', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                          onPressed: () {
-                            _clearCanvasDocument();
-                            ref.read(salaryProvider.notifier).clearAllRecords();
-                          },
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            if (hasFileLoaded) ...[
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, color: AppColors.accentRose, size: 22),
+                                tooltip: 'Retirer le bulletin du canevas',
+                                onPressed: _clearCanvasDocument,
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.accentCyan,
+                                foregroundColor: Colors.white,
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.file_upload_outlined, size: 16),
+                              label: Text(_customFileName ?? 'Importer bulletins (Lot / Unitaire)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              onPressed: _pickUserPayslipFiles,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const _BulletPoint('Nom et Prénom de l\'employé'),
+                    const SizedBox(height: 8),
+                    const _BulletPoint('Adresse personnelle complète'),
+                    const SizedBox(height: 8),
+                    const _BulletPoint('Numéro de Sécurité Sociale (NIR)'),
+                    const SizedBox(height: 8),
+                    const _BulletPoint('Coordonnées bancaires (IBAN/BIC)'),
+                    const SizedBox(height: 8),
+                    const _BulletPoint('Nom et SIRET de l\'entreprise'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
 
-                  if (records.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(16),
+              // Main Action Button: Masquer & Analyser le document
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hasFileLoaded ? AppColors.accentCyan : AppColors.cardBackground,
+                    foregroundColor: hasFileLoaded ? Colors.white : AppColors.textMuted,
+                    elevation: hasFileLoaded ? 3 : 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: _isProcessing
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.psychology_rounded, size: 22),
+                  label: const Text('Masquer & Analyser le document', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  onPressed: hasFileLoaded
+                      ? () async {
+                          setState(() => _isProcessing = true);
+                          String? extractedText;
+                          if (_customFileBytes != null && (_customFileName ?? '').toLowerCase().endsWith('.pdf')) {
+                            extractedText = await _extractPdfTextFromBytes(_customFileBytes!);
+                          }
+                          final parsed = await SalaryParserService.parseDocument(
+                            fileBytes: _customFileBytes,
+                            fileName: _customFileName,
+                            apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
+                            rawTextContent: extractedText,
+                          );
+                          setState(() => _isProcessing = false);
+
+                          if (!mounted) return;
+                          _showExtractionConfirmationDialog(context, parsed);
+                        }
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Canvas Toggle Tabs & Zoom Controls Header
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(12),
+                        color: AppColors.cardBackground,
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: AppColors.borderSubtle),
                       ),
-                      child: const Center(
-                        child: Text(
-                          'Vos bulletins de salaire analysés apparaîtront ici avec votre moyenne salariale lissée.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                        ),
-                      ),
-                    ),
-
-                  if (records.isNotEmpty) ...[
-                    // Multi-Trend Superposed Evolution Chart (Salaire, Charges, Épargne, Reste)
-                    MultiTrendChartWidget(records: records),
-                    const SizedBox(height: 16),
-
-                    // Annual Global Compensation Recap Widget
-                    AnnualRecapWidget(records: records),
-                    const SizedBox(height: 16),
-
-                    // Fiscal KPI Summary Bar
-                    Builder(
-                      builder: (context) {
-                        final double cumulTax = records.fold(0.0, (sum, r) => sum + r.incomeTaxAmount);
-                        final double avgTaxRate = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.incomeTaxRatePercent) / records.length : 0.0;
-                        final double avgNetSocial = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.netSocial) / records.length : 0.0;
-
-                        return Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.borderSubtle),
-                          ),
-                          child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Net Banque Moyen :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
-                                  Text('${analytics.overallAverageNet.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13)),
-                                ],
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setState(() => _canvasTab = 0),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _canvasTab == 0 ? AppColors.accentCyan : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  'Canevas masqué (${_redactor.shapes.length})',
+                                  style: TextStyle(
+                                    color: _canvasTab == 0 ? Colors.white : AppColors.textSecondary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Net Social Moyen (Avant PAS) :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
-                                  Text('${avgNetSocial.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 13)),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('Cumul Impôt IR Prélevé (Taux Moy. ${avgTaxRate.toStringAsFixed(1)}%) :', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                                  Text('${cumulTax != 0.0 ? cumulTax.toStringAsFixed(2) : "0.00"} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 12)),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    Column(
-                      children: records.map((record) {
-                        final isBaseline = record.isLatestActive;
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: isBaseline ? AppColors.accentCyan.withValues(alpha: 0.1) : AppColors.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isBaseline ? AppColors.accentCyan : AppColors.borderSubtle,
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Radio<String>(
-                                value: record.id,
-                                groupValue: salaryState.activeBaseline?.id,
-                                activeColor: AppColors.accentCyan,
-                                onChanged: (id) {
-                                  _switchDisplayedRecord(record);
-                                },
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setState(() => _canvasTab = 1),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _canvasTab == 1 ? AppColors.accentCyan : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  'Rendu original',
+                                  style: TextStyle(
+                                    color: _canvasTab == 1 ? Colors.white : AppColors.textSecondary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => _switchDisplayedRecord(record),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            record.periodLabel,
-                                            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
-                                          ),
-                                          if (isBaseline) ...[
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBackground,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.zoom_out_rounded, color: AppColors.textSecondary, size: 18),
+                          onPressed: () {
+                            if (_zoomScale > 0.75) setState(() => _zoomScale -= 0.25);
+                          },
+                        ),
+                        Text(
+                          '${(_zoomScale * 100).round()}%',
+                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.zoom_in_rounded, color: AppColors.textSecondary, size: 18),
+                          onPressed: () {
+                            if (_zoomScale < 2.5) setState(() => _zoomScale += 0.25);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Interactive PDF Canvas Workspace Card
+              _buildCanvasWorkspaceCard(context, hasFileLoaded),
+            ],
+
+            // TAB 1: ÉVOLUTIONS & BILAN ANNUEL
+            if (_mainTab == 1) ...[
+              if (records.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBackground,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Importez vos premiers bulletins de paie dans l\'onglet "Import & Masquage" pour activer l\'analyse d\'évolution.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    ),
+                  ),
+                )
+              else ...[
+                // Single Curve Trend Chart
+                SalaryTrendChartWidget(
+                  records: records,
+                  averageNet: analytics.overallAverageNet,
+                  onRecordTap: (record) {
+                    _switchDisplayedRecord(record);
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Multi-Trend Superposed Evolution Chart (Salaire, Charges, Épargne, Reste)
+                MultiTrendChartWidget(records: records),
+                const SizedBox(height: 20),
+
+                // Annual Global Compensation Recap Widget
+                AnnualRecapWidget(records: records),
+                const SizedBox(height: 20),
+
+                // Fiscal KPI Summary Bar
+                Builder(
+                  builder: (context) {
+                    final double cumulTax = records.fold(0.0, (sum, r) => sum + r.incomeTaxAmount);
+                    final double avgTaxRate = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.incomeTaxRatePercent) / records.length : 0.0;
+                    final double avgNetSocial = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.netSocial) / records.length : 0.0;
+
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBackground,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Net Banque Moyen :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text('${analytics.overallAverageNet.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 14)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Net Social Moyen (Avant PAS) :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text('${avgNetSocial.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 14)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Cumul Impôt IR Prélevé (Taux Moy. ${avgTaxRate.toStringAsFixed(1)}%) :', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                              Text('${cumulTax != 0.0 ? cumulTax.toStringAsFixed(2) : "0.00"} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
+
+            // TAB 2: HISTORIQUE DES BULLETINS (PAGINÉ & FILTRÉ)
+            if (_mainTab == 2) ...[
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Historique des Bulletins',
+                              style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${filteredRecords.length} bulletin(s) trouvé(s)',
+                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                        if (records.isNotEmpty)
+                          TextButton.icon(
+                            style: TextButton.styleFrom(foregroundColor: AppColors.accentRose),
+                            icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                            label: const Text('Vider l\'historique', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            onPressed: () {
+                              _clearCanvasDocument();
+                              ref.read(salaryProvider.notifier).clearAllRecords();
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Search & Year Filter Bar
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            onChanged: (val) => setState(() {
+                              _historySearchQuery = val;
+                              _historyPage = 1;
+                            }),
+                            decoration: InputDecoration(
+                              hintText: 'Rechercher une période, montant...',
+                              prefixIcon: const Icon(Icons.search_rounded, color: AppColors.accentCyan, size: 18),
+                              filled: true,
+                              fillColor: AppColors.surface,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderSubtle)),
+                            ),
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Year Filter Chips
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildYearFilterChip(0, 'Tous (${records.length})'),
+                          ...[2026, 2025, 2024, 2023].map((yr) {
+                            final count = records.where((r) => r.period.startsWith('$yr')).length;
+                            if (count == 0 && _selectedHistoryYear != yr) return const SizedBox.shrink();
+                            return _buildYearFilterChip(yr, '$yr ($count)');
+                          }),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (paginatedRecords.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        alignment: Alignment.center,
+                        child: const Text('Aucun bulletin ne correspond à votre recherche.', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      )
+                    else
+                      Column(
+                        children: paginatedRecords.map((record) {
+                          final isBaseline = record.isLatestActive;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: isBaseline ? AppColors.accentCyan.withValues(alpha: 0.1) : AppColors.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isBaseline ? AppColors.accentCyan : AppColors.borderSubtle,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Radio<String>(
+                                  value: record.id,
+                                  groupValue: salaryState.activeBaseline?.id,
+                                  activeColor: AppColors.accentCyan,
+                                  onChanged: (id) {
+                                    _switchDisplayedRecord(record);
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => _switchDisplayedRecord(record),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              record.periodLabel,
+                                              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+                                            ),
+                                            if (isBaseline) ...[
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.accentCyan,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: const Text('Référent Actif', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                              ),
+                                            ],
                                             const SizedBox(width: 8),
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                               decoration: BoxDecoration(
-                                                color: AppColors.accentCyan,
+                                                color: record.incomeTaxAmount != 0.0
+                                                    ? AppColors.accentRose.withValues(alpha: 0.15)
+                                                    : AppColors.accentEmerald.withValues(alpha: 0.15),
                                                 borderRadius: BorderRadius.circular(6),
                                               ),
-                                              child: const Text('Référent Actif', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                                            ),
-                                          ],
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: record.incomeTaxAmount != 0.0
-                                                  ? AppColors.accentRose.withValues(alpha: 0.15)
-                                                  : AppColors.accentEmerald.withValues(alpha: 0.15),
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              'PAS: ${record.incomeTaxAmount != 0.0 ? record.incomeTaxAmount.toStringAsFixed(2) : "0.00"} € (${record.incomeTaxRatePercent.toStringAsFixed(1)}%)',
-                                              style: TextStyle(
-                                                color: record.incomeTaxAmount != 0.0 ? AppColors.accentRose : AppColors.accentEmerald,
-                                                fontSize: 9,
-                                                fontWeight: FontWeight.bold,
+                                              child: Text(
+                                                'PAS: ${record.incomeTaxAmount != 0.0 ? record.incomeTaxAmount.toStringAsFixed(2) : "0.00"} € (${record.incomeTaxRatePercent.toStringAsFixed(1)}%)',
+                                                style: TextStyle(
+                                                  color: record.incomeTaxAmount != 0.0 ? AppColors.accentRose : AppColors.accentEmerald,
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Net Social : ${record.netSocial.toStringAsFixed(2)} € • ${record.notes ?? record.status}',
-                                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                                      ),
-                                    ],
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Net Social : ${record.netSocial.toStringAsFixed(2)} € • ${record.notes ?? record.status}',
+                                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    '${record.netSalary.toStringAsFixed(2)} €',
-                                    style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 15),
-                                  ),
-                                  Text(
-                                    'Brut : ${(record.grossSalary ?? 0).toStringAsFixed(2)} €',
-                                    style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
-                                  ),
-                                ],
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
-                                onPressed: () {
-                                  if (salaryState.activeBaseline?.id == record.id) {
-                                    _clearCanvasDocument();
-                                  }
-                                  ref.read(salaryProvider.notifier).deleteRecord(record.id);
-                                },
-                              ),
-                            ],
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      '${record.netSalary.toStringAsFixed(2)} €',
+                                      style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 15),
+                                    ),
+                                    Text(
+                                      'Brut : ${(record.grossSalary ?? 0).toStringAsFixed(2)} €',
+                                      style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                                    ),
+                                  ],
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
+                                  onPressed: () {
+                                    if (salaryState.activeBaseline?.id == record.id) {
+                                      _clearCanvasDocument();
+                                    }
+                                    ref.read(salaryProvider.notifier).deleteRecord(record.id);
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+
+                    // Pagination Footer Controls
+                    if (totalPages > 1) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.surface,
+                              foregroundColor: currentPage > 1 ? AppColors.accentCyan : AppColors.textMuted,
+                              elevation: 0,
+                            ),
+                            icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                            label: const Text('Précédent', style: TextStyle(fontSize: 11)),
+                            onPressed: currentPage > 1 ? () => setState(() => _historyPage--) : null,
                           ),
-                        );
-                      }).toList(),
-                    ),
+                          Text(
+                            'Page $currentPage / $totalPages',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.surface,
+                              foregroundColor: currentPage < totalPages ? AppColors.accentCyan : AppColors.textMuted,
+                              elevation: 0,
+                            ),
+                            label: const Text('Suivant', style: TextStyle(fontSize: 11)),
+                            icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                            onPressed: currentPage < totalPages ? () => setState(() => _historyPage++) : null,
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
+            ],
+
             const SizedBox(height: 40),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildYearFilterChip(int year, String label) {
+    final isSelected = _selectedHistoryYear == year;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: FilterChip(
+        selected: isSelected,
+        label: Text(label, style: TextStyle(color: isSelected ? Colors.white : AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
+        backgroundColor: AppColors.surface,
+        selectedColor: AppColors.accentCyan,
+        onSelected: (_) => setState(() {
+          _selectedHistoryYear = year;
+          _historyPage = 1;
+        }),
       ),
     );
   }
