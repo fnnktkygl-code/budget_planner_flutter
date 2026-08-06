@@ -1,177 +1,389 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
+import '../widgets/liquid_tank.dart';
 import '../widgets/notification_header.dart';
 
-class SavingsScreen extends ConsumerWidget {
+class SavingsScreen extends ConsumerStatefulWidget {
   const SavingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SavingsScreen> createState() => _SavingsScreenState();
+}
+
+class _SavingsScreenState extends ConsumerState<SavingsScreen> {
+  double _livretABalance = 1600;
+  double _livretATarget = 8000;
+
+  double _lddsBalance = 0;
+  double _lddsTarget = 0;
+
+  double _monthlySavingsRate = 200;
+
+  void _showEditTankDialog(String title, double currentBalance, double currentTarget, Function(double, double) onSave) {
+    final balanceCtrl = TextEditingController(text: currentBalance.toStringAsFixed(0));
+    final targetCtrl = TextEditingController(text: currentTarget.toStringAsFixed(0));
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.edit_note_rounded, color: AppColors.accentGold),
+              const SizedBox(width: 10),
+              Text('Ajuster $title', style: const TextStyle(color: AppColors.textPrimary, fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: balanceCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Solde actuel (€)',
+                  suffixText: '€',
+                ),
+                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: targetCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Plafond / Cible (€)',
+                  suffixText: '€',
+                ),
+                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                final newBal = double.tryParse(balanceCtrl.text.trim()) ?? currentBalance;
+                final newTarget = double.tryParse(targetCtrl.text.trim()) ?? currentTarget;
+                onSave(newBal, newTarget);
+                Navigator.pop(ctx);
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double totalSaved = _livretABalance + _lddsBalance;
+    final double totalTarget = _livretATarget + _lddsTarget;
+
+    final double remainingTarget = (15000 - totalSaved).clamp(0, 15000);
+    final double monthsToTarget = _monthlySavingsRate > 0 ? remainingTarget / _monthlySavingsRate : 0.0;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const NotificationHeaderWidget(title: 'Entonnoir d\'Épargne'),
+      appBar: const NotificationHeaderWidget(title: 'Entonnoir d\'épargne'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Section Banner Notification
+            // Section Title: ARCHITECTURE DE SÉCURITÉ (Matching Screenshots 1 & 8)
+            const Text(
+              'ARCHITECTURE DE SÉCURITÉ',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Liquid Tanks Grid / Stack
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth >= 600) {
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: LiquidTankWidget(
+                          title: 'Livret A',
+                          currentAmount: _livretABalance,
+                          targetAmount: _livretATarget,
+                          liquidColor: AppColors.accentGold,
+                          onEdit: () => _showEditTankDialog('Livret A', _livretABalance, _livretATarget, (b, t) {
+                            setState(() {
+                              _livretABalance = b;
+                              _livretATarget = t;
+                            });
+                          }),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: LiquidTankWidget(
+                          title: 'LDDS',
+                          currentAmount: _lddsBalance,
+                          targetAmount: _lddsTarget,
+                          liquidColor: AppColors.accentCyan,
+                          onEdit: () => _showEditTankDialog('LDDS', _lddsBalance, _lddsTarget, (b, t) {
+                            setState(() {
+                              _lddsBalance = b;
+                              _lddsTarget = t;
+                            });
+                          }),
+                        ),
+                      ),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      LiquidTankWidget(
+                        title: 'Livret A',
+                        currentAmount: _livretABalance,
+                        targetAmount: _livretATarget,
+                        liquidColor: AppColors.accentGold,
+                        onEdit: () => _showEditTankDialog('Livret A', _livretABalance, _livretATarget, (b, t) {
+                          setState(() {
+                            _livretABalance = b;
+                            _livretATarget = t;
+                          });
+                        }),
+                      ),
+                      const SizedBox(height: 14),
+                      LiquidTankWidget(
+                        title: 'LDDS',
+                        currentAmount: _lddsBalance,
+                        targetAmount: _lddsTarget,
+                        liquidColor: AppColors.accentCyan,
+                        onEdit: () => _showEditTankDialog('LDDS', _lddsBalance, _lddsTarget, (b, t) {
+                          setState(() {
+                            _lddsBalance = b;
+                            _lddsTarget = t;
+                          });
+                        }),
+                      ),
+                    ],
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // Card: Accumulateur Sécurité & Stepper (Matching Screenshot 1)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.accentCyan.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.bolt_rounded, color: AppColors.accentGold, size: 20),
+                      SizedBox(width: 10),
+                      Text(
+                        'Accumulateur séquentiel',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Nous remplissons vos filets de sécurité séquentiellement : d\'abord le Livret A, puis le LDDS. Sûr et optimal.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  const Text(
+                    'Ajuster le taux d\'épargne',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Slider Control
+                  Slider(
+                    value: _monthlySavingsRate,
+                    min: 50,
+                    max: 1000,
+                    divisions: 19,
+                    activeColor: AppColors.accentCyan,
+                    onChanged: (val) => setState(() => _monthlySavingsRate = val),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Stepper Buttons [-] [ 200 € ] [+] (Matching Screenshot 1)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.surface,
+                          side: const BorderSide(color: AppColors.borderSubtle),
+                        ),
+                        icon: const Icon(Icons.remove_rounded, color: AppColors.accentCyan),
+                        onPressed: () {
+                          if (_monthlySavingsRate > 50) {
+                            setState(() => _monthlySavingsRate -= 50);
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.borderSubtle),
+                        ),
+                        child: Text(
+                          '${_monthlySavingsRate.toStringAsFixed(0)}   €',
+                          style: const TextStyle(
+                            color: AppColors.accentCyan,
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      IconButton(
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.surface,
+                          side: const BorderSide(color: AppColors.borderSubtle),
+                        ),
+                        icon: const Icon(Icons.add_rounded, color: AppColors.accentCyan),
+                        onPressed: () {
+                          if (_monthlySavingsRate < 2000) {
+                            setState(() => _monthlySavingsRate += 50);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(color: AppColors.borderSubtle, height: 1),
+                  const SizedBox(height: 18),
+
+                  // Stats List (Matching Screenshot 1)
+                  _buildStatRow(
+                    icon: Icons.show_chart_rounded,
+                    label: 'Taux d\'épargne mensuel :',
+                    value: '${_monthlySavingsRate.toStringAsFixed(0)} €/mo',
+                    valueColor: AppColors.accentEmerald,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildStatRow(
+                    icon: Icons.wallet_outlined,
+                    label: 'Total épargné :',
+                    value: '${totalSaved.toStringAsFixed(0)} € / ${totalTarget > 0 ? totalTarget.toStringAsFixed(0) : "8000"} €',
+                    valueColor: AppColors.textPrimary,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildStatRow(
+                    icon: Icons.timer_outlined,
+                    label: 'Temps pour la cible (15k) :',
+                    value: '${monthsToTarget.toStringAsFixed(1)} mois',
+                    valueColor: AppColors.accentGold,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Footer Tip Card (Matching Screenshot 1)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.borderSubtle),
               ),
               child: Row(
                 children: const [
-                  Icon(Icons.savings_rounded, color: AppColors.accentCyan, size: 20),
-                  SizedBox(width: 10),
+                  Icon(Icons.info_outline_rounded, color: AppColors.accentCyan, size: 20),
+                  SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Entonnoir d\'épargne automatique : Priorisation Sécurité -> PEA -> Immo',
+                      '💡 Astuce : Cliquez sur un réservoir ci-dessus pour modifier directement son solde et son plafond.',
                       style: TextStyle(
-                        color: AppColors.textPrimary,
+                        color: AppColors.textSecondary,
                         fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        height: 1.3,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
-
-            // Savings Cards
-            _buildFunnelStepCard(
-              stepNumber: 1,
-              title: 'Épargne de Précaution (Livret A / LDD)',
-              targetAmount: '6 000.00 €',
-              currentAmount: '4 200.00 €',
-              progress: 0.70,
-              color: AppColors.accentGold,
-              icon: Icons.shield_rounded,
-              context: context,
-            ),
-            const SizedBox(height: 16),
-            _buildFunnelStepCard(
-              stepNumber: 2,
-              title: 'Épargne Long Terme (PEA / ETF World)',
-              targetAmount: '20 000.00 €',
-              currentAmount: '12 500.00 €',
-              progress: 0.625,
-              color: AppColors.accentCyan,
-              icon: Icons.show_chart_rounded,
-              context: context,
-            ),
-            const SizedBox(height: 16),
-            _buildFunnelStepCard(
-              stepNumber: 3,
-              title: 'Projets Immobiliers & Apport',
-              targetAmount: '15 000.00 €',
-              currentAmount: '3 000.00 €',
-              progress: 0.20,
-              color: AppColors.accentEmerald,
-              icon: Icons.home_work_rounded,
-              context: context,
-            ),
+            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFunnelStepCard({
-    required int stepNumber,
-    required String title,
-    required String targetAmount,
-    required String currentAmount,
-    required double progress,
-    required Color color,
+  Widget _buildStatRow({
     required IconData icon,
-    required BuildContext context,
+    required String label,
+    required String value,
+    required Color valueColor,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 22),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: AppColors.textMuted, size: 18),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Étape $stepNumber',
-                      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      title,
-                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          LinearProgressIndicator(
-            value: progress,
-            backgroundColor: AppColors.surface,
-            color: color,
-            minHeight: 10,
-            borderRadius: BorderRadius.circular(5),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Actuel : $currentAmount', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
-              Text('Cible : $targetAmount', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: color,
-                side: BorderSide(color: color.withValues(alpha: 0.4)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Alimenter cette poche d\'épargne'),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Virement automatique programmé vers $title !'),
-                    backgroundColor: color,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
             ),
+          ],
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
