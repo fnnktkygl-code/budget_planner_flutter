@@ -153,7 +153,7 @@ class SalaryParserService {
     return null;
   }
 
-  /// Scans raw PDF bytes including decompressed zlib stream text for French payslip financial figures
+  /// Scans PDF text stream strictly for explicit French payslip financial labels
   static Map<String, dynamic>? _scanPdfTextForFinancials(Uint8List? fileBytes) {
     if (fileBytes == null || fileBytes.isEmpty) return null;
 
@@ -210,7 +210,7 @@ class SalaryParserService {
 
     // 1. Net à payer / Net versé sur le compte / Net payable / Net a payer avant impot
     final netMatch = RegExp(
-      r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE|MONTANT\s+NET)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
+      r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE|MONTANT\s+NET\s+PAYER)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
       caseSensitive: false,
     ).firstMatch(fullText);
     if (netMatch != null) {
@@ -220,7 +220,7 @@ class SalaryParserService {
 
     // 2. Net Social / Montant Net Social
     final netSocialMatch = RegExp(
-      r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
+      r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
       caseSensitive: false,
     ).firstMatch(fullText);
     if (netSocialMatch != null) {
@@ -230,24 +230,12 @@ class SalaryParserService {
 
     // 3. Salaire Brut / Total Brut
     final grossMatch = RegExp(
-      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
+      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
       caseSensitive: false,
     ).firstMatch(fullText);
     if (grossMatch != null) {
       final valStr = grossMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
       foundGross = double.tryParse(valStr);
-    }
-
-    // 4. Fallback search for any 4-digit monetary number in text (e.g., 4400, 2713.74) if netMatch wasn't triggered
-    if (foundNet == null) {
-      final fallbackNum = RegExp(r'(\d{1,2}[\s.]?\d{3}(?:[,\.]\d{2})?)').firstMatch(fullText);
-      if (fallbackNum != null) {
-        final valStr = fallbackNum.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
-        final candidate = double.tryParse(valStr);
-        if (candidate != null && candidate >= 1000.0 && candidate <= 15000.0) {
-          foundNet = candidate;
-        }
-      }
     }
 
     if (foundNet != null || foundNetSocial != null || foundGross != null) {
@@ -274,12 +262,17 @@ class SalaryParserService {
     final int yr = extractedInfo != null ? extractedInfo['year'] : 2026;
     final int mo = extractedInfo != null ? extractedInfo['month'] : 7;
 
-    // 1. Scan PDF byte stream (including decompressed FlateDecode text)
+    // 1. Scan PDF byte stream
     final scannedFinancials = _scanPdfTextForFinancials(fileBytes);
-
     final rawFileB64 = fileBytes != null ? base64Encode(fileBytes) : null;
 
-    // 2. Multi-Tier Model Rotator (Gemini 3.5/3.1/2.5 Flash Lite -> Standard Flash -> Gemma 4/2 Reserve -> Gemini 2.0/1.5)
+    // Determine correct MIME type for Gemini API
+    final fnLower = (fileName ?? '').toLowerCase();
+    final String mimeType = fnLower.endsWith('.pdf')
+        ? 'application/pdf'
+        : (fnLower.endsWith('.png') ? 'image/png' : 'image/jpeg');
+
+    // 2. Multi-Tier Model Rotator Cascade
     if (fileBytes != null && fileBytes.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
       final base64Data = base64Encode(fileBytes);
       final now = DateTime.now();
@@ -305,18 +298,18 @@ class SalaryParserService {
                   'parts': [
                     {
                       'text': '''
-Extrais uniquement les valeurs financières et lignes de prime de ce bulletin au format JSON :
-- period (String ex: "Juillet 2026" ou "2026-07")
-- grossSalary (double ex: 3776.67)
-- netSocial (double ex: 2952.28)
-- netPayable (double ex: 2713.74)
-- hasExplicitBonus (boolean: true si une ligne explicite de PRIME DE VACANCES, 13EME MOIS ou PRIME EXCEPTIONNELLE est présente sur le bulletin, sinon false)
-- bonusDescription (String ex: "Prime de Vacances" ou null si aucune prime)
+Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulletin et renvoie STRICTEMENT un JSON valide :
+- period (String format YYYY-MM ex: "2026-03" ou "2026-07")
+- grossSalary (double: Salaire brut mensuel)
+- netSocial (double: Montant Net Social)
+- netPayable (double: Salaire Net à Payer avant impôt ou Net versé sur le compte bancaire)
+- hasExplicitBonus (boolean: true uniquement si une ligne de PRIME DE VACANCES, 13EME MOIS, BONUS ou PRIME EXCEPTIONNELLE est présente)
+- bonusDescription (String: Intitulé exact de la prime si présente, sinon null)
 '''
                     },
                     {
                       'inline_data': {
-                        'mime_type': 'image/jpeg',
+                        'mime_type': mimeType,
                         'data': base64Data,
                       }
                     }

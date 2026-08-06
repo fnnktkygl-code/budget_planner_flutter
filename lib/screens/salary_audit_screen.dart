@@ -333,6 +333,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
           final parsed = await SalaryParserService.parseDocument(
             fileBytes: file.bytes,
             fileName: file.name,
+            apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
           );
 
           final renderedB64 = renderedImg != null ? base64Encode(renderedImg) : null;
@@ -988,6 +989,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                         final parsed = await SalaryParserService.parseDocument(
                           fileBytes: _customFileBytes,
                           fileName: _customFileName,
+                          apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
                         );
                         setState(() => _isProcessing = false);
 
