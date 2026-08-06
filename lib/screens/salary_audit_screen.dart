@@ -1744,6 +1744,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 SalaryTrendChartWidget(
                   records: records,
                   averageNet: analytics.overallAverageNet,
+                  taxAdjustments: salaryState.taxAdjustments,
                   onRecordTap: (record) {
                     _switchDisplayedRecord(record);
                   },
