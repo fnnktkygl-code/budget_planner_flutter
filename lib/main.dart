@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'constants/colors.dart';
+import 'core/providers/auth_provider.dart';
+import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/savings_screen.dart';
 import 'screens/crisis_screen.dart';
@@ -21,11 +23,13 @@ void main() {
   );
 }
 
-class AuraBudgetApp extends StatelessWidget {
+class AuraBudgetApp extends ConsumerWidget {
   const AuraBudgetApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+
     return MaterialApp(
       title: 'AuraBudget Pro',
       debugShowCheckedModeBanner: false,
@@ -41,7 +45,16 @@ class AuraBudgetApp extends StatelessWidget {
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         useMaterial3: true,
       ),
-      home: const MainLayoutScreen(),
+      home: authState.isLoading
+          ? const Scaffold(
+              backgroundColor: AppColors.background,
+              body: Center(
+                child: CircularProgressIndicator(color: AppColors.accentCyan),
+              ),
+            )
+          : authState.isSignedIn
+              ? const MainLayoutScreen()
+              : const LoginScreen(),
     );
   }
 }

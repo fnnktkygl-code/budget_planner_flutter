@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
+import '../core/providers/auth_provider.dart';
 import '../core/providers/budget_provider.dart';
 import '../core/providers/salary_provider.dart';
 import '../core/providers/settings_provider.dart';
@@ -11,6 +12,7 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
     final budget = ref.watch(budgetProvider);
     final salary = ref.watch(salaryProvider);
     final settings = ref.watch(settingsProvider);
@@ -26,15 +28,33 @@ class DashboardScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Utilisateur & Status Banque
+            // Header Utilisateur Gmail & Status Banque
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
-                    const Text('AuraBudget Pro', style: TextStyle(color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.bold)),
-                    Text('Base de Répartition : ${salary.activeBaseline?.periodLabel ?? 'Juin 2026'}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                    CircleAvatar(
+                      backgroundColor: AppColors.accentCyan.withValues(alpha: 0.2),
+                      child: Text(
+                        (authState.user?.displayName ?? 'A')[0].toUpperCase(),
+                        style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          authState.user?.displayName ?? 'AuraBudget Pro',
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          authState.user?.email ?? 'Base : ${salary.activeBaseline?.periodLabel ?? 'Juin 2026'}',
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
                 GestureDetector(
