@@ -180,64 +180,52 @@ class SalaryParserService {
     return null;
   }
 
-  static double? _extractFactualNetFromText(String? text) {
-    if (text == null || text.isEmpty) return null;
+  static double? _parseFrenchAmount(String text, String keywordPattern) {
+    if (text.isEmpty) return null;
 
-    final regexes = [
-      RegExp(r'NET\s+A\s+PAYER\s+EN\s+EUROS\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
-      RegExp(r'NET\s+A\s+PAYER\s+AVANT\s+IMP[OÔ]T[^\n]*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
-      RegExp(r'NET\s+A\s+PAYER\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
-      RegExp(r'NET\s+PAY[EÉ]\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
-      RegExp(r'VIREMENT\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
-    ];
+    final re = RegExp(
+      '$keywordPattern[^\\d\\n]*(\\d{1,5})[\\s\\,\\.]+(\\d{2})',
+      caseSensitive: false,
+    );
 
-    for (var re in regexes) {
-      final match = re.firstMatch(text);
-      if (match != null) {
-        final clean = match.group(1)!.replaceAll(' ', '').replaceAll(',', '.');
-        final val = double.tryParse(clean);
-        if (val != null && val > 500 && val < 50000) {
-          return val;
-        }
-      }
-    }
-    return null;
-  }
-
-  static double? _extractFactualNetSocialFromText(String? text) {
-    if (text == null || text.isEmpty) return null;
-
-    final re = RegExp(r'MONTANT\s+NET\s+SOCIAL\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false);
     final match = re.firstMatch(text);
     if (match != null) {
-      final clean = match.group(1)!.replaceAll(' ', '').replaceAll(',', '.');
-      final val = double.tryParse(clean);
-      if (val != null && val > 500 && val < 50000) {
+      final euros = match.group(1)!.replaceAll(' ', '');
+      final cents = match.group(2)!;
+      final val = double.tryParse('$euros.$cents');
+      if (val != null && val > 300 && val < 50000) {
         return val;
       }
     }
     return null;
   }
 
-  static double? _extractFactualGrossFromText(String? text) {
+  static double? _extractFactualNetFromText(String? text) {
     if (text == null || text.isEmpty) return null;
 
-    final regexes = [
-      RegExp(r'SALAIRE\s+BRUT\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
-      RegExp(r'TOTAL\s+BRUT\s*[:\s]*(\d[\d\s]*[\,\.]\d{2})', caseSensitive: false),
+    final patterns = [
+      r'NET\s+A\s+PAYER\s+EN\s+EUROS',
+      r'NET\s+A\s+PAYER\s+AVANT\s+IMP[OÔ]T',
+      r'NET\s+A\s+PAYER',
+      r'NET\s+PAY[EÉ]',
+      r'VIREMENT',
     ];
 
-    for (var re in regexes) {
-      final match = re.firstMatch(text);
-      if (match != null) {
-        final clean = match.group(1)!.replaceAll(' ', '').replaceAll(',', '.');
-        final val = double.tryParse(clean);
-        if (val != null && val > 500 && val < 50000) {
-          return val;
-        }
-      }
+    for (var pattern in patterns) {
+      final val = _parseFrenchAmount(text, pattern);
+      if (val != null) return val;
     }
     return null;
+  }
+
+  static double? _extractFactualNetSocialFromText(String? text) {
+    if (text == null || text.isEmpty) return null;
+    return _parseFrenchAmount(text, r'MONTANT\s+NET\s+SOCIAL');
+  }
+
+  static double? _extractFactualGrossFromText(String? text) {
+    if (text == null || text.isEmpty) return null;
+    return _parseFrenchAmount(text, r'SALAIRE\s+BRUT') ?? _parseFrenchAmount(text, r'TOTAL\s+BRUT');
   }
 
   static Future<RealParsedPayslip> parseDocument({

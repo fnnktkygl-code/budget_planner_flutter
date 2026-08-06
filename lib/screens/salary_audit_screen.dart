@@ -533,7 +533,8 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     _selectedYear = parsed.date.year;
     _selectedMonth = parsed.date.month;
 
-    final netController = TextEditingController(text: parsed.netPayable.toStringAsFixed(2));
+    final double netVal = parsed.netPayable > 0 ? parsed.netPayable : (parsed.netSocial > 0 ? parsed.netSocial : 0.0);
+    final netController = TextEditingController(text: netVal > 0 ? netVal.toStringAsFixed(2) : '');
     final grossController = TextEditingController(text: parsed.grossSalary.toStringAsFixed(2));
     final netSocialController = TextEditingController(text: parsed.netSocial.toStringAsFixed(2));
 
