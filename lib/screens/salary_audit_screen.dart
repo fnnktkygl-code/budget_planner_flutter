@@ -1222,6 +1222,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     final grossCtrl = TextEditingController(text: (record.grossSalary ?? 0.0).toStringAsFixed(2));
     final netSocialCtrl = TextEditingController(text: record.netSocial.toStringAsFixed(2));
     final labelCtrl = TextEditingController(text: record.periodLabel);
+    final peeCtrl = TextEditingController(text: record.companySavingsPEE > 0 ? record.companySavingsPEE.toStringAsFixed(2) : '');
     final bonusAmountCtrl = TextEditingController(text: (record.bonusAmount ?? 0.0) > 0 ? record.bonusAmount!.toStringAsFixed(2) : '');
     final bonusDescCtrl = TextEditingController(text: record.bonusDescription ?? '');
     bool isBonus = record.hasExplicitBonus;
@@ -1291,6 +1292,18 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                         border: OutlineInputBorder(),
                       ),
                       style: const TextStyle(color: AppColors.accentPurple, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: peeCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Épargne Salariale / Abondement PEE (€)',
+                        hintText: 'ex: 300.00',
+                        suffixText: '€',
+                        border: OutlineInputBorder(),
+                      ),
+                      style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
                     InkWell(
@@ -1363,6 +1376,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     final newNet = double.tryParse(netCtrl.text) ?? record.netSalary;
                     final newGross = double.tryParse(grossCtrl.text) ?? record.grossSalary;
                     final newNetSocial = double.tryParse(netSocialCtrl.text) ?? record.netSocial;
+                    final newPee = double.tryParse(peeCtrl.text) ?? record.companySavingsPEE;
                     final bAmt = double.tryParse(bonusAmountCtrl.text);
 
                     final updated = record.copyWith(
@@ -1370,6 +1384,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       netSalary: newNet,
                       grossSalary: newGross,
                       netSocial: newNetSocial,
+                      companySavingsPEE: newPee,
                       hasExplicitBonus: isBonus,
                       bonusAmount: isBonus ? bAmt : null,
                       bonusDescription: isBonus ? (bonusDescCtrl.text.isNotEmpty ? bonusDescCtrl.text : 'Extra / Prime') : null,
