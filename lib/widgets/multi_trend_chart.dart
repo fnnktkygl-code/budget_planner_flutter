@@ -59,6 +59,9 @@ class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
 
     final salaryValues = sorted.map((r) {
       if (!_includeIncomeTax) return r.regularNetSocial;
+      if (r.incomeTaxAmount.abs() > 1.0 && r.incomeTaxAmount.abs() < 400.0) {
+        return r.regularNetSalary;
+      }
       final yearRecs = sorted.where((x) => x.year == r.year && x.incomeTaxAmount.abs() > 1.0).toList();
       double pas = 0.0;
       if (yearRecs.isNotEmpty) {

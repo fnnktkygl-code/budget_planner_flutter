@@ -471,8 +471,9 @@ class _SalaryChartPainter extends CustomPainter {
           return max(0.0, r.regularNetSocial - monthlyRealTax);
         }
       }
-      final pas = _getEffectivePasForYear(r);
-      return max(0.0, r.regularNetSocial - pas);
+    }
+    if (r.incomeTaxAmount.abs() > 1.0 && r.incomeTaxAmount.abs() < 400.0) {
+      return r.regularNetSalary;
     }
     final pas = _getEffectivePasForYear(r);
     return max(0.0, r.regularNetSocial - pas);

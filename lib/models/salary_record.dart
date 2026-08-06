@@ -72,19 +72,32 @@ class SalaryRecord {
   bool get isExtraOrBonusMonth =>
       hasExplicitBonus || (bonusAmount != null && bonusAmount! > 0) || calculatedExtraAmount > 10.0;
 
-  /// Salaire net récurrent hors prime exceptionnel (calculé dynamiquement)
+  /// Salaire net récurrent hors prime exceptionnel (calculé dynamiquement à partir des vraies fiches de paie!)
   double get regularNetSalary {
-    if (isExtraOrBonusMonth) {
-      if (year == 2026) return 2713.74;
-      return 2719.66;
+    if (bonusAmount != null && bonusAmount! > 0) {
+      final ratio = (grossSalary != null && grossSalary! > 0) ? (netSalary / grossSalary!) : 0.77;
+      final netBonus = bonusAmount! * ratio;
+      return (netSalary - netBonus).clamp(0.0, double.infinity);
+    }
+    if (calculatedExtraAmount > 10.0) {
+      final ratio = (grossSalary != null && grossSalary! > 0) ? (netSalary / grossSalary!) : 0.77;
+      final netExtra = calculatedExtraAmount * ratio;
+      return (netSalary - netExtra).clamp(0.0, double.infinity);
     }
     return netSalary;
   }
 
-  /// Net social récurrent hors prime exceptionnel (calculé dynamiquement)
+  /// Net social récurrent hors prime exceptionnel (calculé dynamiquement à partir des vraies fiches de paie!)
   double get regularNetSocial {
-    if (isExtraOrBonusMonth) {
-      return 2860.89;
+    if (bonusAmount != null && bonusAmount! > 0) {
+      final ratio = (grossSalary != null && grossSalary! > 0) ? (netSocial / grossSalary!) : 0.78;
+      final netBonus = bonusAmount! * ratio;
+      return (netSocial - netBonus).clamp(0.0, double.infinity);
+    }
+    if (calculatedExtraAmount > 10.0) {
+      final ratio = (grossSalary != null && grossSalary! > 0) ? (netSocial / grossSalary!) : 0.78;
+      final netExtra = calculatedExtraAmount * ratio;
+      return (netSocial - netExtra).clamp(0.0, double.infinity);
     }
     return netSocial;
   }
