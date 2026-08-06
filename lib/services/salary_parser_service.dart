@@ -191,34 +191,45 @@ class SalaryParserService {
       bonusDesc = 'Prime de Performance';
     }
 
-    // 1. Net à payer / Net versé sur le compte / Net payable / Net a payer avant impot
+    // Pattern d'extraction haute précision (euros et centimes séparés par espace, virgule ou point)
+    const String numPattern = r'(\d{1,6})[\s,\.](\d{2})(?!\d)';
+
+    // 1. Net à payer avant impôt / Net à payer / Net versé / Net fiscal
     final netMatch = RegExp(
-      r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE|MONTANT\s+NET)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
+      r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE|NET\s+FISCAL)[^\d]*' + numPattern,
       caseSensitive: false,
     ).firstMatch(fullText);
     if (netMatch != null) {
-      final valStr = netMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
-      foundNet = double.tryParse(valStr);
+      foundNet = double.tryParse('${netMatch.group(1)}.${netMatch.group(2)}');
+    }
+
+    // Fallback: Recherche virement / solde net
+    if (foundNet == null) {
+      final virementMatch = RegExp(
+        r'(?:EN\s+EUROS\s+VIREMENT|VIREMENT|SOLDE\s+DE\s+TOUT\s+COMPTE)[^\d]*' + numPattern,
+        caseSensitive: false,
+      ).firstMatch(fullText);
+      if (virementMatch != null) {
+        foundNet = double.tryParse('${virementMatch.group(1)}.${virementMatch.group(2)}');
+      }
     }
 
     // 2. Net Social / Montant Net Social
     final netSocialMatch = RegExp(
-      r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
+      r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*' + numPattern,
       caseSensitive: false,
     ).firstMatch(fullText);
     if (netSocialMatch != null) {
-      final valStr = netSocialMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
-      foundNetSocial = double.tryParse(valStr);
+      foundNetSocial = double.tryParse('${netSocialMatch.group(1)}.${netSocialMatch.group(2)}');
     }
 
-    // 3. Salaire Brut / Total Brut
+    // 3. Salaire Brut / Total Brut / Brut Impôts
     final grossMatch = RegExp(
-      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
+      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT|BRUT\s+IMPOTS)[^\d]*' + numPattern,
       caseSensitive: false,
     ).firstMatch(fullText);
     if (grossMatch != null) {
-      final valStr = grossMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
-      foundGross = double.tryParse(valStr);
+      foundGross = double.tryParse('${grossMatch.group(1)}.${grossMatch.group(2)}');
     }
 
     if (foundNet != null || foundNetSocial != null || foundGross != null) {
