@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io' show zlib;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/salary_record.dart';
@@ -153,36 +152,20 @@ class SalaryParserService {
     return null;
   }
 
-  /// Scans PDF text stream strictly for explicit French payslip financial labels
-  static Map<String, dynamic>? _scanPdfTextForFinancials(Uint8List? fileBytes) {
-    if (fileBytes == null || fileBytes.isEmpty) return null;
-
+  /// Scans extracted PDF text or Latin1 byte text strictly for French payslip financial figures
+  static Map<String, dynamic>? _scanPdfTextForFinancials(Uint8List? fileBytes, String? rawTextContent) {
     final StringBuffer textBuffer = StringBuffer();
 
-    // 1. Direct Latin1 decode
-    try {
-      textBuffer.write(latin1.decode(fileBytes, allowInvalid: true));
-    } catch (_) {}
+    if (rawTextContent != null && rawTextContent.isNotEmpty) {
+      textBuffer.write(rawTextContent);
+    }
 
-    // 2. Decompress zlib streams if present in PDF
-    try {
-      final String rawString = latin1.decode(fileBytes, allowInvalid: true);
-      final RegExp streamRegExp = RegExp(r'stream[\r\n]+([\s\S]*?)[\r\n]+endstream');
-      final matches = streamRegExp.allMatches(rawString);
-
-      for (final match in matches) {
-        final streamContent = match.group(1);
-        if (streamContent != null) {
-          final streamBytes = Uint8List.fromList(latin1.encode(streamContent));
-          try {
-            final decompressedBytes = zlib.decode(streamBytes);
-            final decompressedText = latin1.decode(decompressedBytes, allowInvalid: true);
-            textBuffer.write('\n');
-            textBuffer.write(decompressedText);
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
+    if (fileBytes != null && fileBytes.isNotEmpty) {
+      try {
+        textBuffer.write('\n');
+        textBuffer.write(latin1.decode(fileBytes, allowInvalid: true));
+      } catch (_) {}
+    }
 
     final fullText = textBuffer.toString();
     if (fullText.isEmpty) return null;
@@ -210,7 +193,7 @@ class SalaryParserService {
 
     // 1. Net à payer / Net versé sur le compte / Net payable / Net a payer avant impot
     final netMatch = RegExp(
-      r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE|MONTANT\s+NET\s+PAYER)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
+      r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE|MONTANT\s+NET)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
       caseSensitive: false,
     ).firstMatch(fullText);
     if (netMatch != null) {
@@ -220,7 +203,7 @@ class SalaryParserService {
 
     // 2. Net Social / Montant Net Social
     final netSocialMatch = RegExp(
-      r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
+      r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
       caseSensitive: false,
     ).firstMatch(fullText);
     if (netSocialMatch != null) {
@@ -230,7 +213,7 @@ class SalaryParserService {
 
     // 3. Salaire Brut / Total Brut
     final grossMatch = RegExp(
-      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
+      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
       caseSensitive: false,
     ).firstMatch(fullText);
     if (grossMatch != null) {
@@ -255,6 +238,7 @@ class SalaryParserService {
     Uint8List? fileBytes,
     String? fileName,
     String? apiKey,
+    String? rawTextContent,
   }) async {
     final extractedInfo = _extractPeriodFromFileName(fileName);
     final String extractedPeriod = extractedInfo != null ? extractedInfo['period'] : 'Période Inconnue';
@@ -262,11 +246,10 @@ class SalaryParserService {
     final int yr = extractedInfo != null ? extractedInfo['year'] : 2026;
     final int mo = extractedInfo != null ? extractedInfo['month'] : 7;
 
-    // 1. Scan PDF byte stream
-    final scannedFinancials = _scanPdfTextForFinancials(fileBytes);
+    // 1. Scan PDF text content (from PDF.js browser text extraction or byte stream)
+    final scannedFinancials = _scanPdfTextForFinancials(fileBytes, rawTextContent);
     final rawFileB64 = fileBytes != null ? base64Encode(fileBytes) : null;
 
-    // Determine correct MIME type for Gemini API
     final fnLower = (fileName ?? '').toLowerCase();
     final String mimeType = fnLower.endsWith('.pdf')
         ? 'application/pdf'

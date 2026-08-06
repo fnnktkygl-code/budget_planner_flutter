@@ -130,6 +130,29 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     }
   }
 
+  Future<String?> _extractPdfTextFromBytes(Uint8List bytes) async {
+    if (kIsWeb) {
+      final completer = Completer<String?>();
+      js.context['onPdfTextExtracted'] = (dynamic text) {
+        if (text != null && text is String && text.isNotEmpty) {
+          completer.complete(text);
+        } else {
+          completer.complete(null);
+        }
+      };
+
+      try {
+        final base64Pdf = base64Encode(bytes);
+        js.context.callMethod('extractPdfTextWithCallback', [base64Pdf, 'onPdfTextExtracted']);
+        return await completer.future;
+      } catch (e) {
+        debugPrint('[SalaryAuditScreen] JS PDF Text Extraction Exception: $e');
+        return null;
+      }
+    }
+    return null;
+  }
+
   Future<void> _processUploadedFile(Uint8List bytes, String fileName) async {
     setState(() {
       _customFileBytes = bytes;
@@ -320,10 +343,12 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
           final file = files[i];
           modalStateSetter?.call(() {});
 
-          // Render PDF page image
+          // Render PDF page image and extract text via PDF.js on Web
           Uint8List? renderedImg;
+          String? extractedText;
           if (file.name.toLowerCase().endsWith('.pdf')) {
             renderedImg = await _renderPdfBytesToImage(file.bytes!);
+            extractedText = await _extractPdfTextFromBytes(file.bytes!);
           }
 
           // Rate-limiting delay buffer to prevent API overload
@@ -334,6 +359,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
             fileBytes: file.bytes,
             fileName: file.name,
             apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
+            rawTextContent: extractedText,
           );
 
           final renderedB64 = renderedImg != null ? base64Encode(renderedImg) : null;
@@ -986,10 +1012,15 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 onPressed: hasFileLoaded
                     ? () async {
                         setState(() => _isProcessing = true);
+                        String? extractedText;
+                        if (_customFileBytes != null && (_customFileName ?? '').toLowerCase().endsWith('.pdf')) {
+                          extractedText = await _extractPdfTextFromBytes(_customFileBytes!);
+                        }
                         final parsed = await SalaryParserService.parseDocument(
                           fileBytes: _customFileBytes,
                           fileName: _customFileName,
                           apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
+                          rawTextContent: extractedText,
                         );
                         setState(() => _isProcessing = false);
 

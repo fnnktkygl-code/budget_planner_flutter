@@ -32,7 +32,7 @@
   <title>AuraBudget Pro — Audit Salarial & Caviardage IA</title>
   <link rel="manifest" href="manifest.json">
 
-  <!-- pdf.js library for Web PDF page rendering -->
+  <!-- pdf.js library for Web PDF page rendering and Text Extraction -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     if (typeof pdfjsLib !== 'undefined') {
@@ -74,6 +74,39 @@
         });
       } catch (err) {
         console.error('renderPdfBase64WithCallback exception:', err);
+        if (window[callbackName]) window[callbackName]('');
+      }
+    };
+
+    window.extractPdfTextWithCallback = function(base64Str, callbackName) {
+      try {
+        var binaryString = atob(base64Str);
+        var len = binaryString.length;
+        var bytes = new Uint8Array(len);
+        for (var i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        pdfjsLib.getDocument({ data: bytes }).promise.then(function(pdf) {
+          pdf.getPage(1).then(function(page) {
+            page.getTextContent().then(function(textContent) {
+              var extractedText = textContent.items.map(function(item) { return item.str; }).join(' ');
+              if (window[callbackName]) {
+                window[callbackName](extractedText);
+              }
+            }).catch(function(err) {
+              console.error('PDF getTextContent error:', err);
+              if (window[callbackName]) window[callbackName]('');
+            });
+          }).catch(function(err) {
+            console.error('PDF getPage error:', err);
+            if (window[callbackName]) window[callbackName]('');
+          });
+        }).catch(function(err) {
+          console.error('pdfjs getDocument text error:', err);
+          if (window[callbackName]) window[callbackName]('');
+        });
+      } catch (err) {
+        console.error('extractPdfTextWithCallback exception:', err);
         if (window[callbackName]) window[callbackName]('');
       }
     };
