@@ -62,6 +62,19 @@ class SalaryRecord {
   /// Rémunération globale mensuelle équivalente (Net banque + Épargne Salariale PEE)
   double get totalGlobalComp => netSalary + companySavingsPEE;
 
+  /// Année extraite de la période (ex: 2025)
+  int get year {
+    if (period.contains('-')) {
+      final parts = period.split('-');
+      return int.tryParse(parts[0]) ?? 2025;
+    }
+    final match = RegExp(r'20\d{2}').firstMatch(period);
+    if (match != null) {
+      return int.parse(match.group(0)!);
+    }
+    return 2025;
+  }
+
   SalaryRecord({
     required this.id,
     required this.period,

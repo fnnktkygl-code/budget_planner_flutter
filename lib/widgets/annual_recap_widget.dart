@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import '../constants/colors.dart';
 import '../models/salary_record.dart';
-
 import '../models/tax_adjustment.dart';
 
-class AnnualRecapWidget extends StatelessWidget {
+class AnnualRecapWidget extends StatefulWidget {
   final List<SalaryRecord> records;
   final List<TaxAdjustment>? taxAdjustments;
 
@@ -15,27 +14,65 @@ class AnnualRecapWidget extends StatelessWidget {
   });
 
   @override
+  State<AnnualRecapWidget> createState() => _AnnualRecapWidgetState();
+}
+
+class _AnnualRecapWidgetState extends State<AnnualRecapWidget> {
+  int? _selectedYear;
+
+  @override
   Widget build(BuildContext context) {
-    if (records.isEmpty) {
+    if (widget.records.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final double totalNetBanque = records.fold(0.0, (sum, r) => sum + r.netSalary);
-    final double totalPrimes = records.fold(0.0, (sum, r) => sum + (r.bonusAmount ?? 0.0));
-    final double totalPEE = records.fold(0.0, (sum, r) => sum + r.companySavingsPEE);
-    final double totalPAS = records.fold(0.0, (sum, r) => sum + r.incomeTaxAmount.abs());
-    final double totalNetSocial = records.fold(0.0, (sum, r) => sum + r.netSocial);
-    final double totalGlobalComp = totalNetBanque + totalPEE;
+    final years = widget.records.map((r) => r.year).toSet().toList()..sort((a, b) => b.compareTo(a));
 
-    final bool hasTaxAdj = taxAdjustments != null && taxAdjustments!.isNotEmpty;
-    final double totalRealTaxDgfip = hasTaxAdj ? taxAdjustments!.fold(0.0, (sum, t) => sum + t.totalTaxNetDue) : 0.0;
-    final double totalRealMonthlyDgfip = hasTaxAdj ? taxAdjustments!.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear) : 0.0;
+    final filteredRecords = _selectedYear == null
+        ? widget.records
+        : widget.records.where((r) => r.year == _selectedYear).toList();
+
+    if (filteredRecords.isEmpty) return const SizedBox.shrink();
+
+    final double totalGross = filteredRecords.fold(0.0, (sum, r) => sum + (r.grossSalary ?? 0.0));
+    final double totalNetBanque = filteredRecords.fold(0.0, (sum, r) => sum + r.netSalary);
+    final double totalPrimes = filteredRecords.fold(0.0, (sum, r) => sum + (r.bonusAmount ?? 0.0));
+    final double totalPEE = filteredRecords.fold(0.0, (sum, r) => sum + r.companySavingsPEE);
+    final double totalPAS = filteredRecords.fold(0.0, (sum, r) => sum + r.incomeTaxAmount.abs());
+    final double totalNetSocial = filteredRecords.fold(0.0, (sum, r) => sum + r.netSocial);
+    final double totalGlobalComp = totalNetBanque + totalPEE;
+    final double totalBaseNet = totalNetBanque - totalPrimes;
+    final double totalCotisations = totalGross > totalNetSocial ? (totalGross - totalNetSocial) : 0.0;
+
+    final double netPctOfGross = totalGross > 0 ? (totalNetBanque / totalGross * 100) : 0.0;
+    final double basePctOfNet = totalNetBanque > 0 ? (totalBaseNet / totalNetBanque * 100) : 0.0;
+    final double primePctOfNet = totalNetBanque > 0 ? (totalPrimes / totalNetBanque * 100) : 0.0;
+    final double pasPctOfNetSocial = totalNetSocial > 0 ? (totalPAS / totalNetSocial * 100) : 0.0;
+    final double cotiPctOfGross = totalGross > 0 ? (totalCotisations / totalGross * 100) : 0.0;
+
+    final bool hasTaxAdj = widget.taxAdjustments != null && widget.taxAdjustments!.isNotEmpty;
+    final activeTaxAdj = (_selectedYear != null && hasTaxAdj)
+        ? widget.taxAdjustments!.where((t) => t.taxYear == _selectedYear).firstOrNull
+        : widget.taxAdjustments?.firstOrNull;
+
+    final double totalRealTaxDgfip = activeTaxAdj?.totalTaxNetDue ?? (hasTaxAdj ? widget.taxAdjustments!.fold(0.0, (sum, t) => sum + t.totalTaxNetDue) : 0.0);
+    final double totalRealMonthlyDgfip = activeTaxAdj?.monthlyRealTaxForYear ?? (hasTaxAdj ? widget.taxAdjustments!.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear) : 0.0);
+
+    final int monthCount = filteredRecords.length;
+    final bool isFullYear = _selectedYear != null && monthCount == 12;
+    final String completenessLabel = _selectedYear == null
+        ? '$monthCount mois suivis (Cumul global)'
+        : (isFullYear ? '$monthCount / 12 mois (Année complète ✓)' : '$monthCount / 12 mois (Année en cours ⏳)');
+
+    final Color completenessColor = _selectedYear == null
+        ? AppColors.accentGold
+        : (isFullYear ? AppColors.accentEmerald : AppColors.accentCyan);
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Column(
@@ -46,13 +83,13 @@ class AnnualRecapWidget extends StatelessWidget {
             children: [
               Row(
                 children: const [
-                  Icon(Icons.workspace_premium_rounded, color: AppColors.accentGold, size: 22),
+                  Icon(Icons.workspace_premium_rounded, color: AppColors.accentGold, size: 24),
                   SizedBox(width: 8),
                   Text(
                     'Bilan Annuel de Rémunération Globale',
                     style: TextStyle(
                       color: AppColors.textPrimary,
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -61,20 +98,33 @@ class AnnualRecapWidget extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.accentGold.withValues(alpha: 0.15),
+                  color: completenessColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.accentGold.withValues(alpha: 0.3)),
+                  border: Border.all(color: completenessColor.withValues(alpha: 0.3)),
                 ),
                 child: Text(
-                  '${records.length} mois suivis',
-                  style: const TextStyle(color: AppColors.accentGold, fontSize: 11, fontWeight: FontWeight.bold),
+                  completenessLabel,
+                  style: TextStyle(color: completenessColor, fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildYearChip(null, 'Toutes les périodes (${widget.records.length} mois)'),
+                for (int y in years) ...[
+                  const SizedBox(width: 8),
+                  _buildYearChip(y, '$y (${widget.records.where((r) => r.year == y).length}/12 m)'),
+                ]
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
 
-          // Total Net Global Card Banner
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -82,61 +132,136 @@ class AnnualRecapWidget extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'TOTAL NET ENMAGASINÉ (Banque + PEE)',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'TOTAL NET ENMAGASINÉ (Banque + PEE)',
+                              style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                            if (netPctOfGross > 0) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${netPctOfGross.toStringAsFixed(1)}% du Brut',
+                                  style: const TextStyle(color: AppColors.accentEmerald, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ]
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${totalGlobalComp.toStringAsFixed(2)} €',
+                          style: const TextStyle(color: AppColors.accentCyan, fontSize: 24, fontWeight: FontWeight.bold),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${totalGlobalComp.toStringAsFixed(2)} €',
-                      style: const TextStyle(color: AppColors.accentCyan, fontSize: 24, fontWeight: FontWeight.bold),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          hasTaxAdj ? 'Impôt Réel DGFiP (Avis)' : 'Rétention Fiscale Impôt IR (PAS)',
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          hasTaxAdj ? '${totalRealTaxDgfip.toStringAsFixed(0)} € / an' : '${totalPAS.toStringAsFixed(2)} € (${pasPctOfNetSocial.toStringAsFixed(1)}%)',
+                          style: const TextStyle(color: AppColors.accentRose, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        if (hasTaxAdj) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '(${totalRealMonthlyDgfip.toStringAsFixed(2)} €/mois • PAS Paie prov.: ${totalPAS.toStringAsFixed(0)} €)',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      hasTaxAdj ? 'Impôt Réel DGFiP (Avis 2025)' : 'Rétention Fiscale Impôt IR (PAS)',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      hasTaxAdj ? '${totalRealTaxDgfip.toStringAsFixed(0)} € / an' : '${totalPAS.toStringAsFixed(2)} €',
-                      style: const TextStyle(color: AppColors.accentRose, fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    if (hasTaxAdj) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        '(${totalRealMonthlyDgfip.toStringAsFixed(2)} €/mois • PAS Paie prov.: ${totalPAS.toStringAsFixed(0)} €)',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                if (totalGross > 0) ...[
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: SizedBox(
+                      height: 8,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: (netPctOfGross * 10).round().clamp(1, 1000),
+                            child: Container(color: AppColors.accentEmerald),
+                          ),
+                          if (cotiPctOfGross > 0)
+                            Expanded(
+                              flex: (cotiPctOfGross * 10).round().clamp(1, 1000),
+                              child: Container(color: AppColors.accentPurple),
+                            ),
+                          if (pasPctOfNetSocial > 0)
+                            Expanded(
+                              flex: (pasPctOfNetSocial * 10).round().clamp(1, 1000),
+                              child: Container(color: AppColors.accentRose),
+                            ),
+                        ],
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 16),
 
-          // Detailed Breakdown Table
           Table(
             columnWidths: const {
-              0: FlexColumnWidth(2),
-              1: FlexColumnWidth(1.5),
-              2: FlexColumnWidth(1.5),
+              0: FlexColumnWidth(2.2),
+              1: FlexColumnWidth(1.4),
+              2: FlexColumnWidth(1.4),
             },
             children: [
-              _buildTableRow('Salaire Net de Base Cumulé', '${(totalNetBanque - totalPrimes).toStringAsFixed(2)} €', AppColors.textPrimary, isHeader: false),
-              _buildTableRow('Primes & Variable Explicites', '${totalPrimes.toStringAsFixed(2)} €', AppColors.accentEmerald, isHeader: false),
-              _buildTableRow('Épargne Salariale PEE (Intéressement)', '${totalPEE.toStringAsFixed(2)} €', AppColors.accentGold, isHeader: false),
-              _buildTableRow('Net Social Avant Impôt (CSG/CRDS)', '${totalNetSocial.toStringAsFixed(2)} €', AppColors.accentPurple, isHeader: false),
+              _buildTableRow(
+                'Salaire Net de Base Cumulé',
+                '${totalBaseNet.toStringAsFixed(2)} €',
+                '${basePctOfNet.toStringAsFixed(1)}% du Net',
+                AppColors.textPrimary,
+              ),
+              _buildTableRow(
+                'Primes & Variable Explicites',
+                '${totalPrimes.toStringAsFixed(2)} €',
+                '${primePctOfNet.toStringAsFixed(1)}% du Net',
+                AppColors.accentEmerald,
+              ),
+              _buildTableRow(
+                'Épargne Salariale PEE (Intéressement)',
+                '${totalPEE.toStringAsFixed(2)} €',
+                totalPEE > 0 ? '${(totalPEE / totalGlobalComp * 100).toStringAsFixed(1)}% Global' : '0.0%',
+                AppColors.accentGold,
+              ),
+              _buildTableRow(
+                'Net Social Avant Impôt (CSG/CRDS)',
+                '${totalNetSocial.toStringAsFixed(2)} €',
+                totalGross > 0 ? '${(totalNetSocial / totalGross * 100).toStringAsFixed(1)}% du Brut' : '100.0%',
+                AppColors.accentPurple,
+              ),
+              if (totalGross > 0)
+                _buildTableRow(
+                  'Cotisations & Charges Sociales (Brut - Net Social)',
+                  '${totalCotisations.toStringAsFixed(2)} €',
+                  '${cotiPctOfGross.toStringAsFixed(1)}% du Brut',
+                  AppColors.textMuted,
+                ),
             ],
           ),
         ],
@@ -144,17 +269,44 @@ class AnnualRecapWidget extends StatelessWidget {
     );
   }
 
-  TableRow _buildTableRow(String title, String value, Color valueColor, {required bool isHeader}) {
+  Widget _buildYearChip(int? year, String label) {
+    final isSelected = _selectedYear == year;
+    return InkWell(
+      onTap: () => setState(() => _selectedYear = year),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.2) : AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? AppColors.accentCyan : AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  TableRow _buildTableRow(String title, String value, String percentage, Color valueColor) {
     return TableRow(
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
             title,
-            style: TextStyle(
-              color: isHeader ? AppColors.textSecondary : AppColors.textSecondary,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
               fontSize: 12,
-              fontWeight: isHeader ? FontWeight.bold : FontWeight.w500,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
@@ -166,6 +318,18 @@ class AnnualRecapWidget extends StatelessWidget {
             style: TextStyle(
               color: valueColor,
               fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            percentage,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11,
               fontWeight: FontWeight.bold,
             ),
           ),
