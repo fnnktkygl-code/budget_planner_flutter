@@ -21,7 +21,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final rawJson = prefs.getString('aura_salary_records');
+    final rawJson = prefs.getString('aura_salary_records_v2');
     if (rawJson != null && rawJson.isNotEmpty) {
       try {
         final List<dynamic> parsed = jsonDecode(rawJson);
@@ -31,25 +31,32 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
         state = SalaryState(records: []);
       }
     } else {
+      // Clean start for fresh user documents
       state = SalaryState(records: []);
+      // Clear legacy storage key
+      prefs.remove('aura_salary_records');
     }
   }
 
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = jsonEncode(state.records.map((r) => r.toJson()).toList());
-    prefs.setString('aura_salary_records', jsonStr);
+    prefs.setString('aura_salary_records_v2', jsonStr);
   }
 
   void addRecord(SalaryRecord record) {
-    // Remove existing record with same period if re-imported
+    // Remove any existing record with the exact same period to prevent duplicates
     List<SalaryRecord> updated = state.records
-        .where((r) => r.period != record.period)
+        .where((r) => r.period != record.period && r.periodLabel != record.periodLabel)
         .map((r) => r.copyWith(isLatestActive: false))
         .toList();
-    
+
     final activeRecord = record.copyWith(isLatestActive: true);
     updated.add(activeRecord);
+    
+    // Sort descending by period
+    updated.sort((a, b) => b.period.compareTo(a.period));
+
     state = SalaryState(records: updated);
     _save();
   }
@@ -79,9 +86,11 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     _save();
   }
 
-  void clearAllRecords() {
+  void clearAllRecords() async {
     state = SalaryState(records: []);
-    _save();
+    final prefs = await SharedPreferences.getInstance();
+    prefs.remove('aura_salary_records_v2');
+    prefs.remove('aura_salary_records');
   }
 }
 
