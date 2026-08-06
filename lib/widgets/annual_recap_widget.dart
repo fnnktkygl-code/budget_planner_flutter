@@ -38,7 +38,6 @@ class _AnnualRecapWidgetState extends State<AnnualRecapWidget> {
     final double totalNetBanque = filteredRecords.fold(0.0, (sum, r) => sum + r.netSalary);
     final double totalPrimes = filteredRecords.fold(0.0, (sum, r) => sum + (r.bonusAmount ?? 0.0));
     final double totalPEE = filteredRecords.fold(0.0, (sum, r) => sum + r.companySavingsPEE);
-    final double totalPAS = filteredRecords.fold(0.0, (sum, r) => sum + r.incomeTaxAmount.abs());
     final double totalNetSocial = filteredRecords.fold(0.0, (sum, r) => sum + r.netSocial);
     final double totalGlobalComp = totalNetBanque + totalPEE;
     final double totalBaseNet = totalNetBanque - totalPrimes;
@@ -47,17 +46,24 @@ class _AnnualRecapWidgetState extends State<AnnualRecapWidget> {
     final double netPctOfGross = totalGross > 0 ? (totalNetBanque / totalGross * 100) : 0.0;
     final double basePctOfNet = totalNetBanque > 0 ? (totalBaseNet / totalNetBanque * 100) : 0.0;
     final double primePctOfNet = totalNetBanque > 0 ? (totalPrimes / totalNetBanque * 100) : 0.0;
-    final double pasPctOfNetSocial = totalNetSocial > 0 ? (totalPAS / totalNetSocial * 100) : 0.0;
-    final double pasPctOfGross = totalGross > 0 ? (totalPAS / totalGross * 100) : 0.0;
-    final double cotiPctOfGross = totalGross > 0 ? (totalCotisations / totalGross * 100) : 0.0;
 
     final bool hasTaxAdj = widget.taxAdjustments != null && widget.taxAdjustments!.isNotEmpty;
     final activeTaxAdj = (_selectedYear != null && hasTaxAdj)
         ? widget.taxAdjustments!.where((t) => t.taxYear == _selectedYear).firstOrNull
         : widget.taxAdjustments?.firstOrNull;
 
+    final double rawRecordsPAS = filteredRecords.fold(0.0, (sum, r) => sum + r.incomeTaxAmount.abs());
+    final double totalPAS = (activeTaxAdj != null && activeTaxAdj.alreadyPaidPas > 0)
+        ? activeTaxAdj.alreadyPaidPas
+        : rawRecordsPAS;
+
     final double totalRealTaxDgfip = activeTaxAdj?.totalTaxNetDue ?? (hasTaxAdj ? widget.taxAdjustments!.fold(0.0, (sum, t) => sum + t.totalTaxNetDue) : 0.0);
     final double totalRealMonthlyDgfip = activeTaxAdj?.monthlyRealTaxForYear ?? (hasTaxAdj ? widget.taxAdjustments!.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear) : 0.0);
+
+    final double totalPASForPct = totalPAS > 0 ? totalPAS : rawRecordsPAS;
+    final double pasPctOfNetSocial = totalNetSocial > 0 ? (totalPASForPct / totalNetSocial * 100) : 0.0;
+    final double pasPctOfGross = totalGross > 0 ? (totalPASForPct / totalGross * 100) : 0.0;
+    final double cotiPctOfGross = totalGross > 0 ? (totalCotisations / totalGross * 100) : 0.0;
 
     final int monthCount = filteredRecords.length;
     final bool isFullYear = _selectedYear != null && monthCount == 12;
