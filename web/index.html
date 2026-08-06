@@ -12,13 +12,13 @@
     * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
 
     This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
+    `--base-href` argument provided to `flutter build`.
   -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="AuraBudget Pro — Planificateur Financier, Ingestion TrueLayer & Audit Salarial IA">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -29,51 +29,57 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>budget_planner_flutter</title>
+  <title>AuraBudget Pro — Audit Salarial & Caviardage IA</title>
   <link rel="manifest" href="manifest.json">
-  <!-- pdf.js library for Flutter Web PDF rendering -->
+
+  <!-- pdf.js library for Web PDF page rendering -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     if (typeof pdfjsLib !== 'undefined') {
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
 
-    window.renderPdfBase64ToDataUrl = async function(base64Str) {
+    window.renderPdfBase64WithCallback = function(base64Str, callbackName) {
       try {
-        const binaryString = atob(base64Str);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
+        var binaryString = atob(base64Str);
+        var len = binaryString.length;
+        var bytes = new Uint8Array(len);
+        for (var i = 0; i < len; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
-        const loadingTask = pdfjsLib.getDocument({ data: bytes });
-        const pdf = await loadingTask.promise;
-        const page = await pdf.getPage(1);
-        const viewport = page.getViewport({ scale: 2.0 });
-        
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+        pdfjsLib.getDocument({ data: bytes }).promise.then(function(pdf) {
+          pdf.getPage(1).then(function(page) {
+            var viewport = page.getViewport({ scale: 2.0 });
+            var canvas = document.createElement('canvas');
+            var context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
 
-        await page.render({ canvasContext: context, viewport: viewport }).promise;
-        return canvas.toDataURL('image/png');
+            page.render({ canvasContext: context, viewport: viewport }).promise.then(function() {
+              var dataUrl = canvas.toDataURL('image/png');
+              if (window[callbackName]) {
+                window[callbackName](dataUrl);
+              }
+            }).catch(function(err) {
+              console.error('PDF page render error:', err);
+              if (window[callbackName]) window[callbackName]('');
+            });
+          }).catch(function(err) {
+            console.error('PDF getPage error:', err);
+            if (window[callbackName]) window[callbackName]('');
+          });
+        }).catch(function(err) {
+          console.error('pdfjs getDocument error:', err);
+          if (window[callbackName]) window[callbackName]('');
+        });
       } catch (err) {
-        console.error('JS PDF Render Error:', err);
-        return null;
+        console.error('renderPdfBase64WithCallback exception:', err);
+        if (window[callbackName]) window[callbackName]('');
       }
     };
   </script>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

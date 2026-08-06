@@ -1,4 +1,5 @@
 // ignore_for_file: avoid_web_libraries_in_flutter
+import 'dart:async';
 import 'dart:convert';
 import 'dart:js' as js;
 import 'dart:typed_data';
@@ -31,6 +32,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   Uint8List? _customFileBytes;
   Uint8List? _renderedPdfImageBytes;
   String? _customFileName;
+  bool _isRenderingPdf = false;
 
   Offset? _startDrag;
   Offset? _currentDrag;
@@ -47,38 +49,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
-  Future<Uint8List?> _renderPdfToImageBytes(Uint8List pdfBytes) async {
-    // 1. JS Interop Base64 rendering on Web
-    if (kIsWeb) {
-      try {
-        final base64Str = base64Encode(pdfBytes);
-        final dataUrl = js.context.callMethod('renderPdfBase64ToDataUrl', [base64Str]);
-        if (dataUrl != null && dataUrl is String && dataUrl.startsWith('data:image')) {
-          final rawBase64 = dataUrl.split(',')[1];
-          return base64Decode(rawBase64);
-        }
-      } catch (e) {
-        debugPrint('[SalaryAuditScreen] JS PDF Render Error: $e');
-      }
-    }
-
-    // 2. Fallback to pdfx native rendering
-    try {
-      final pdfDoc = await PdfDocument.openData(pdfBytes);
-      final page = await pdfDoc.getPage(1);
-      final pageImage = await page.render(
-        width: page.width * 2,
-        height: page.height * 2,
-        format: PdfPageImageFormat.jpeg,
-      );
-      await pdfDoc.close();
-      return pageImage?.bytes;
-    } catch (e) {
-      debugPrint('[SalaryAuditScreen] Pdfx Render Error: $e');
-      return null;
-    }
-  }
-
   Future<void> _processUploadedFile(Uint8List bytes, String fileName) async {
     setState(() {
       _customFileBytes = bytes;
@@ -89,10 +59,58 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
     final isPdf = fileName.toLowerCase().endsWith('.pdf');
     if (isPdf) {
-      final imageBytes = await _renderPdfToImageBytes(bytes);
-      setState(() {
-        _renderedPdfImageBytes = imageBytes;
-      });
+      setState(() => _isRenderingPdf = true);
+
+      if (kIsWeb) {
+        final completer = Completer<Uint8List?>();
+
+        js.context['onPdfPageRendered'] = (dynamic dataUrl) {
+          if (dataUrl != null && dataUrl is String && dataUrl.startsWith('data:image')) {
+            final base64Str = dataUrl.split(',')[1];
+            completer.complete(base64Decode(base64Str));
+          } else {
+            completer.complete(null);
+          }
+        };
+
+        try {
+          final base64Pdf = base64Encode(bytes);
+          js.context.callMethod('renderPdfBase64WithCallback', [base64Pdf, 'onPdfPageRendered']);
+          final renderedBytes = await completer.future;
+
+          if (mounted) {
+            setState(() {
+              _renderedPdfImageBytes = renderedBytes;
+              _isRenderingPdf = false;
+            });
+          }
+        } catch (e) {
+          debugPrint('[SalaryAuditScreen] JS PDF Render Exception: $e');
+          if (mounted) setState(() => _isRenderingPdf = false);
+        }
+      } else {
+        // Native Desktop/Mobile Fallback
+        try {
+          final pdfDoc = await PdfDocument.openData(bytes);
+          final page = await pdfDoc.getPage(1);
+          final pageImage = await page.render(
+            width: page.width * 2,
+            height: page.height * 2,
+            format: PdfPageImageFormat.jpeg,
+          );
+          await pdfDoc.close();
+
+          if (mounted) {
+            setState(() {
+              _renderedPdfImageBytes = pageImage?.bytes;
+              _isRenderingPdf = false;
+            });
+          }
+        } catch (e) {
+          debugPrint('[SalaryAuditScreen] Native Pdfx Render Exception: $e');
+          if (mounted) setState(() => _isRenderingPdf = false);
+        }
+      }
     }
   }
 
@@ -316,7 +334,66 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
   }
 
   Widget _buildRealDocumentView() {
-    // 1. RENDERED PDF IMAGE PAGE (Via pdf.js canvas renderer)
+    // 1. EMPTY STATE : No file imported yet (NO MOCKUP DISPLAYED AT ALL)
+    if (_customFileBytes == null || _customFileBytes!.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.accentCyan.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.note_add_outlined, color: AppColors.accentCyan, size: 48),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Aucun bulletin importé',
+                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Veuillez cliquer sur le bouton "Importer mon bulletin" ci-dessous pour charger votre fichier PDF ou Image. Il s\'affichera directement ici pour vous permettre de caviarder vos données personnelles.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentCyan,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.file_upload_outlined, size: 20),
+                label: const Text('Importer mon bulletin (PDF / Image)', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: _pickUserPayslipFile,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 2. LOADING PDF RENDERER STATE
+    if (_isRenderingPdf) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: AppColors.accentCyan),
+            SizedBox(height: 16),
+            Text('Rendu visuel du bulletin PDF en cours...', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          ],
+        ),
+      );
+    }
+
+    // 3. RENDERED PDF IMAGE PAGE (Via pdf.js renderer)
     if (_renderedPdfImageBytes != null) {
       return InteractiveViewer(
         maxScale: 4.0,
@@ -330,105 +407,29 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
       );
     }
 
-    // 2. RENDER DIRECT IMAGE FILE IF USER UPLOADED PNG/JPG
-    if (_customFileBytes != null &&
-        _customFileName != null &&
-        (_customFileName!.endsWith('.png') ||
-            _customFileName!.endsWith('.jpg') ||
-            _customFileName!.endsWith('.jpeg'))) {
-      return InteractiveViewer(
-        maxScale: 4.0,
-        minScale: 1.0,
-        child: Image.memory(
-          _customFileBytes!,
-          fit: BoxFit.contain,
-          width: double.infinity,
-          height: double.infinity,
-        ),
-      );
-    }
-
-    // 3. FULL VISUAL PAYSLIP DOCUMENT SHEET (Matching Screenshot 1)
-    // NEVER show a dark box with PDF icon! ALWAYS show full payslip document!
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.all(20),
-      child: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 48),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // 4. RENDER DIRECT IMAGE FILE (PNG, JPG, JPEG)
+    return InteractiveViewer(
+      maxScale: 4.0,
+      minScale: 1.0,
+      child: Image.memory(
+        _customFileBytes!,
+        fit: BoxFit.contain,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (context, error, stackTrace) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _customFileName != null ? 'DOCUMENT : $_customFileName' : 'VESTAS FRANCE SAS PEROLS',
-                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11),
-                    ),
-                    const Text('BAT LATITUDE PARC DE L AEROPORT', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                    const Text('34470 PEROLS', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                    const Text('SIRET : 44084901600066', style: TextStyle(color: Colors.black87, fontSize: 9)),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: const [
-                    Text('BULLETIN DE PAIE', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-                    Text('DU : 01 JUILLET 2026', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                    Text('AU : 31 JUILLET 2026', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                    Text('NIR : 193109934108822', style: TextStyle(color: Colors.black87, fontSize: 9, fontWeight: FontWeight.bold)),
-                  ],
-                ),
+                const Icon(Icons.picture_as_pdf_rounded, color: AppColors.accentRose, size: 48),
+                const SizedBox(height: 12),
+                Text(_customFileName ?? 'Bulletin Importé', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                const Text('Erreur de rendu visuel de l\'image.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
               ],
             ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(8),
-              color: Colors.grey.shade200,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
-                  Text('SALARIÉ : NEGEM RICHARD', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
-                  Text('BRUT : 3 776,67 €', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              height: 260,
-              decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade400)),
-              child: Column(
-                children: [
-                  Container(color: Colors.grey.shade300, height: 20),
-                  Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text('APPOINTEMENTS FORFAIT : 3 776.67 €', style: TextStyle(color: Colors.black, fontSize: 11)),
-                        SizedBox(height: 4),
-                        Text('COTISATIONS SALARIALES : - 840.78 €', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                        SizedBox(height: 4),
-                        Text('TITRES REPAS DÉDUITS : - 52.80 €', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                        SizedBox(height: 4),
-                        Text('INDEMNITE TELETRAVAIL : + 15.00 €', style: TextStyle(color: Colors.black87, fontSize: 10)),
-                        SizedBox(height: 12),
-                        Text('MONTANT NET SOCIAL : 2 952.28 €', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
-                        Text('NET A PAYER : 2 713.74 €', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-                        SizedBox(height: 8),
-                        Text('IBAN : FR76 4061 8803 7300 0403 1180 429', style: TextStyle(color: Colors.black87, fontSize: 9, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -438,6 +439,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     final salaryState = ref.watch(salaryProvider);
     final records = salaryState.records;
     final analytics = salaryState.analytics;
+    final hasFileLoaded = _customFileBytes != null && _customFileBytes!.isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -474,7 +476,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                         icon: const Icon(Icons.folder_open_rounded, size: 16),
-                        label: Text(_customFileName ?? 'Charger PDF', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        label: Text(_customFileName ?? 'Charger PDF / Image', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         onPressed: _pickUserPayslipFile,
                       ),
                     ],
@@ -500,35 +502,37 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               height: 52,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentCyan,
-                  foregroundColor: Colors.white,
-                  elevation: 3,
+                  backgroundColor: hasFileLoaded ? AppColors.accentCyan : AppColors.cardBackground,
+                  foregroundColor: hasFileLoaded ? Colors.white : AppColors.textMuted,
+                  elevation: hasFileLoaded ? 3 : 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 icon: _isProcessing
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.psychology_rounded, size: 22),
                 label: const Text('Masquer & Analyser le document', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                onPressed: () async {
-                  setState(() => _isProcessing = true);
-                  final parsed = await SalaryParserService.parseDocument(
-                    fileBytes: _customFileBytes,
-                    fileName: _customFileName,
-                  );
-                  setState(() => _isProcessing = false);
+                onPressed: hasFileLoaded
+                    ? () async {
+                        setState(() => _isProcessing = true);
+                        final parsed = await SalaryParserService.parseDocument(
+                          fileBytes: _customFileBytes,
+                          fileName: _customFileName,
+                        );
+                        setState(() => _isProcessing = false);
 
-                  if (!mounted) return;
+                        if (!mounted) return;
 
-                  if (parsed.periodDetected) {
-                    final record = parsed.toSalaryRecord();
-                    ref.read(salaryProvider.notifier).addRecord(record);
-                    // ignore: use_build_context_synchronously
-                    _showSuccessDialog(context, parsed, parsed.period);
-                  } else {
-                    // ignore: use_build_context_synchronously
-                    _showPeriodWarningDialog(context, parsed);
-                  }
-                },
+                        if (parsed.periodDetected) {
+                          final record = parsed.toSalaryRecord();
+                          ref.read(salaryProvider.notifier).addRecord(record);
+                          // ignore: use_build_context_synchronously
+                          _showSuccessDialog(context, parsed, parsed.period);
+                        } else {
+                          // ignore: use_build_context_synchronously
+                          _showPeriodWarningDialog(context, parsed);
+                        }
+                      }
+                    : null,
               ),
             ),
             const SizedBox(height: 16),
@@ -596,12 +600,12 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
               width: double.infinity,
               child: Stack(
                 children: [
-                  // Full Document White Paper Card
+                  // Full Document Paper Card
                   Container(
                     width: double.infinity,
                     height: 540,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppColors.cardBackground,
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 4)),
@@ -612,11 +616,11 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                       borderRadius: BorderRadius.circular(20),
                       child: Stack(
                         children: [
-                          // Real Document Sheet (Screenshot 1 View)
+                          // Real Document Image (Zero Mockup Text!)
                           Positioned.fill(child: _buildRealDocumentView()),
 
                           // Interactive Redaction Canvas
-                          if (_canvasTab == 0)
+                          if (_canvasTab == 0 && hasFileLoaded)
                             Positioned.fill(
                               child: GestureDetector(
                                 onPanStart: (details) {
@@ -687,84 +691,86 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                   ),
 
                   // Draggable Redaction Toolbar Overlay
-                  Positioned(
-                    top: _toolbarPos.dy,
-                    left: _toolbarPos.dx,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppColors.cardBackground,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 10, offset: const Offset(0, 4)),
-                        ],
-                        border: Border.all(color: AppColors.borderSubtle),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          GestureDetector(
-                            onPanUpdate: (details) {
-                              setState(() {
-                                _toolbarPos += details.delta;
-                              });
-                            },
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 4),
-                              child: Icon(Icons.drag_indicator_rounded, color: AppColors.accentCyan, size: 22),
+                  if (hasFileLoaded)
+                    Positioned(
+                      top: _toolbarPos.dy,
+                      left: _toolbarPos.dx,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardBackground,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 10, offset: const Offset(0, 4)),
+                          ],
+                          border: Border.all(color: AppColors.borderSubtle),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onPanUpdate: (details) {
+                                setState(() {
+                                  _toolbarPos += details.delta;
+                                });
+                              },
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 4),
+                                child: Icon(Icons.drag_indicator_rounded, color: AppColors.accentCyan, size: 22),
+                              ),
                             ),
-                          ),
-                          const VerticalDivider(color: AppColors.borderSubtle, width: 1, indent: 6, endIndent: 6),
-                          IconButton(
-                            icon: Icon(Icons.touch_app_rounded, color: _selectedTool == RedactionTool.move ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
-                            onPressed: () => setState(() => _selectedTool = RedactionTool.move),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.edit_rounded, color: _selectedTool == RedactionTool.paint ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
-                            onPressed: () => setState(() => _selectedTool = RedactionTool.paint),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.crop_square_rounded, color: _selectedTool == RedactionTool.rect ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
-                            onPressed: () => setState(() => _selectedTool = RedactionTool.rect),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.circle_outlined, color: _selectedTool == RedactionTool.circle ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
-                            onPressed: () => setState(() => _selectedTool = RedactionTool.circle),
-                          ),
-                          const VerticalDivider(color: AppColors.borderSubtle, width: 1, indent: 6, endIndent: 6),
-                          IconButton(
-                            icon: Icon(Icons.undo_rounded, color: _redactor.canUndo ? AppColors.textPrimary : AppColors.textMuted, size: 20),
-                            onPressed: _redactor.canUndo ? () => setState(() => _redactor.undo()) : null,
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.redo_rounded, color: _redactor.canRedo ? AppColors.textPrimary : AppColors.textMuted, size: 20),
-                            onPressed: _redactor.canRedo ? () => setState(() => _redactor.redo()) : null,
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, color: AppColors.accentRose, size: 20),
-                            onPressed: () => setState(() => _redactor.clearAll()),
-                          ),
-                        ],
+                            const VerticalDivider(color: AppColors.borderSubtle, width: 1, indent: 6, endIndent: 6),
+                            IconButton(
+                              icon: Icon(Icons.touch_app_rounded, color: _selectedTool == RedactionTool.move ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
+                              onPressed: () => setState(() => _selectedTool = RedactionTool.move),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.edit_rounded, color: _selectedTool == RedactionTool.paint ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
+                              onPressed: () => setState(() => _selectedTool = RedactionTool.paint),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.crop_square_rounded, color: _selectedTool == RedactionTool.rect ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
+                              onPressed: () => setState(() => _selectedTool = RedactionTool.rect),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.circle_outlined, color: _selectedTool == RedactionTool.circle ? AppColors.accentCyan : AppColors.textSecondary, size: 20),
+                              onPressed: () => setState(() => _selectedTool = RedactionTool.circle),
+                            ),
+                            const VerticalDivider(color: AppColors.borderSubtle, width: 1, indent: 6, endIndent: 6),
+                            IconButton(
+                              icon: Icon(Icons.undo_rounded, color: _redactor.canUndo ? AppColors.textPrimary : AppColors.textMuted, size: 20),
+                              onPressed: _redactor.canUndo ? () => setState(() => _redactor.undo()) : null,
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.redo_rounded, color: _redactor.canRedo ? AppColors.textPrimary : AppColors.textMuted, size: 20),
+                              onPressed: _redactor.canRedo ? () => setState(() => _redactor.redo()) : null,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.accentRose, size: 20),
+                              onPressed: () => setState(() => _redactor.clearAll()),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
 
                   // Bottom-Right Floating Eye Toggle Button
-                  Positioned(
-                    bottom: 20,
-                    right: 20,
-                    child: FloatingActionButton(
-                      backgroundColor: AppColors.accentCyan,
-                      foregroundColor: Colors.white,
-                      elevation: 6,
-                      onPressed: () {
-                        setState(() {
-                          _isMaskVisible = !_isMaskVisible;
-                        });
-                      },
-                      child: Icon(_isMaskVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                  if (hasFileLoaded)
+                    Positioned(
+                      bottom: 20,
+                      right: 20,
+                      child: FloatingActionButton(
+                        backgroundColor: AppColors.accentCyan,
+                        foregroundColor: Colors.white,
+                        elevation: 6,
+                        onPressed: () {
+                          setState(() {
+                            _isMaskVisible = !_isMaskVisible;
+                          });
+                        },
+                        child: Icon(_isMaskVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
