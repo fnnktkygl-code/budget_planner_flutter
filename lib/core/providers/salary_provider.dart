@@ -49,6 +49,9 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
         .map((r) => r.copyWith(isLatestActive: false))
         .toList();
 
+    // Remove any duplicate period entry
+    updated.removeWhere((r) => r.id == record.id);
+
     final activeRecord = record.copyWith(isLatestActive: true);
     updated.add(activeRecord);
 
@@ -66,12 +69,9 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
         .map((r) => r.copyWith(isLatestActive: false))
         .toList();
 
-    final existingIds = updated.map((r) => r.id).toSet();
     for (var r in newRecords) {
-      if (!existingIds.contains(r.id)) {
-        updated.add(r.copyWith(isLatestActive: false));
-        existingIds.add(r.id);
-      }
+      updated.removeWhere((existing) => existing.id == r.id);
+      updated.add(r.copyWith(isLatestActive: false));
     }
 
     // Set the latest chronological record as active baseline
