@@ -193,12 +193,13 @@ class SalaryParserService {
       bonusDesc = 'Prime de Performance';
     }
 
-    // Pattern d'extraction haute précision (euros et centimes séparés par espace, virgule ou point)
-    const String numPattern = r'(\d{1,6})(?:[\s,\.](\d{2}))?(?!\d)';
+    // Pattern d'extraction haute précision pour montants salariaux (3 à 6 chiffres pour les euros ex: 2713, 4400)
+    // Ne matche PAS les chiffres isolés de la formule 1-2+3-4
+    const String numPattern = r'(\d{3,6})(?:[\s,\.](\d{2}))?(?!\d)';
 
     // PRIORITY 1A: Number PRECEDING "EN EUROS VIREMENT", "VIREMENT", "NET VERSÉ" (ex: " 2713 74 \n EN EUROS VIREMENT")
     final numBeforeVirementRegExp = RegExp(
-      numPattern + r'[^\d]{0,50}(?:EN\s+EUROS\s+VIREMENT|VIREMENT|NET\s+VERS[EÉ]|SUR\s+VOTRE\s+COMPTE|NET\s+PAY[EÉ])',
+      numPattern + r'[^\d]{0,60}(?:EN\s+EUROS\s+VIREMENT|VIREMENT|NET\s+VERS[EÉ]|SUR\s+VOTRE\s+COMPTE|NET\s+PAY[EÉ])',
       caseSensitive: false,
     );
 
