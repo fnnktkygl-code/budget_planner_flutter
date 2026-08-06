@@ -103,7 +103,12 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     if (rawTaxJson != null && rawTaxJson.isNotEmpty) {
       try {
         final List<dynamic> parsedTax = jsonDecode(rawTaxJson);
-        taxList = parsedTax.map((item) => TaxAdjustment.fromJson(item)).toList();
+        final rawTaxList = parsedTax.map((item) => TaxAdjustment.fromJson(item)).toList();
+        final Map<int, TaxAdjustment> uniqueByYear = {};
+        for (var t in rawTaxList) {
+          uniqueByYear[t.taxYear] = t;
+        }
+        taxList = uniqueByYear.values.toList();
       } catch (_) {}
     }
 
