@@ -58,7 +58,7 @@ class RealParsedPayslip {
     final yearMonth = customPeriod ??
         '${date.year}-${date.month < 10 ? "0${date.month}" : "${date.month}"}';
     
-    // Strict factual value: no dummy hardcoded 2713.74 € fallback ever!
+    // Strict factual value: net after tax received on bank account (Net versé sur le compte)
     final finalNet = customNet ?? netPayable;
 
     return SalaryRecord(
@@ -154,7 +154,7 @@ class SalaryParserService {
     return null;
   }
 
-  /// Scans extracted PDF text or Latin1 byte text strictly for French payslip financial figures
+  /// Scans extracted PDF text or Latin1 byte text strictly for Net After Tax (Net versé sur le compte)
   static Map<String, dynamic>? _scanPdfTextForFinancials(Uint8List? fileBytes, String? rawTextContent) {
     final StringBuffer textBuffer = StringBuffer();
 
@@ -196,13 +196,13 @@ class SalaryParserService {
     // Pattern d'extraction haute précision (euros et centimes séparés par espace, virgule ou point)
     const String numPattern = r'(\d{1,6})(?:[\s,\.](\d{2}))?(?!\d)';
 
-    // 1. Net à payer avant impôt / Net à payer / Net versé / Net fiscal (parcours complet allMatches)
-    final netRegExp = RegExp(
-      r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE|NET\s+FISCAL)[^\d]*' + numPattern,
+    // PRIORITY 1: NET APRES IMPOT / NET VERSE SUR LE COMPTE / VIREMENT
+    final netAfterTaxRegExp = RegExp(
+      r'(?:NET\s+VERS[EÉ]|NET\s+PAY[EÉ]|NET\s+A\s+PAYER\s+APR[EÈ]S\s+IMP[OÔ]T|MONTANT\s+NET\s+VERS[EÉ]|EN\s+EUROS\s+VIREMENT|VIREMENT|SOLDE\s+DE\s+TOUT\s+COMPTE)[^\d]*' + numPattern,
       caseSensitive: false,
     );
 
-    for (final match in netRegExp.allMatches(fullText)) {
+    for (final match in netAfterTaxRegExp.allMatches(fullText)) {
       final euros = match.group(1)!;
       final centimes = match.group(2) ?? '00';
       final val = double.tryParse('$euros.$centimes');
@@ -212,13 +212,30 @@ class SalaryParserService {
       }
     }
 
-    // Fallback: Recherche virement / solde net sur allMatches
+    // PRIORITY 2: General NET A PAYER (if net after tax line wasn't matched explicitly above)
     if (foundNet == null) {
-      final virementRegExp = RegExp(
-        r'(?:EN\s+EUROS\s+VIREMENT|VIREMENT|SOLDE\s+DE\s+TOUT\s+COMPTE)[^\d]*' + numPattern,
+      final netGeneralRegExp = RegExp(
+        r'(?:NET\s+A\s+PAYER|NET\s+PAYABLE|NET\s+FISCAL)[^\d]*' + numPattern,
         caseSensitive: false,
       );
-      for (final match in virementRegExp.allMatches(fullText)) {
+      for (final match in netGeneralRegExp.allMatches(fullText)) {
+        final euros = match.group(1)!;
+        final centimes = match.group(2) ?? '00';
+        final val = double.tryParse('$euros.$centimes');
+        if (val != null && val >= 500.0 && val <= 30000.0) {
+          foundNet = val;
+          break;
+        }
+      }
+    }
+
+    // PRIORITY 3: NET A PAYER AVANT IMPOT (only as secondary fallback if net after tax is missing)
+    if (foundNet == null) {
+      final netBeforeTaxRegExp = RegExp(
+        r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT)[^\d]*' + numPattern,
+        caseSensitive: false,
+      );
+      for (final match in netBeforeTaxRegExp.allMatches(fullText)) {
         final euros = match.group(1)!;
         final centimes = match.group(2) ?? '00';
         final val = double.tryParse('$euros.$centimes');
@@ -257,11 +274,6 @@ class SalaryParserService {
         foundGross = val;
         break;
       }
-    }
-
-    // Si foundNet est null mais que foundNetSocial est extrait factuellement, utiliser Net Social
-    if (foundNet == null && foundNetSocial != null) {
-      foundNet = foundNetSocial;
     }
 
     if (foundNet != null || foundNetSocial != null || foundGross != null) {
@@ -326,9 +338,9 @@ class SalaryParserService {
                       'text': '''
 Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulletin et renvoie STRICTEMENT un JSON valide :
 - period (String format YYYY-MM ex: "2026-03" ou "2026-07")
-- grossSalary (double: Salaire brut mensuel)
+- grossSalary (double: Total salaire brut)
 - netSocial (double: Montant Net Social)
-- netPayable (double: Salaire Net à Payer avant impôt ou Net versé sur le compte bancaire)
+- netPayable (double: STRICTEMENT le Salaire Net VERSÉ sur le compte bancaire APRÈS IMPÔT SUR LE REVENU / Prélèvement à la source. NE PRENDS PAS le Net avant impôt !)
 - hasExplicitBonus (boolean: true uniquement si une ligne de PRIME DE VACANCES, 13EME MOIS, BONUS ou PRIME EXCEPTIONNELLE est présente)
 - bonusDescription (String: Intitulé exact de la prime si présente, sinon null)
 '''
@@ -373,10 +385,10 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
               grossSalary: parsedGross >= 500.0 ? parsedGross : (scannedFinancials?['gross'] ?? 0.0),
               netSocial: parsedSocial >= 500.0 ? parsedSocial : (scannedFinancials?['netSocial'] ?? 0.0),
               netPayable: parsedNet >= 500.0 ? parsedNet : (scannedFinancials?['net'] ?? 0.0),
-              socialContributions: -840.78,
-              mealTickets: -52.80,
+              socialContributions: 0.0,
+              mealTickets: 0.0,
               teleworkAllowance: 0.0,
-              nonTaxableAllowance: 34.13,
+              nonTaxableAllowance: 0.0,
               hasExplicitBonus: (jsonMap['hasExplicitBonus'] as bool?) ?? (scannedFinancials?['hasExplicitBonus'] ?? false),
               bonusDescription: jsonMap['bonusDescription'] ?? scannedFinancials?['bonusDescription'],
               isParsedFromDocument: true,
@@ -419,10 +431,10 @@ Tu es un expert comptable spécialisé dans la paie française. Analyse ce bulle
       grossSalary: grossVal,
       netSocial: netSocialVal,
       netPayable: netVal,
-      socialContributions: -840.78,
-      mealTickets: -52.80,
+      socialContributions: 0.0,
+      mealTickets: 0.0,
       teleworkAllowance: 0.0,
-      nonTaxableAllowance: 34.13,
+      nonTaxableAllowance: 0.0,
       hasExplicitBonus: scannedFinancials?['hasExplicitBonus'] ?? false,
       bonusDescription: scannedFinancials?['bonusDescription'],
       isParsedFromDocument: isParsed,
