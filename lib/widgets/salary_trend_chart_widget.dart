@@ -29,20 +29,21 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
   int? _selectedYear; // null = All periods
 
   double _getRetroactiveNet(SalaryRecord record) {
-    if (widget.taxAdjustments == null || widget.taxAdjustments!.isEmpty) {
+    final currentYear = DateTime.now().year;
+    final year = record.year;
+
+    // Reconciliation applies ONLY to completed past years with Avis d'Imposition
+    if (year >= currentYear || widget.taxAdjustments == null || widget.taxAdjustments!.isEmpty) {
       return record.netSalary;
     }
-    final yearStr = record.period.split('-').first;
-    final year = int.tryParse(yearStr) ?? 0;
-    
-    // Find tax adjustment matching this year
+
     final adjList = widget.taxAdjustments!.where((t) => t.taxYear == year).toList();
     if (adjList.isEmpty) {
       return record.netSalary;
     }
-    
+
     final monthlyRealTax = adjList.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear);
-    return max(0.0, record.netSocial - monthlyRealTax);
+    return max(0.0, record.regularNetSocial - monthlyRealTax);
   }
 
   @override
@@ -444,14 +445,15 @@ class _SalaryChartPainter extends CustomPainter {
   double _getVal(SalaryRecord r) {
     if (viewMode == 1) return r.regularNetSocial;
     if (viewMode == 2) {
-      if (taxAdjustments != null && taxAdjustments!.isNotEmpty) {
-        final year = r.year;
-        final adjList = taxAdjustments!.where((t) => t.taxYear == year).toList();
+      final currentYear = DateTime.now().year;
+      if (r.year < currentYear && taxAdjustments != null && taxAdjustments!.isNotEmpty) {
+        final adjList = taxAdjustments!.where((t) => t.taxYear == r.year).toList();
         if (adjList.isNotEmpty) {
           final monthlyRealTax = adjList.fold(0.0, (sum, t) => sum + t.monthlyRealTaxForYear);
           return max(0.0, r.regularNetSocial - monthlyRealTax);
         }
       }
+      return r.regularNetSalary;
     }
     return r.regularNetSalary;
   }
