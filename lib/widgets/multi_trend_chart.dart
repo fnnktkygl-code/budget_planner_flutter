@@ -24,6 +24,7 @@ class MultiTrendChartWidget extends StatefulWidget {
 class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
   bool _includeIncomeTax = true; // With PAS vs Before PAS
   int? _hoverIndex;
+  int? _selectedYear;
 
   @override
   Widget build(BuildContext context) {
@@ -43,9 +44,19 @@ class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
       );
     }
 
+    final availableYears = widget.records.map((r) => r.year).toSet().toList()..sort((a, b) => b.compareTo(a));
+
     // Sort records chronologically by period key
-    final sorted = List<SalaryRecord>.from(widget.records)
+    final allSorted = List<SalaryRecord>.from(widget.records)
       ..sort((a, b) => a.period.compareTo(b.period));
+
+    final sorted = _selectedYear == null
+        ? allSorted
+        : allSorted.where((r) => r.year == _selectedYear).toList();
+
+    if (sorted.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     final salaryValues = sorted.map((r) {
       double baseNet = _includeIncomeTax ? r.netSalary : r.netSocial;
@@ -143,6 +154,19 @@ class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildMultiChartYearChip(null, 'Toutes les périodes (${widget.records.length} m)'),
+                for (int y in availableYears) ...[
+                  const SizedBox(width: 8),
+                  _buildMultiChartYearChip(y, '$y (${widget.records.where((r) => r.year == y).length} m)'),
+                ]
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
 
           // Multi-Curve Canvas Area with Hover & Touch Gestures
@@ -214,6 +238,35 @@ class _MultiTrendChartWidgetState extends State<MultiTrendChartWidget> {
           style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
         ),
       ],
+    );
+  }
+  Widget _buildMultiChartYearChip(int? year, String label) {
+    final isSelected = _selectedYear == year;
+    return InkWell(
+      onTap: () => setState(() {
+        _selectedYear = year;
+        _hoverIndex = null;
+      }),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.2) : AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? AppColors.accentCyan : AppColors.textSecondary,
+            fontSize: 10,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
     );
   }
 }

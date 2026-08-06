@@ -26,6 +26,7 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
   int? _hoverIndex;
   int _viewMode = 0; // 0: En Banque (Net), 1: Avant Impôt (Net Social), 2: Réel Après DGFiP
   bool _separateBonus = true;
+  int? _selectedYear; // null = All periods
 
   double _getRetroactiveNet(SalaryRecord record) {
     if (widget.taxAdjustments == null || widget.taxAdjustments!.isEmpty) {
@@ -50,9 +51,19 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
       return const SizedBox.shrink();
     }
 
+    final availableYears = widget.records.map((r) => r.year).toSet().toList()..sort((a, b) => b.compareTo(a));
+
     // Chronological order (oldest to newest) for line graph
-    final sortedRecords = List<SalaryRecord>.from(widget.records)
+    final allSortedRecords = List<SalaryRecord>.from(widget.records)
       ..sort((a, b) => a.period.compareTo(b.period));
+
+    final sortedRecords = _selectedYear == null
+        ? allSortedRecords
+        : allSortedRecords.where((r) => r.year == _selectedYear).toList();
+
+    if (sortedRecords.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     final hoverIndex = _hoverIndex != null && _hoverIndex! < sortedRecords.length
         ? _hoverIndex!
@@ -169,6 +180,19 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
                 ],
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildChartYearChip(null, 'Toutes les périodes (${widget.records.length} m)'),
+                for (int y in availableYears) ...[
+                  const SizedBox(width: 8),
+                  _buildChartYearChip(y, '$y (${widget.records.where((r) => r.year == y).length} m)'),
+                ]
+              ],
+            ),
           ),
           const SizedBox(height: 20),
 
@@ -322,6 +346,36 @@ class _SalaryTrendChartWidgetState extends State<SalaryTrendChartWidget> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildChartYearChip(int? year, String label) {
+    final isSelected = _selectedYear == year;
+    return InkWell(
+      onTap: () => setState(() {
+        _selectedYear = year;
+        _hoverIndex = null;
+      }),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.2) : AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? AppColors.accentCyan : AppColors.textSecondary,
+            fontSize: 10,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
       ),
     );
   }
