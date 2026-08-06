@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show zlib;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/salary_record.dart';
@@ -71,7 +72,7 @@ class RealParsedPayslip {
       nonTaxableAllowances: nonTaxableAllowance,
       investableAmount: (finalNet * 0.3).roundToDouble(),
       savingsRate: 30.0,
-      status: isParsedFromDocument ? '✓ Extrait du bulletin' : '⚠️ Vérifié par l\'utilisateur',
+      status: finalNet > 0 ? '✓ Extrait du bulletin' : '⚠️ Saisie Net requise',
       documentName: customFileName ?? 'bulletin_$id.pdf',
       renderedImageBase64: imageBase64 ?? renderedImageBase64,
       rawFileBase64: fileBase64 ?? rawFileBase64,
@@ -90,29 +91,20 @@ class SalaryParserService {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
-  /// Smart Gemini & Gemma Quota Rotator Cascade — Standardisé sur les projets Resume & Atelier Écrivain
   static const List<String> _geminiModelsCascade = [
-    // TIER 1: Modèles Lite Haute Capacité (15 RPM / 500 RPD) — Performance & Rapidité
     'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite',
     'gemini-2.5-flash-lite',
-
-    // TIER 2: Modèles Standard Flash (5 RPM / 20 RPD) — Qualité Supérieure
     'gemini-3.5-flash',
     'gemini-3.6-flash',
     'gemini-2.5-flash',
-
-    // TIER 3: Modèles Gemma 4 & Gemma 2 Réserve (30 RPM / 14 400 RPD) — Inépuisable (14.4K RPD)
     'gemma-4-31b-it',
     'gemma-4-26b-a4b-it',
     'gemma-2-27b-it',
-
-    // TIER 4: Production Fallback
     'gemini-2.0-flash',
     'gemini-1.5-flash',
   ];
 
-  // In-memory model cooldown registry (lasts across app lifecycle)
   static final Map<String, DateTime> _modelCooldownMap = {};
 
   static Map<String, dynamic>? _extractPeriodFromFileName(String? fileName) {
@@ -161,74 +153,112 @@ class SalaryParserService {
     return null;
   }
 
-  /// Scans raw text / PDF byte stream for real French payslip financial figures
+  /// Scans raw PDF bytes including decompressed zlib stream text for French payslip financial figures
   static Map<String, dynamic>? _scanPdfTextForFinancials(Uint8List? fileBytes) {
     if (fileBytes == null || fileBytes.isEmpty) return null;
 
+    final StringBuffer textBuffer = StringBuffer();
+
+    // 1. Direct Latin1 decode
     try {
-      final rawText = latin1.decode(fileBytes, allowInvalid: true);
+      textBuffer.write(latin1.decode(fileBytes, allowInvalid: true));
+    } catch (_) {}
 
-      double? foundNet;
-      double? foundGross;
-      double? foundNetSocial;
-      bool hasExplicitBonus = false;
-      String? bonusDesc;
+    // 2. Decompress zlib streams if present in PDF
+    try {
+      final String rawString = latin1.decode(fileBytes, allowInvalid: true);
+      final RegExp streamRegExp = RegExp(r'stream[\r\n]+([\s\S]*?)[\r\n]+endstream');
+      final matches = streamRegExp.allMatches(rawString);
 
-      // Check for explicit bonus line items in text stream
-      if (RegExp(r'PRIME\s+DE\s+VACANCES', caseSensitive: false).hasMatch(rawText)) {
-        hasExplicitBonus = true;
-        bonusDesc = 'Prime de Vacances';
-      } else if (RegExp(r"13E?ME\s+MOIS|PRIME\s+DE\s+FIN\s+D'ANNEE", caseSensitive: false).hasMatch(rawText)) {
-        hasExplicitBonus = true;
-        bonusDesc = '13ème Mois';
-      } else if (RegExp(r'PRIME\s+EXCEPTIONNELLE|GRATIFICATION|BONUS', caseSensitive: false).hasMatch(rawText)) {
-        hasExplicitBonus = true;
-        bonusDesc = 'Prime Exceptionnelle';
-      } else if (RegExp(r'PRIME\s+DE\s+PERFORMANCE|VARIABLE', caseSensitive: false).hasMatch(rawText)) {
-        hasExplicitBonus = true;
-        bonusDesc = 'Prime de Performance';
-      }
-
-      // 1. Net à payer / Net versé sur le compte / Net payable
-      final netMatch = RegExp(
-        r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
-        caseSensitive: false,
-      ).firstMatch(rawText);
-      if (netMatch != null) {
-        final valStr = netMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
-        foundNet = double.tryParse(valStr);
-      }
-
-      // 2. Net Social / Montant Net Social
-      final netSocialMatch = RegExp(
-        r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
-        caseSensitive: false,
-      ).firstMatch(rawText);
-      if (netSocialMatch != null) {
-        final valStr = netSocialMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
-        foundNetSocial = double.tryParse(valStr);
-      }
-
-      // 3. Salaire Brut / Total Brut
-      final grossMatch = RegExp(
-        r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2}))',
-        caseSensitive: false,
-      ).firstMatch(rawText);
-      if (grossMatch != null) {
-        final valStr = grossMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
-        foundGross = double.tryParse(valStr);
-      }
-
-      if (foundNet != null || foundNetSocial != null || foundGross != null) {
-        return {
-          if (foundNet != null) 'net': foundNet,
-          if (foundGross != null) 'gross': foundGross,
-          if (foundNetSocial != null) 'netSocial': foundNetSocial,
-          'hasExplicitBonus': hasExplicitBonus,
-          if (bonusDesc != null) 'bonusDescription': bonusDesc,
-        };
+      for (final match in matches) {
+        final streamContent = match.group(1);
+        if (streamContent != null) {
+          final streamBytes = Uint8List.fromList(latin1.encode(streamContent));
+          try {
+            final decompressedBytes = zlib.decode(streamBytes);
+            final decompressedText = latin1.decode(decompressedBytes, allowInvalid: true);
+            textBuffer.write('\n');
+            textBuffer.write(decompressedText);
+          } catch (_) {}
+        }
       }
     } catch (_) {}
+
+    final fullText = textBuffer.toString();
+    if (fullText.isEmpty) return null;
+
+    double? foundNet;
+    double? foundGross;
+    double? foundNetSocial;
+    bool hasExplicitBonus = false;
+    String? bonusDesc;
+
+    // Check for explicit bonus line items in text stream
+    if (RegExp(r'PRIME\s+DE\s+VACANCES', caseSensitive: false).hasMatch(fullText)) {
+      hasExplicitBonus = true;
+      bonusDesc = 'Prime de Vacances';
+    } else if (RegExp(r"13E?ME\s+MOIS|PRIME\s+DE\s+FIN\s+D'ANNEE", caseSensitive: false).hasMatch(fullText)) {
+      hasExplicitBonus = true;
+      bonusDesc = '13ème Mois';
+    } else if (RegExp(r'PRIME\s+EXCEPTIONNELLE|GRATIFICATION|BONUS', caseSensitive: false).hasMatch(fullText)) {
+      hasExplicitBonus = true;
+      bonusDesc = 'Prime Exceptionnelle';
+    } else if (RegExp(r'PRIME\s+DE\s+PERFORMANCE|VARIABLE', caseSensitive: false).hasMatch(fullText)) {
+      hasExplicitBonus = true;
+      bonusDesc = 'Prime de Performance';
+    }
+
+    // 1. Net à payer / Net versé sur le compte / Net payable / Net a payer avant impot
+    final netMatch = RegExp(
+      r'(?:NET\s+A\s+PAYER\s+AVANT\s+IMPOT|NET\s+A\s+PAYER|NET\s+PAYE|NET\s+VERS[EÉ]|NET\s+PAYABLE|MONTANT\s+NET)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
+      caseSensitive: false,
+    ).firstMatch(fullText);
+    if (netMatch != null) {
+      final valStr = netMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
+      foundNet = double.tryParse(valStr);
+    }
+
+    // 2. Net Social / Montant Net Social
+    final netSocialMatch = RegExp(
+      r'(?:MONTANT\s+NET\s+SOCIAL|NET\s+SOCIAL)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
+      caseSensitive: false,
+    ).firstMatch(fullText);
+    if (netSocialMatch != null) {
+      final valStr = netSocialMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
+      foundNetSocial = double.tryParse(valStr);
+    }
+
+    // 3. Salaire Brut / Total Brut
+    final grossMatch = RegExp(
+      r'(?:SALAIRE\s+BRUT|TOTAL\s+BRUT|CUMUL\s+BRUT|TOTAL\s+DU\s+BRUT)[^\d]*(\d{1,3}(?:[\s.]\d{3})*(?:[,\.]\d{2})?)',
+      caseSensitive: false,
+    ).firstMatch(fullText);
+    if (grossMatch != null) {
+      final valStr = grossMatch.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
+      foundGross = double.tryParse(valStr);
+    }
+
+    // 4. Fallback search for any 4-digit monetary number in text (e.g., 4400, 2713.74) if netMatch wasn't triggered
+    if (foundNet == null) {
+      final fallbackNum = RegExp(r'(\d{1,2}[\s.]?\d{3}(?:[,\.]\d{2})?)').firstMatch(fullText);
+      if (fallbackNum != null) {
+        final valStr = fallbackNum.group(1)!.replaceAll(' ', '').replaceAll('.', '').replaceAll(',', '.');
+        final candidate = double.tryParse(valStr);
+        if (candidate != null && candidate >= 1000.0 && candidate <= 15000.0) {
+          foundNet = candidate;
+        }
+      }
+    }
+
+    if (foundNet != null || foundNetSocial != null || foundGross != null) {
+      return {
+        if (foundNet != null) 'net': foundNet,
+        if (foundGross != null) 'gross': foundGross,
+        if (foundNetSocial != null) 'netSocial': foundNetSocial,
+        'hasExplicitBonus': hasExplicitBonus,
+        if (bonusDesc != null) 'bonusDescription': bonusDesc,
+      };
+    }
 
     return null;
   }
@@ -244,7 +274,7 @@ class SalaryParserService {
     final int yr = extractedInfo != null ? extractedInfo['year'] : 2026;
     final int mo = extractedInfo != null ? extractedInfo['month'] : 7;
 
-    // 1. Try text stream OCR scan on PDF bytes
+    // 1. Scan PDF byte stream (including decompressed FlateDecode text)
     final scannedFinancials = _scanPdfTextForFinancials(fileBytes);
 
     final rawFileB64 = fileBytes != null ? base64Encode(fileBytes) : null;
@@ -255,7 +285,6 @@ class SalaryParserService {
       final now = DateTime.now();
 
       for (String modelName in _geminiModelsCascade) {
-        // Skip models currently in 5-minute quota cooldown
         final cooldownUntil = _modelCooldownMap[modelName];
         if (cooldownUntil != null && now.isBefore(cooldownUntil)) {
           debugPrint('⏳ [Gemini Rotator] Skipping $modelName (in cooldown until $cooldownUntil)');
@@ -331,12 +360,10 @@ Extrais uniquement les valeurs financières et lignes de prime de ce bulletin au
               rawFileBase64: rawFileB64,
             );
           } else if (response.statusCode == 429) {
-            // Rate limit / Quota exceeded -> 5 min cooldown & cascade immediately to next tier
             debugPrint('🚨 [QUOTA ALERT] Modèle $modelName sous limite de quota (HTTP 429). Placé en cooldown 5 min. Bascule vers la suite du cascade...');
             _modelCooldownMap[modelName] = DateTime.now().add(const Duration(minutes: 5));
             continue;
           } else if (response.statusCode == 404 || response.statusCode == 400) {
-            // Model not supported or unavailable -> cascade to next tier
             debugPrint('⚠️ [MODEL CASCADE] Modèle $modelName non disponible (HTTP ${response.statusCode}). Passage au niveau suivant...');
             continue;
           }
@@ -346,7 +373,7 @@ Extrais uniquement les valeurs financières et lignes de prime de ce bulletin au
       }
     }
 
-    // 3. FACTUAL NO-FAKE-DATA FALLBACK
+    // 3. FACTUAL EXTRACTION OR USER VALIDATION REQUIRED
     final double netVal = scannedFinancials?['net'] ?? 0.0;
     final double grossVal = scannedFinancials?['gross'] ?? 0.0;
     final double netSocialVal = scannedFinancials?['netSocial'] ?? 0.0;

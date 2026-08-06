@@ -361,13 +361,25 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
           Navigator.pop(context); // Close batch modal
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('🎉 Importation Réussie : ${batchRecords.length} bulletins analysés & ajoutés !'),
-            backgroundColor: AppColors.accentEmerald,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        final zeroCount = batchRecords.where((r) => r.netSalary == 0.0).length;
+        if (zeroCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ $zeroCount bulletin(s) sur ${batchRecords.length} ont été importés. Veuillez cliquer sur la période pour indiquer le salaire net exact.'),
+              backgroundColor: AppColors.accentRose,
+              duration: const Duration(seconds: 6),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🎉 Importation Réussie : ${batchRecords.length} bulletins analysés & ajoutés avec succès !'),
+              backgroundColor: AppColors.accentEmerald,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('[SalaryAuditScreen] Pick Multiple Files Exception: $e');
