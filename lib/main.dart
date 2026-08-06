@@ -68,6 +68,7 @@ class ResponsiveMainLayout extends StatefulWidget {
 
 class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   int _currentIndex = 0;
+  bool _isSidebarCollapsed = false;
 
   final List<Widget> _screens = const [
     DashboardScreen(),     // Index 0
@@ -94,15 +95,23 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
         final isDesktop = constraints.maxWidth >= 900;
 
         if (isDesktop) {
-          // Desktop Layout: Permanent Left Sidebar + Content Area
+          // Desktop Layout: Collapsible Left Sidebar + Content Area
           return Scaffold(
             backgroundColor: AppColors.background,
             body: Row(
               children: [
-                SizedBox(
-                  width: 270,
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  width: _isSidebarCollapsed ? 76 : 260,
                   child: AppDrawerWidget(
                     currentIndex: _currentIndex,
+                    isCollapsed: _isSidebarCollapsed,
+                    onToggleCollapse: () {
+                      setState(() {
+                        _isSidebarCollapsed = !_isSidebarCollapsed;
+                      });
+                    },
                     onSelectScreen: (index) {
                       setState(() {
                         _currentIndex = index;
@@ -151,19 +160,19 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
                   label: 'Tableau',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.account_tree_outlined),
+                  icon: Icon(Icons.tune_rounded),
                   label: 'Règles',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.document_scanner_outlined),
-                  label: 'Bulletin',
+                  icon: Icon(Icons.receipt_long_rounded),
+                  label: 'Bulletins',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.savings_outlined),
+                  icon: Icon(Icons.savings_rounded),
                   label: 'Épargne',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.settings_outlined),
+                  icon: Icon(Icons.settings_rounded),
                   label: 'Config',
                 ),
               ],

@@ -5,11 +5,13 @@ import 'banking_modal.dart';
 class NotificationHeaderWidget extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
+  final VoidCallback? onToggleSidebar;
 
   const NotificationHeaderWidget({
     super.key,
     required this.title,
     this.actions,
+    this.onToggleSidebar,
   });
 
   @override
@@ -156,8 +158,15 @@ class NotificationHeaderWidget extends StatelessWidget implements PreferredSizeW
       elevation: 0,
       leading: Builder(
         builder: (context) => IconButton(
-          icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary, size: 24),
-          onPressed: () => Scaffold.of(context).openDrawer(),
+          icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary, size: 22),
+          onPressed: () {
+            if (onToggleSidebar != null) {
+              onToggleSidebar!();
+            } else if (Scaffold.of(context).hasDrawer) {
+              Scaffold.of(context).openDrawer();
+            }
+          },
+          tooltip: 'Basculer le menu',
         ),
       ),
       title: Row(
@@ -173,12 +182,44 @@ class NotificationHeaderWidget extends StatelessWidget implements PreferredSizeW
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 4),
-          const Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 16),
         ],
       ),
       actions: [
         if (actions != null) ...actions!,
+        
+        // Synchro Bank Status Indicator Button
+        InkWell(
+          onTap: () {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => const BankingModalContent(),
+            );
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.accentEmerald.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.circle, color: AppColors.accentEmerald, size: 8),
+                SizedBox(width: 6),
+                Text(
+                  'Synchro OK',
+                  style: TextStyle(color: AppColors.accentEmerald, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+
         // Notification Bell Icon with Badge Counter
         Stack(
           alignment: Alignment.topRight,
@@ -207,17 +248,6 @@ class NotificationHeaderWidget extends StatelessWidget implements PreferredSizeW
               ),
             ),
           ],
-        ),
-        IconButton(
-          icon: const Icon(Icons.account_balance_rounded, color: AppColors.accentCyan, size: 22),
-          onPressed: () {
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (_) => const BankingModalContent(),
-            );
-          },
         ),
         const SizedBox(width: 8),
       ],
