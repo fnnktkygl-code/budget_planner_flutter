@@ -89,10 +89,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final nonTaxable = activeBaseline?.nonTaxableAllowances ?? 34.13;
 
     final segments = [
-      AllocationSegment(label: 'Charges', percentage: 51, color: AppColors.chartRed),
-      AllocationSegment(label: 'Cible PEA', percentage: 35, color: AppColors.chartBlue),
-      AllocationSegment(label: 'Livret A', percentage: 7, color: AppColors.chartYellow),
-      AllocationSegment(label: 'Reste à vivre', percentage: 7, color: AppColors.chartGreen),
+      AllocationSegment(
+        id: 'charges',
+        label: 'Charges',
+        percentage: 51,
+        color: AppColors.chartRed,
+        subItems: [
+          AllocationSubItem(name: 'Loyer', amount: 677.00, subtext: 'Charge fixe incompressible'),
+          AllocationSubItem(name: 'Abonnements & Médias', amount: 41.00, subtext: 'Internet, Téléphone, Streaming'),
+          AllocationSubItem(name: 'Tontine', amount: 300.00, subtext: 'Cotisation tontine mensuelle'),
+          AllocationSubItem(name: 'Soutien Familial', amount: 231.00, subtext: 'Contribution mensuelle'),
+        ],
+      ),
+      AllocationSegment(
+        id: 'pea',
+        label: 'Cible PEA',
+        percentage: 35,
+        color: AppColors.chartBlue,
+        subItems: [
+          AllocationSubItem(name: 'DCA ETF MSCI World / S&P 500', amount: (netSalary * 0.35), subtext: 'Investissement actions long terme'),
+        ],
+      ),
+      AllocationSegment(
+        id: 'livret_a',
+        label: 'Livret A',
+        percentage: 7,
+        color: AppColors.chartYellow,
+        subItems: [
+          AllocationSubItem(name: 'Fond d\'urgence / Épargne liquide', amount: (netSalary * 0.07), subtext: 'Épargne de précaution disponible'),
+        ],
+      ),
+      AllocationSegment(
+        id: 'reste_a_vivre',
+        label: 'Reste à vivre',
+        percentage: 7,
+        color: AppColors.chartGreen,
+        subItems: [
+          AllocationSubItem(name: 'Dépenses courantes Revolut', amount: (netSalary * 0.07), subtext: 'Courses, loisirs & vie quotidienne'),
+        ],
+      ),
     ];
 
     return Scaffold(
@@ -189,7 +224,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: _buildAllocationCard(segments)),
+                      Expanded(child: _buildAllocationCard(segments, netSalary)),
                       const SizedBox(width: 16),
                       Expanded(child: _buildNetIncomeCard(activeBaseline, grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable)),
                     ],
@@ -197,7 +232,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 } else {
                   return Column(
                     children: [
-                      _buildAllocationCard(segments),
+                      _buildAllocationCard(segments, netSalary),
                       const SizedBox(height: 16),
                       _buildNetIncomeCard(activeBaseline, grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable),
                     ],
@@ -211,7 +246,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildAllocationCard(List<AllocationSegment> segments) {
+  Widget _buildAllocationCard(List<AllocationSegment> segments, double netSalary) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -247,7 +282,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          DonutChartWidget(segments: segments),
+          DonutChartWidget(segments: segments, netSalary: netSalary),
         ],
       ),
     );
