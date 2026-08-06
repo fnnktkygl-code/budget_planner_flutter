@@ -2,30 +2,48 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/salary_record.dart';
+import '../../models/tax_adjustment.dart';
 import '../../services/salary_analyzer_service.dart';
 
 class SalaryState {
   final List<SalaryRecord> records;
+  final List<TaxAdjustment> taxAdjustments;
 
-  SalaryState({required this.records});
+  SalaryState({
+    required this.records,
+    this.taxAdjustments = const [],
+  });
 
   SalaryRecord? get activeBaseline => getActiveBaselineSalary(records);
 
   SalaryAnalytics get analytics => computeSalaryAnalytics(records);
+
+  double get activeTaxAdjustmentMonthlyInstallment {
+    double total = 0;
+    for (var adj in taxAdjustments) {
+      total += adj.monthlyInstallment;
+    }
+    return total;
+  }
 }
 
 class SalaryNotifier extends StateNotifier<SalaryState> {
-  SalaryNotifier() : super(SalaryState(records: [])) {
+  SalaryNotifier() : super(SalaryState(records: [], taxAdjustments: [])) {
     init();
   }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final rawJson = prefs.getString('aura_salary_records_v3');
+    final rawTaxJson = prefs.getString('aura_tax_adjustments_v1');
+
+    List<SalaryRecord> list = [];
+    List<TaxAdjustment> taxList = [];
+
     if (rawJson != null && rawJson.isNotEmpty) {
       try {
         final List<dynamic> parsed = jsonDecode(rawJson);
-        final list = parsed.map((item) => SalaryRecord.fromJson(item)).toList();
+        list = parsed.map((item) => SalaryRecord.fromJson(item)).toList();
         
         // Ensure sorted chronologically descending by period (newest month first)
         list.sort((a, b) => b.period.compareTo(a.period));
@@ -35,14 +53,22 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
           list[0] = list[0].copyWith(isLatestActive: true);
         }
 
-        state = SalaryState(records: list);
+        state = SalaryState(records: list, taxAdjustments: state.taxAdjustments);
       } catch (_) {
-        state = SalaryState(records: []);
+        state = SalaryState(records: [], taxAdjustments: state.taxAdjustments);
       }
     } else {
-      state = SalaryState(records: []);
+      state = SalaryState(records: [], taxAdjustments: state.taxAdjustments);
       prefs.remove('aura_salary_records');
       prefs.remove('aura_salary_records_v2');
+    }
+
+    if (rawTaxJson != null && rawTaxJson.isNotEmpty) {
+      try {
+        final List<dynamic> parsedTax = jsonDecode(rawTaxJson);
+        taxList = parsedTax.map((item) => TaxAdjustment.fromJson(item)).toList();
+        state = SalaryState(records: list, taxAdjustments: taxList);
+      } catch (_) {}
     }
   }
 
@@ -50,6 +76,9 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = jsonEncode(state.records.map((r) => r.toJson()).toList());
     prefs.setString('aura_salary_records_v3', jsonStr);
+
+    final taxJsonStr = jsonEncode(state.taxAdjustments.map((t) => t.toJson()).toList());
+    prefs.setString('aura_tax_adjustments_v1', taxJsonStr);
   }
 
   void addRecord(SalaryRecord record) {
@@ -129,12 +158,26 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     _save();
   }
 
+  void addTaxAdjustment(TaxAdjustment adjustment) {
+    final updated = state.taxAdjustments.where((t) => t.id != adjustment.id).toList();
+    updated.add(adjustment);
+    state = SalaryState(records: state.records, taxAdjustments: updated);
+    _save();
+  }
+
+  void deleteTaxAdjustment(String id) {
+    final updated = state.taxAdjustments.where((t) => t.id != id).toList();
+    state = SalaryState(records: state.records, taxAdjustments: updated);
+    _save();
+  }
+
   void clearAllRecords() async {
-    state = SalaryState(records: []);
+    state = SalaryState(records: [], taxAdjustments: []);
     final prefs = await SharedPreferences.getInstance();
     prefs.remove('aura_salary_records_v3');
     prefs.remove('aura_salary_records_v2');
     prefs.remove('aura_salary_records');
+    prefs.remove('aura_tax_adjustments_v1');
   }
 }
 

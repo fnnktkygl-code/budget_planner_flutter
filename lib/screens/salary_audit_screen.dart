@@ -13,6 +13,7 @@ import 'package:pdfx/pdfx.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
 import '../models/salary_record.dart';
+import '../models/tax_adjustment.dart';
 import '../services/redactor_engine.dart';
 import '../services/salary_parser_service.dart';
 import '../widgets/notification_header.dart';
@@ -918,6 +919,208 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     );
   }
 
+  void _showAddTaxAdjustmentDialog(BuildContext context, {TaxAdjustment? existing}) {
+    final yearCtrl = TextEditingController(text: (existing?.taxYear ?? 2025).toString());
+    final labelCtrl = TextEditingController(text: existing?.label ?? "Avis d'Imposition DGFiP");
+    final grossCtrl = TextEditingController(text: (existing?.grossAmount ?? 3000.0).toStringAsFixed(0));
+    final deductionCtrl = TextEditingController(text: (existing?.deductionAmount ?? 700.0).toStringAsFixed(0));
+
+    int selectedStartMonth = 9; // Septembre
+    int monthsCount = 4; // 4 mois
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final gross = double.tryParse(grossCtrl.text) ?? 0.0;
+            final deduction = double.tryParse(deductionCtrl.text) ?? 0.0;
+            final netDue = (gross - deduction).clamp(0.0, 100000.0);
+            final monthly = monthsCount > 0 ? netDue / monthsCount : netDue;
+
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: const [
+                  Icon(Icons.account_balance_rounded, color: AppColors.accentCyan, size: 22),
+                  SizedBox(width: 10),
+                  Text('Avis d\'Imposition / Rattrapage DGFiP', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Saisissez le rappel réclamé par la DGFiP (ex: suite à un PAS non prélevé l\'an dernier) et vos réductions (ex: pension alimentaire parents).',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: labelCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Intitulé de la régularisation',
+                        labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        border: OutlineInputBorder(),
+                      ),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: yearCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Année Fiscale',
+                              labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                              border: OutlineInputBorder(),
+                            ),
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: grossCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            onChanged: (_) => setModalState(() {}),
+                            decoration: const InputDecoration(
+                              labelText: 'Rappel Brut (€)',
+                              labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                              border: OutlineInputBorder(),
+                              suffixText: '€',
+                            ),
+                            style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: deductionCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (_) => setModalState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Réduction / Déduction (ex: Pension Parents)',
+                        labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        border: OutlineInputBorder(),
+                        suffixText: '€',
+                      ),
+                      style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Étalement des Prélèvements Bancaires :', style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            value: selectedStartMonth,
+                            dropdownColor: AppColors.cardBackground,
+                            decoration: const InputDecoration(labelText: 'Mois Début', border: OutlineInputBorder()),
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                            items: const [
+                              DropdownMenuItem(value: 8, child: Text('Août')),
+                              DropdownMenuItem(value: 9, child: Text('Septembre')),
+                              DropdownMenuItem(value: 10, child: Text('Octobre')),
+                              DropdownMenuItem(value: 11, child: Text('Novembre')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) setModalState(() => selectedStartMonth = val);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            value: monthsCount,
+                            dropdownColor: AppColors.cardBackground,
+                            decoration: const InputDecoration(labelText: 'Nombre Mensualités', border: OutlineInputBorder()),
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                            items: const [
+                              DropdownMenuItem(value: 1, child: Text('1 mois (Comptant)')),
+                              DropdownMenuItem(value: 2, child: Text('2 mois')),
+                              DropdownMenuItem(value: 3, child: Text('3 mois')),
+                              DropdownMenuItem(value: 4, child: Text('4 mois (Sept-Déc)')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) setModalState(() => monthsCount = val);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Solde Net à Payer :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                              Text('${netDue.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 14)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Mensualité Prélevée :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                              Text('${monthly.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 14)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text('Annuler', style: TextStyle(color: AppColors.textSecondary)),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Enregistrer la Régularisation'),
+                  onPressed: () {
+                    final yr = int.tryParse(yearCtrl.text) ?? 2025;
+                    final startM = selectedStartMonth < 10 ? '0$selectedStartMonth' : '$selectedStartMonth';
+                    final adj = TaxAdjustment(
+                      id: existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                      label: labelCtrl.text.isEmpty ? "Avis d'Imposition DGFiP" : labelCtrl.text,
+                      taxYear: yr,
+                      grossAmount: double.tryParse(grossCtrl.text) ?? 0.0,
+                      deductionAmount: double.tryParse(deductionCtrl.text) ?? 0.0,
+                      startPeriod: '2026-$startM',
+                      monthsCount: monthsCount,
+                    );
+
+                    ref.read(salaryProvider.notifier).addTaxAdjustment(adj);
+                    Navigator.of(ctx).pop();
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildCanvasWorkspaceCard(BuildContext context, bool hasFileLoaded) {
     return SizedBox(
       height: 560,
@@ -1410,12 +1613,142 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                 AnnualRecapWidget(records: records),
                 const SizedBox(height: 20),
 
+                // Avis d'Imposition & Rattrapage Fiscale DGFiP Card
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBackground,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.account_balance_rounded, color: AppColors.accentCyan, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Avis d\'Imposition & Régularisation DGFiP',
+                                style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentCyan,
+                              foregroundColor: Colors.white,
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: const Icon(Icons.add_rounded, size: 16),
+                            label: const Text('Déclarer un Avis', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            onPressed: () => _showAddTaxAdjustmentDialog(context),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (salaryState.taxAdjustments.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.borderSubtle),
+                          ),
+                          child: const Text(
+                            'Aucune régularisation d\'impôt déclarée. Si la DGFiP vous réclame un solde de régularisation (ex: suite à un PAS non prélevé l\'an dernier), déclarez-le ici avec vos réductions (ex: pension parents) pour l\'étaler sur votre budget.',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                        )
+                      else
+                        Column(
+                          children: salaryState.taxAdjustments.map((adj) {
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.borderSubtle),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(adj.label, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.accentRose.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text('Rappel ${adj.taxYear} : ${adj.grossAmount.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.accentRose, fontSize: 9, fontWeight: FontWeight.bold)),
+                                            ),
+                                            if (adj.deductionAmount > 0) ...[
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Text('Réduction : -${adj.deductionAmount.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold)),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Étalé sur ${adj.monthsCount} mois (début ${adj.startPeriod}) • Solde Net dû : ${adj.netTaxDue.toStringAsFixed(2)} €',
+                                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '-${adj.monthlyInstallment.toStringAsFixed(2)} €/mois',
+                                        style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
+                                    onPressed: () {
+                                      ref.read(salaryProvider.notifier).deleteTaxAdjustment(adj.id);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
                 // Fiscal KPI Summary Bar
                 Builder(
                   builder: (context) {
                     final double cumulTax = records.fold(0.0, (sum, r) => sum + r.incomeTaxAmount);
                     final double avgTaxRate = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.incomeTaxRatePercent) / records.length : 0.0;
                     final double avgNetSocial = records.isNotEmpty ? records.fold(0.0, (sum, r) => sum + r.netSocial) / records.length : 0.0;
+                    final double activeMonthlyAdj = salaryState.activeTaxAdjustmentMonthlyInstallment;
 
                     return Container(
                       padding: const EdgeInsets.all(16),
@@ -1449,6 +1782,16 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                               Text('${cumulTax != 0.0 ? cumulTax.toStringAsFixed(2) : "0.00"} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
                             ],
                           ),
+                          if (activeMonthlyAdj > 0) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Mensualité Étalée Avis DGFiP :', style: TextStyle(color: AppColors.accentRose, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text('-${activeMonthlyAdj.toStringAsFixed(2)} € / mois', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     );

@@ -396,8 +396,9 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     final salary = ref.watch(salaryProvider);
     final netSalary = salary.activeBaseline?.netSalary ?? 2713.74;
 
+    final taxMonthly = salary.activeTaxAdjustmentMonthlyInstallment;
     final totalSavings = _savingsCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
-    final totalFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
+    final totalFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary)) + taxMonthly;
     final totalDaily = _dailyCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
 
     final resteAVivre = netSalary - totalSavings - totalFixed - totalDaily;
@@ -575,7 +576,34 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             // Section 2: CHARGES FIXES INCOMPRESSIBLES
             _buildSectionHeader('CHARGES FIXES INCOMPRESSIBLES', totalFixed, netSalary, AppColors.chartRed),
             const SizedBox(height: 12),
-            _buildCategoryGroupCard(_fixedChargesCategories, netSalary, allowDelete: true, onAdd: () => _showAddCategoryDialog(_fixedChargesCategories, 'Charge', AppColors.accentRose)),
+            _buildCategoryGroupCard(
+              _fixedChargesCategories,
+              netSalary,
+              allowDelete: true,
+              onAdd: () => _showAddCategoryDialog(_fixedChargesCategories, 'Charge', AppColors.accentRose),
+              extraWidget: taxMonthly > 0
+                  ? Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentRose.withValues(alpha: 0.1),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.account_balance_rounded, color: AppColors.accentRose, size: 18),
+                              SizedBox(width: 10),
+                              Text('Impôts DGFiP (Régularisation Étalée)', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                          Text('-${taxMonthly.toStringAsFixed(2)} €/mois', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
+                        ],
+                      ),
+                    )
+                  : null,
+            ),
 
             const SizedBox(height: 24),
 
@@ -631,6 +659,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     double netSalary, {
     required bool allowDelete,
     required VoidCallback onAdd,
+    Widget? extraWidget,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -640,6 +669,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
       ),
       child: Column(
         children: [
+          if (extraWidget != null) extraWidget,
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
