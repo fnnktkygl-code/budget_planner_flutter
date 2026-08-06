@@ -90,11 +90,30 @@ class SalaryParserService {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
-  static const List<String> _geminiModels = [
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
+  /// Smart Gemini & Gemma Quota Rotator Cascade — Standardisé sur les projets Resume & Atelier Écrivain
+  static const List<String> _geminiModelsCascade = [
+    // TIER 1: Modèles Lite Haute Capacité (15 RPM / 500 RPD) — Performance & Rapidité
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-2.5-flash-lite',
+
+    // TIER 2: Modèles Standard Flash (5 RPM / 20 RPD) — Qualité Supérieure
+    'gemini-3.5-flash',
+    'gemini-3.6-flash',
+    'gemini-2.5-flash',
+
+    // TIER 3: Modèles Gemma 4 & Gemma 2 Réserve (30 RPM / 14 400 RPD) — Inépuisable (14.4K RPD)
+    'gemma-4-31b-it',
+    'gemma-4-26b-a4b-it',
+    'gemma-2-27b-it',
+
+    // TIER 4: Production Fallback
     'gemini-2.0-flash',
+    'gemini-1.5-flash',
   ];
+
+  // In-memory model cooldown registry (lasts across app lifecycle)
+  static final Map<String, DateTime> _modelCooldownMap = {};
 
   static Map<String, dynamic>? _extractPeriodFromFileName(String? fileName) {
     if (fileName == null || fileName.isEmpty) return null;
@@ -230,11 +249,19 @@ class SalaryParserService {
 
     final rawFileB64 = fileBytes != null ? base64Encode(fileBytes) : null;
 
-    // 2. Try Gemini Vision AI API if API key provided
+    // 2. Multi-Tier Model Rotator (Gemini 3.5/3.1/2.5 Flash Lite -> Standard Flash -> Gemma 4/2 Reserve -> Gemini 2.0/1.5)
     if (fileBytes != null && fileBytes.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
       final base64Data = base64Encode(fileBytes);
+      final now = DateTime.now();
 
-      for (String modelName in _geminiModels) {
+      for (String modelName in _geminiModelsCascade) {
+        // Skip models currently in 5-minute quota cooldown
+        final cooldownUntil = _modelCooldownMap[modelName];
+        if (cooldownUntil != null && now.isBefore(cooldownUntil)) {
+          debugPrint('⏳ [Gemini Rotator] Skipping $modelName (in cooldown until $cooldownUntil)');
+          continue;
+        }
+
         try {
           final url = Uri.parse(
             'https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey',
@@ -281,6 +308,8 @@ Extrais uniquement les valeurs financières et lignes de prime de ce bulletin au
             final parsedPeriod = jsonMap['period'] as String?;
             final bool hasGeminiPeriod = parsedPeriod != null && parsedPeriod.isNotEmpty && parsedPeriod != 'null';
 
+            debugPrint('✅ [AI MODEL SUCCESS] Bulletin analysé via le modèle tier : $modelName');
+
             return RealParsedPayslip(
               id: 'payslip-$yr${mo < 10 ? "0$mo" : "$mo"}-${(fileName?.hashCode ?? 0).abs() % 10000}',
               employeeName: '[Caviardé]',
@@ -301,15 +330,23 @@ Extrais uniquement les valeurs financières et lignes de prime de ce bulletin au
               isParsedFromDocument: true,
               rawFileBase64: rawFileB64,
             );
+          } else if (response.statusCode == 429) {
+            // Rate limit / Quota exceeded -> 5 min cooldown & cascade immediately to next tier
+            debugPrint('🚨 [QUOTA ALERT] Modèle $modelName sous limite de quota (HTTP 429). Placé en cooldown 5 min. Bascule vers la suite du cascade...');
+            _modelCooldownMap[modelName] = DateTime.now().add(const Duration(minutes: 5));
+            continue;
+          } else if (response.statusCode == 404 || response.statusCode == 400) {
+            // Model not supported or unavailable -> cascade to next tier
+            debugPrint('⚠️ [MODEL CASCADE] Modèle $modelName non disponible (HTTP ${response.statusCode}). Passage au niveau suivant...');
+            continue;
           }
         } catch (e) {
-          debugPrint('[SalaryParserService] Model $modelName error: $e');
+          debugPrint('⚠️ [MODEL CASCADE] Erreur sur $modelName: $e. Passage au niveau suivant...');
         }
       }
     }
 
     // 3. FACTUAL NO-FAKE-DATA FALLBACK
-    // If no AI key and no text stream match: return exact extracted values or 0.00 so user validates explicitly in modal!
     final double netVal = scannedFinancials?['net'] ?? 0.0;
     final double grossVal = scannedFinancials?['gross'] ?? 0.0;
     final double netSocialVal = scannedFinancials?['netSocial'] ?? 0.0;
