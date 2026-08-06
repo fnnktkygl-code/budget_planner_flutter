@@ -253,11 +253,25 @@ class _AnnualRecapWidgetState extends State<AnnualRecapWidget> {
                 AppColors.textPrimary,
               ),
               _buildTableRow(
-                'Retenue Impôt sur le Revenu (PAS Prlevé)',
+                'Retenue Impôt sur le Revenu (PAS Prélevé sur Paie)',
                 '${totalPAS.toStringAsFixed(2)} €',
                 '${pasPctOfNetSocial.toStringAsFixed(1)}% du Social • ${pasPctOfGross.toStringAsFixed(1)}% Brut',
                 AppColors.accentRose,
               ),
+              if (hasTaxAdj && totalRealTaxDgfip > 0)
+                _buildTableRow(
+                  'Impôt Réel DGFiP (Selon Avis d\'Imposition)',
+                  '${totalRealTaxDgfip.toStringAsFixed(2)} €',
+                  totalNetSocial > 0 ? '${(totalRealTaxDgfip / totalNetSocial * 100).toStringAsFixed(1)}% du Social' : '0.0%',
+                  AppColors.accentRose,
+                ),
+              if (hasTaxAdj && (totalRealTaxDgfip - totalPAS).abs() > 1.0)
+                _buildTableRow(
+                  'Solde / Régularisation DGFiP (Écart à payer)',
+                  '${(totalRealTaxDgfip - totalPAS) > 0 ? "+" : ""}${(totalRealTaxDgfip - totalPAS).toStringAsFixed(2)} €',
+                  (totalRealTaxDgfip - totalPAS) > 0 ? 'Rattrapage DGFiP' : 'Remboursement DGFiP',
+                  (totalRealTaxDgfip - totalPAS) > 0 ? AppColors.accentRose : AppColors.accentEmerald,
+                ),
               _buildTableRow(
                 'Salaire Net de Base Récurrent',
                 '${totalBaseNet.toStringAsFixed(2)} €',
