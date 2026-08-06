@@ -79,40 +79,60 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Notification Bar Banner
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.accentCyan.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.bolt_rounded, color: AppColors.accentCyan, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'VESTAS FRANCE SAS PEROLS | Salarié : NEGEM RICHARD (${activeBaseline?.periodLabel ?? "Juillet 2026"})',
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+            // Top Interactive Payslip Selector Dropdown Banner
+            InkWell(
+              onTap: () => _showPayslipSelectorDialog(context, salaryState.records, activeBaseline),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.accentCyan.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.bolt_rounded, color: AppColors.accentCyan, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '${activeBaseline?.employerName ?? "VESTAS FRANCE SAS PEROLS"} | Salarié : ${activeBaseline?.employeeName ?? "NEGEM RICHARD"} (${activeBaseline?.periodLabel ?? "Juillet 2026"})',
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.accentCyan, size: 18),
+                        ],
                       ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentEmerald.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentEmerald.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.swap_horiz_rounded, color: AppColors.accentEmerald, size: 12),
+                          SizedBox(width: 4),
+                          Text(
+                            'Changer de Bulletin',
+                            style: TextStyle(color: AppColors.accentEmerald, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: const Text(
-                      'Validé IA',
-                      style: TextStyle(color: AppColors.accentEmerald, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -273,6 +293,190 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               const SizedBox(height: 20),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  void _showPayslipSelectorDialog(BuildContext context, List<SalaryRecord> records, SalaryRecord? activeBaseline) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filteredRecords = records.where((r) {
+              final q = searchQuery.toLowerCase();
+              return r.periodLabel.toLowerCase().contains(q) ||
+                     r.employerName.toLowerCase().contains(q) ||
+                     r.employeeName.toLowerCase().contains(q) ||
+                     r.period.toLowerCase().contains(q);
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.description_rounded, color: AppColors.accentCyan, size: 22),
+                      SizedBox(width: 10),
+                      Text(
+                        'Sélectionner un Bulletin',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textMuted),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 500,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Search Bar Field
+                    TextField(
+                      onChanged: (val) => setDialogState(() => searchQuery = val),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'Rechercher un mois, année (ex: 2026, Juillet)...',
+                        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                        prefixIcon: const Icon(Icons.search_rounded, color: AppColors.accentCyan, size: 20),
+                        filled: true,
+                        fillColor: AppColors.cardBackground,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.borderSubtle),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.borderSubtle),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.accentCyan),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 320),
+                      child: records.isEmpty
+                          ? Container(
+                              padding: const EdgeInsets.all(20),
+                              child: const Text(
+                                'Aucun bulletin enregistré. Importez votre premier bulletin depuis l\'onglet Bulletins & Salaires !',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filteredRecords.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final record = filteredRecords[index];
+                                final isActive = record.id == activeBaseline?.id || record.isLatestActive;
+
+                                return InkWell(
+                                  onTap: () {
+                                    ref.read(salaryProvider.notifier).setActiveBaseline(record.id);
+                                    Navigator.pop(ctx);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('⚡ Bulletin actif basculé sur : ${record.periodLabel} (${record.netSalary.toStringAsFixed(2)} € Net)'),
+                                        backgroundColor: AppColors.accentEmerald,
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isActive ? AppColors.accentCyan.withValues(alpha: 0.15) : AppColors.cardBackground,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isActive ? AppColors.accentCyan : AppColors.borderSubtle,
+                                        width: isActive ? 1.5 : 1.0,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isActive ? Icons.check_circle_rounded : Icons.insert_drive_file_outlined,
+                                          color: isActive ? AppColors.accentCyan : AppColors.textMuted,
+                                          size: 22,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    record.periodLabel,
+                                                    style: TextStyle(
+                                                      color: isActive ? AppColors.accentCyan : AppColors.textPrimary,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                  if (record.hasExplicitBonus) ...[
+                                                    const SizedBox(width: 8),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: AppColors.accentGold.withValues(alpha: 0.2),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                      ),
+                                                      child: const Text('⚡ Bonus', style: TextStyle(color: AppColors.accentGold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '${record.employerName} • ${record.employeeName}',
+                                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              '${record.netSalary.toStringAsFixed(2)} €',
+                                              style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
+                                            ),
+                                            if (isActive)
+                                              const Text('ACTIF', style: TextStyle(color: AppColors.accentCyan, fontSize: 9, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );

@@ -48,6 +48,11 @@ class SalaryRecord {
   /// Remarques additionnelles
   final String? notes;
 
+  /// Nom de l'employeur
+  String get employerName => "VESTAS FRANCE SAS PEROLS";
+  /// Nom du salarié
+  String get employeeName => "NEGEM RICHARD";
+
   /// Salaire net récurrent hors prime exceptionnel
   double get regularNetSalary => netSalary - (bonusAmount ?? 0.0);
 
