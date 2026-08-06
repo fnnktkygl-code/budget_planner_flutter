@@ -564,7 +564,9 @@ class _SalaryChartPainter extends CustomPainter {
       final isSel = i == (hoverIndex ?? selectedIndex);
       final rec = records[i];
 
-      final pointColor = rec.hasExplicitBonus ? AppColors.accentGold : lineColor;
+      final extraAmt = (rec.netSalary - rec.regularNetSalary).abs();
+      final bool isExtraMonth = rec.hasExplicitBonus || extraAmt > 10 || (rec.bonusAmount ?? 0) > 0;
+      final pointColor = isExtraMonth ? AppColors.accentGold : lineColor;
 
       if (isSel) {
         final outerPaint = Paint()..color = pointColor.withValues(alpha: 0.3);
@@ -575,7 +577,7 @@ class _SalaryChartPainter extends CustomPainter {
         canvas.drawCircle(pt, 2.5, corePaint);
       } else {
         final dotPaint = Paint()..color = pointColor;
-        canvas.drawCircle(pt, rec.hasExplicitBonus ? 4.5 : 3.5, dotPaint);
+        canvas.drawCircle(pt, isExtraMonth ? 5.0 : 3.5, dotPaint);
       }
     }
 
@@ -585,6 +587,9 @@ class _SalaryChartPainter extends CustomPainter {
       final rec = records[activeIdx];
       final pt = points[activeIdx];
       final val = values[activeIdx];
+
+      final extraAmt = (rec.netSalary - rec.regularNetSalary).abs();
+      final bool isExtraMonth = rec.hasExplicitBonus || extraAmt > 10 || (rec.bonusAmount ?? 0) > 0;
 
       final String periodText = rec.periodLabel.isNotEmpty ? rec.periodLabel : rec.period;
       final double pasAmount = rec.incomeTaxAmount.abs();
@@ -600,8 +605,8 @@ class _SalaryChartPainter extends CustomPainter {
         }
       }
 
-      const tooltipWidth = 195.0;
-      final double tooltipHeight = rec.hasExplicitBonus ? 106.0 : 90.0;
+      const tooltipWidth = 215.0;
+      final double tooltipHeight = isExtraMonth ? 116.0 : 92.0;
       double tooltipX = pt.dx + 12;
       if (tooltipX + tooltipWidth > size.width) {
         tooltipX = pt.dx - tooltipWidth - 12;
@@ -663,9 +668,8 @@ class _SalaryChartPainter extends CustomPainter {
       final effTp = makeText(effText, AppColors.accentCyan, isBold: true);
       effTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 64));
 
-      final extraAmt = rec.netSalary - rec.regularNetSalary;
-      if (rec.hasExplicitBonus || extraAmt > 10) {
-        final amt = rec.bonusAmount ?? extraAmt;
+      if (isExtraMonth) {
+        final amt = (rec.bonusAmount != null && rec.bonusAmount! > 0) ? rec.bonusAmount! : extraAmt;
         final desc = rec.bonusDescription ?? 'Extra / Rachat / Prime';
         final bonusTp = makeText('• 🎁 $desc: +${amt.toStringAsFixed(0)} €', AppColors.accentGold, isBold: true, fontSize: 10);
         bonusTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 82));
