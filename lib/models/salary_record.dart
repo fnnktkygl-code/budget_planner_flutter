@@ -1,19 +1,27 @@
 /// Modèle de données pour les bulletins de salaire et la répartition budgétaire AuraBudget Pro
 class SalaryRecord {
   final String id;
-  /// Format YYYY-MM (ex: "2026-06")
+  /// Format YYYY-MM (ex: "2026-07")
   final String period;
-  /// Libellé affichable (ex: "Juin 2026")
+  /// Libellé affichable (ex: "Juillet 2026")
   final String periodLabel;
   /// Salaire net à payer en EUR
   final double netSalary;
-  /// Salaire brut mensuel (optionnel)
+  /// Salaire brut mensuel
   final double? grossSalary;
+  /// Cotisations sociales (négatif)
+  final double socialContributions;
+  /// Tickets resto déduits (négatif)
+  final double mealTickets;
+  /// Indemnité télétravail (positif)
+  final double teleworkAllowance;
+  /// Indemnités non soumises (positif)
+  final double nonTaxableAllowances;
   /// Budget d'épargne mensuel / DCA alloué en EUR
   final double investableAmount;
   /// Taux d'épargne (% du salaire net)
   final double savingsRate;
-  /// Statut d'importation validé (ex: "✓ Importé & Validé")
+  /// Statut d'importation validé
   final String status;
   /// Nom du fichier source PDF
   final String? documentName;
@@ -30,6 +38,10 @@ class SalaryRecord {
     required this.periodLabel,
     required this.netSalary,
     this.grossSalary,
+    this.socialContributions = -840.78,
+    this.mealTickets = -52.80,
+    this.teleworkAllowance = 15.00,
+    this.nonTaxableAllowances = 34.13,
     required this.investableAmount,
     required this.savingsRate,
     required this.status,
@@ -45,6 +57,10 @@ class SalaryRecord {
     String? periodLabel,
     double? netSalary,
     double? grossSalary,
+    double? socialContributions,
+    double? mealTickets,
+    double? teleworkAllowance,
+    double? nonTaxableAllowances,
     double? investableAmount,
     double? savingsRate,
     String? status,
@@ -59,6 +75,10 @@ class SalaryRecord {
       periodLabel: periodLabel ?? this.periodLabel,
       netSalary: netSalary ?? this.netSalary,
       grossSalary: grossSalary ?? this.grossSalary,
+      socialContributions: socialContributions ?? this.socialContributions,
+      mealTickets: mealTickets ?? this.mealTickets,
+      teleworkAllowance: teleworkAllowance ?? this.teleworkAllowance,
+      nonTaxableAllowances: nonTaxableAllowances ?? this.nonTaxableAllowances,
       investableAmount: investableAmount ?? this.investableAmount,
       savingsRate: savingsRate ?? this.savingsRate,
       status: status ?? this.status,
@@ -75,6 +95,10 @@ class SalaryRecord {
         'periodLabel': periodLabel,
         'netSalary': netSalary,
         'grossSalary': grossSalary,
+        'socialContributions': socialContributions,
+        'mealTickets': mealTickets,
+        'teleworkAllowance': teleworkAllowance,
+        'nonTaxableAllowances': nonTaxableAllowances,
         'investableAmount': investableAmount,
         'savingsRate': savingsRate,
         'status': status,
@@ -90,6 +114,10 @@ class SalaryRecord {
         periodLabel: json['periodLabel'],
         netSalary: (json['netSalary'] as num).toDouble(),
         grossSalary: json['grossSalary'] != null ? (json['grossSalary'] as num).toDouble() : null,
+        socialContributions: json['socialContributions'] != null ? (json['socialContributions'] as num).toDouble() : -840.78,
+        mealTickets: json['mealTickets'] != null ? (json['mealTickets'] as num).toDouble() : -52.80,
+        teleworkAllowance: json['teleworkAllowance'] != null ? (json['teleworkAllowance'] as num).toDouble() : 15.00,
+        nonTaxableAllowances: json['nonTaxableAllowances'] != null ? (json['nonTaxableAllowances'] as num).toDouble() : 34.13,
         investableAmount: (json['investableAmount'] as num).toDouble(),
         savingsRate: (json['savingsRate'] as num).toDouble(),
         status: json['status'] ?? '✓ Importé & Validé',

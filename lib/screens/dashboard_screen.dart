@@ -38,9 +38,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
               SizedBox(height: 12),
+              Text('• Bulletins NEGEM RICHARD (Juillet 2026 & Mai 2025)', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
               Text('• Allocation des actifs & Donut Chart', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
               Text('• Décomposition du Revenu Net Lissé', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-              Text('• Audit Salarial & Cotisations 2026', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
               Text('• Synchronisation Bancaire TrueLayer', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
             ],
           ),
@@ -76,11 +76,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final salary = ref.watch(salaryProvider);
-    final activeBaseline = salary.activeBaseline;
+    final salaryState = ref.watch(salaryProvider);
+    final activeBaseline = salaryState.activeBaseline;
 
     final grossSalary = activeBaseline?.grossSalary ?? 3776.67;
-    final netSalary = activeBaseline?.netSalary ?? 2861.26;
+    final netSalary = activeBaseline?.netSalary ?? 2713.74;
+
+    final socialContrib = activeBaseline?.socialContributions ?? -840.78;
+    final mealTickets = activeBaseline?.mealTickets ?? -52.80;
+    final telework = activeBaseline?.teleworkAllowance ?? 15.00;
+    final nonTaxable = activeBaseline?.nonTaxableAllowances ?? 34.13;
 
     final segments = [
       AllocationSegment(label: 'Charges', percentage: 51, color: AppColors.chartRed),
@@ -97,7 +102,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Notification Bar Banner (Matching User Requirement)
+            // Top Notification Bar Banner
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
@@ -109,10 +114,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   const Icon(Icons.bolt_rounded, color: AppColors.accentCyan, size: 20),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Synchro bancaire active | Dernier relevé : Aujourd\'hui 10:45',
-                      style: TextStyle(
+                      'VESTAS FRANCE SAS PEROLS | Salarié : NEGEM RICHARD (${activeBaseline?.periodLabel ?? "Juillet 2026"})',
+                      style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -126,7 +131,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Text(
-                      'En ligne',
+                      'Validé IA',
                       style: TextStyle(color: AppColors.accentEmerald, fontSize: 10, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -172,7 +177,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Responsive Layout: Grid on Desktop (width >= 900), Column on Mobile
+            // Responsive Layout
             LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth >= 900) {
@@ -181,7 +186,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     children: [
                       Expanded(child: _buildAllocationCard(segments)),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildNetIncomeCard(grossSalary, netSalary)),
+                      Expanded(child: _buildNetIncomeCard(grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable)),
                     ],
                   );
                 } else {
@@ -189,7 +194,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     children: [
                       _buildAllocationCard(segments),
                       const SizedBox(height: 16),
-                      _buildNetIncomeCard(grossSalary, netSalary),
+                      _buildNetIncomeCard(grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable),
                     ],
                   );
                 }
@@ -243,7 +248,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildNetIncomeCard(double grossSalary, double netSalary) {
+  Widget _buildNetIncomeCard(
+    double grossSalary,
+    double netSalary,
+    double socialContrib,
+    double mealTickets,
+    double telework,
+    double nonTaxable,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -290,16 +302,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Items Table
+          // Real Items Table
           _buildSalaryLine('Salaire de base (Brut)', '${grossSalary.toStringAsFixed(2)} €', isPositive: null),
           const SizedBox(height: 14),
-          _buildSalaryLine('Cotisations sociales', '- 860.78 €', isPositive: false),
+          _buildSalaryLine('Cotisations sociales', '${socialContrib.toStringAsFixed(2)} €', isPositive: false),
           const SizedBox(height: 14),
-          _buildSalaryLine('Tickets resto déduits', '- 3.90 €', isPositive: false),
+          _buildSalaryLine('Tickets resto déduits', '${mealTickets.toStringAsFixed(2)} €', isPositive: false),
           const SizedBox(height: 14),
-          _buildSalaryLine('IND. TELETRAVAIL', '+ 15.00 €', isPositive: true),
+          _buildSalaryLine('IND. TELETRAVAIL', '+ ${telework.toStringAsFixed(2)} €', isPositive: true),
           const SizedBox(height: 14),
-          _buildSalaryLine('INDEM. NON SOUMISES', '+ 34.13 €', isPositive: true),
+          _buildSalaryLine('INDEM. NON SOUMISES', '+ ${nonTaxable.toStringAsFixed(2)} €', isPositive: true),
           const SizedBox(height: 20),
           const Divider(color: AppColors.borderSubtle, height: 1),
           const SizedBox(height: 16),
