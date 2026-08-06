@@ -1126,12 +1126,107 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     );
 
                     ref.read(salaryProvider.notifier).addTaxAdjustment(adj);
-                    Navigator.of(ctx).pop();
                   },
                 ),
               ],
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showExportImportBackupDialog(BuildContext context) {
+    final jsonExport = ref.read(salaryProvider.notifier).exportAppDataJson();
+    final jsonImportController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.cloud_sync_rounded, color: AppColors.accentCyan, size: 24),
+              SizedBox(width: 10),
+              Text('Sauvegarde & Synchro Mobile', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Transférez l\'ensemble de vos données (bulletins, impôts, échéances dentiste, buffer) sur votre téléphone mobile ou un autre navigateur sans aucune perte.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                const Text('1. Exporter / Sauvegarder :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  label: const Text('Copier le code de sauvegarde complet'),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: jsonExport));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('✅ Code de sauvegarde copié dans le presse-papier !'),
+                        backgroundColor: AppColors.accentEmerald,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+                const Divider(color: AppColors.borderSubtle),
+                const SizedBox(height: 12),
+                const Text('2. Restaurer à partir d\'un code :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: jsonImportController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText: 'Collez ici votre code de sauvegarde JSON...',
+                    border: OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 11),
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentEmerald, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.download_rounded, size: 16),
+                  label: const Text('Restaurer mes données'),
+                  onPressed: () {
+                    final success = ref.read(salaryProvider.notifier).importAppDataJson(jsonImportController.text.trim());
+                    if (success) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🎉 Restauration réussie ! Tous vos bulletins et réglages sont réimportés.'),
+                          backgroundColor: AppColors.accentEmerald,
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('⚠️ Code de sauvegarde invalide.'),
+                          backgroundColor: AppColors.accentRose,
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Fermer', style: TextStyle(color: AppColors.textSecondary)),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
         );
       },
     );
@@ -1292,6 +1387,40 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Permanent Cloud Backup / Sync Bar
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.accentCyan.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.cloud_done_rounded, color: AppColors.accentCyan, size: 18),
+                      SizedBox(width: 8),
+                      Text('Sauvegarde & Synchro Mobile :', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+                    ],
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentCyan,
+                      foregroundColor: Colors.white,
+                      elevation: 1,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.sync_rounded, size: 14),
+                    label: const Text('Sauvegarder / Synchroniser', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    onPressed: () => _showExportImportBackupDialog(context),
+                  ),
+                ],
+              ),
+            ),
+
             // Top Main Navigation Segmented Sub-Tabs
             Container(
               padding: const EdgeInsets.all(4),

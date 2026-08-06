@@ -67,7 +67,13 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final rawJson = prefs.getString('aura_salary_records_v3');
+    
+    // Multi-key Migration Fallback (v3 -> v2 -> v1 -> default)
+    String? rawJson = prefs.getString('aura_salary_records_v3');
+    if (rawJson == null || rawJson.isEmpty) {
+      rawJson = prefs.getString('aura_salary_records_v2') ?? prefs.getString('aura_salary_records');
+    }
+
     final rawTaxJson = prefs.getString('aura_tax_adjustments_v1');
     final rawTempJson = prefs.getString('aura_temporary_expenses_v1');
     final savedBalance = prefs.getDouble('aura_account_balance_v1') ?? 1740.0;
@@ -108,6 +114,62 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       temporaryExpenses: tempList,
       accountBalance: savedBalance,
     );
+
+    // Save to ensure v3 is populated with migrated data
+    _save();
+  }
+
+  String exportAppDataJson() {
+    final data = {
+      'version': 3,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'accountBalance': state.accountBalance,
+      'records': state.records.map((r) => r.toJson()).toList(),
+      'taxAdjustments': state.taxAdjustments.map((t) => t.toJson()).toList(),
+      'temporaryExpenses': state.temporaryExpenses.map((e) => e.toJson()).toList(),
+    };
+    return jsonEncode(data);
+  }
+
+  bool importAppDataJson(String rawJsonStr) {
+    try {
+      final Map<String, dynamic> data = jsonDecode(rawJsonStr);
+      final double balance = (data['accountBalance'] as num?)?.toDouble() ?? 1740.0;
+
+      List<SalaryRecord> rList = [];
+      if (data['records'] != null) {
+        final List<dynamic> rParsed = data['records'];
+        rList = rParsed.map((item) => SalaryRecord.fromJson(item)).toList();
+        rList.sort((a, b) => b.period.compareTo(a.period));
+        if (rList.isNotEmpty && !rList.any((r) => r.isLatestActive)) {
+          rList[0] = rList[0].copyWith(isLatestActive: true);
+        }
+      }
+
+      List<TaxAdjustment> tList = [];
+      if (data['taxAdjustments'] != null) {
+        final List<dynamic> tParsed = data['taxAdjustments'];
+        tList = tParsed.map((item) => TaxAdjustment.fromJson(item)).toList();
+      }
+
+      List<TemporaryExpense> eList = [];
+      if (data['temporaryExpenses'] != null) {
+        final List<dynamic> eParsed = data['temporaryExpenses'];
+        eList = eParsed.map((item) => TemporaryExpense.fromJson(item)).toList();
+      }
+
+      state = SalaryState(
+        records: rList,
+        taxAdjustments: tList,
+        temporaryExpenses: eList,
+        accountBalance: balance,
+      );
+
+      _save();
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<void> _save() async {
