@@ -44,7 +44,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
   // Period Selector Dialog State
   int _selectedYear = 2026;
-  int _selectedMonth = 3;
+  int _selectedMonth = 7;
   final List<String> _monthsFr = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
@@ -142,8 +142,21 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
     }
   }
 
+  void _switchDisplayedRecord(SalaryRecord record) {
+    setState(() {
+      _customFileName = record.documentName ?? record.periodLabel;
+      if (record.renderedImageBase64 != null && record.renderedImageBase64!.isNotEmpty) {
+        _renderedPdfImageBytes = base64Decode(record.renderedImageBase64!);
+      }
+      if (record.rawFileBase64 != null && record.rawFileBase64!.isNotEmpty) {
+        _customFileBytes = base64Decode(record.rawFileBase64!);
+      }
+      _redactor.clearAll();
+    });
+    ref.read(salaryProvider.notifier).setActiveBaseline(record.id);
+  }
+
   void _showExtractionConfirmationDialog(BuildContext context, RealParsedPayslip parsed) {
-    // Synchronize selected month & year with parsed document date!
     _selectedYear = parsed.date.year;
     _selectedMonth = parsed.date.month;
 
@@ -183,7 +196,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Période Dropdown
                     Row(
                       children: [
                         const Text('Mois :', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
@@ -229,7 +241,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Net à Payer Field
                     TextField(
                       controller: netController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -245,7 +256,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Salaire Brut Field
                     TextField(
                       controller: grossController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -261,7 +271,6 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Net Social Field
                     TextField(
                       controller: netSocialController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -292,10 +301,16 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                     final customPeriodKey = '$_selectedYear-$monthStr';
                     final customPeriodLabel = '${_monthsFr[_selectedMonth - 1]} $_selectedYear';
 
+                    final renderedB64 = _renderedPdfImageBytes != null ? base64Encode(_renderedPdfImageBytes!) : null;
+                    final fileB64 = _customFileBytes != null ? base64Encode(_customFileBytes!) : null;
+
                     final record = parsed.toSalaryRecord(
                       customPeriod: customPeriodKey,
                       customPeriodLabel: customPeriodLabel,
                       customNet: customNet,
+                      customFileName: _customFileName,
+                      imageBase64: renderedB64,
+                      fileBase64: fileB64,
                     );
 
                     ref.read(salaryProvider.notifier).addRecord(record);
@@ -909,41 +924,42 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
                                 groupValue: salaryState.activeBaseline?.id,
                                 activeColor: AppColors.accentCyan,
                                 onChanged: (id) {
-                                  if (id != null) {
-                                    ref.read(salaryProvider.notifier).setActiveBaseline(id);
-                                  }
+                                  _switchDisplayedRecord(record);
                                 },
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          record.periodLabel,
-                                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
-                                        ),
-                                        if (isBaseline) ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.accentCyan,
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: const Text('Référent Actif', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                child: GestureDetector(
+                                  onTap: () => _switchDisplayedRecord(record),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            record.periodLabel,
+                                            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                                           ),
+                                          if (isBaseline) ...[
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.accentCyan,
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text('Référent Actif', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ],
                                         ],
-                                      ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      record.notes ?? record.status,
-                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                                    ),
-                                  ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        record.notes ?? record.status,
+                                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                               Column(

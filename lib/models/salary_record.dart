@@ -25,6 +25,10 @@ class SalaryRecord {
   final String status;
   /// Nom du fichier source PDF
   final String? documentName;
+  /// Image encodée en base64 de la page visualisée
+  final String? renderedImageBase64;
+  /// Fichier brut encodé en base64
+  final String? rawFileBase64;
   /// Indique s'il s'agit du bulletin référent d'allocation actif
   final bool isLatestActive;
   /// Date de mise à jour
@@ -46,6 +50,8 @@ class SalaryRecord {
     required this.savingsRate,
     required this.status,
     this.documentName,
+    this.renderedImageBase64,
+    this.rawFileBase64,
     this.isLatestActive = false,
     required this.updatedAt,
     this.notes,
@@ -65,6 +71,8 @@ class SalaryRecord {
     double? savingsRate,
     String? status,
     String? documentName,
+    String? renderedImageBase64,
+    String? rawFileBase64,
     bool? isLatestActive,
     DateTime? updatedAt,
     String? notes,
@@ -83,6 +91,8 @@ class SalaryRecord {
       savingsRate: savingsRate ?? this.savingsRate,
       status: status ?? this.status,
       documentName: documentName ?? this.documentName,
+      renderedImageBase64: renderedImageBase64 ?? this.renderedImageBase64,
+      rawFileBase64: rawFileBase64 ?? this.rawFileBase64,
       isLatestActive: isLatestActive ?? this.isLatestActive,
       updatedAt: updatedAt ?? this.updatedAt,
       notes: notes ?? this.notes,
@@ -103,6 +113,8 @@ class SalaryRecord {
         'savingsRate': savingsRate,
         'status': status,
         'documentName': documentName,
+        'renderedImageBase64': renderedImageBase64,
+        'rawFileBase64': rawFileBase64,
         'isLatestActive': isLatestActive,
         'updatedAt': updatedAt.toIso8601String(),
         'notes': notes,
@@ -122,6 +134,8 @@ class SalaryRecord {
         savingsRate: (json['savingsRate'] as num).toDouble(),
         status: json['status'] ?? '✓ Importé & Validé',
         documentName: json['documentName'],
+        renderedImageBase64: json['renderedImageBase64'],
+        rawFileBase64: json['rawFileBase64'],
         isLatestActive: json['isLatestActive'] ?? false,
         updatedAt: DateTime.parse(json['updatedAt']),
         notes: json['notes'],
