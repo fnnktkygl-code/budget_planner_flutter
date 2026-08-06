@@ -234,6 +234,9 @@ class _MultiTrendPainter extends CustomPainter {
     }
 
     void drawCurve(List<double> values, Color color, {double strokeWidth = 2.5}) {
+      if (values.isEmpty) return;
+
+      final pts = List.generate(values.length, (i) => getPoint(i, values[i]));
       final path = Path();
       final paint = Paint()
         ..color = color
@@ -241,24 +244,30 @@ class _MultiTrendPainter extends CustomPainter {
         ..strokeWidth = strokeWidth
         ..strokeCap = StrokeCap.round;
 
-      for (int i = 0; i < values.length; i++) {
-        final pt = getPoint(i, values[i]);
-        if (i == 0) {
-          path.moveTo(pt.dx, pt.dy);
-        } else {
-          path.lineTo(pt.dx, pt.dy);
+      path.moveTo(pts[0].dx, pts[0].dy);
+
+      if (pts.length == 1) {
+        // Single point
+        path.addOval(Rect.fromCircle(center: pts[0], radius: 2));
+      } else {
+        for (int i = 0; i < pts.length - 1; i++) {
+          final p0 = pts[i];
+          final p1 = pts[i + 1];
+          final controlP1 = Offset(p0.dx + (p1.dx - p0.dx) / 2, p0.dy);
+          final controlP2 = Offset(p0.dx + (p1.dx - p0.dx) / 2, p1.dy);
+          path.cubicTo(controlP1.dx, controlP1.dy, controlP2.dx, controlP2.dy, p1.dx, p1.dy);
         }
       }
+
       canvas.drawPath(path, paint);
 
       // Draw points
       final dotPaint = Paint()..color = color;
       final bgDotPaint = Paint()..color = AppColors.cardBackground;
 
-      for (int i = 0; i < values.length; i++) {
-        final pt = getPoint(i, values[i]);
-        canvas.drawCircle(pt, 4, dotPaint);
-        canvas.drawCircle(pt, 2, bgDotPaint);
+      for (int i = 0; i < pts.length; i++) {
+        canvas.drawCircle(pts[i], 4, dotPaint);
+        canvas.drawCircle(pts[i], 2, bgDotPaint);
       }
     }
 

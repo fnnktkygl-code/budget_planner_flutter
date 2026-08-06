@@ -1067,7 +1067,7 @@ class _SalaryAuditScreenState extends ConsumerState<SalaryAuditScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const NotificationHeaderWidget(title: 'Analyseur de bulletin de paie'),
+      appBar: const NotificationHeaderWidget(title: 'Espace Salaires & Bulletins'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
