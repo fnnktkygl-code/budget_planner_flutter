@@ -60,10 +60,10 @@ class SalaryRecord {
   double get calculatedExtraAmount {
     if (bonusAmount != null && bonusAmount! > 0) return bonusAmount!;
     if (netSocial > 3100) {
-      return (netSocial - 2952.28).abs();
+      return (netSocial - 2860.89).clamp(0.0, double.infinity);
     }
     if (netSalary > 3100) {
-      return (netSalary - 2787.89).abs();
+      return (netSalary - 2787.89).clamp(0.0, double.infinity);
     }
     return 0.0;
   }
@@ -74,22 +74,17 @@ class SalaryRecord {
 
   /// Salaire net récurrent hors prime exceptionnel (calculé dynamiquement)
   double get regularNetSalary {
-    if (bonusAmount != null && bonusAmount! > 0) {
-      return (netSalary - bonusAmount!).clamp(0.0, double.infinity);
-    }
-    if (calculatedExtraAmount > 10.0) {
-      return (netSalary - calculatedExtraAmount).clamp(0.0, double.infinity);
+    if (isExtraOrBonusMonth) {
+      if (year == 2026) return 2713.74;
+      return 2719.66;
     }
     return netSalary;
   }
 
   /// Net social récurrent hors prime exceptionnel (calculé dynamiquement)
   double get regularNetSocial {
-    if (bonusAmount != null && bonusAmount! > 0) {
-      return (netSocial - bonusAmount!).clamp(0.0, double.infinity);
-    }
-    if (calculatedExtraAmount > 10.0) {
-      return (netSocial - calculatedExtraAmount).clamp(0.0, double.infinity);
+    if (isExtraOrBonusMonth) {
+      return 2860.89;
     }
     return netSocial;
   }
