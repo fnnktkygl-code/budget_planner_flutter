@@ -685,7 +685,10 @@ class _SalaryChartPainter extends CustomPainter {
       final titleTp = makeText(periodText, AppColors.textPrimary, isBold: true, fontSize: 12);
       titleTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 8));
 
-      final netSocTp = makeText('• Net Social Base: ${rec.regularNetSocial.toStringAsFixed(2)} €', AppColors.accentPurple, isBold: true);
+      final netSocText = isExtraMonth
+          ? '• Net Social Total: ${rec.netSocial.toStringAsFixed(2)} € (Base: ${rec.regularNetSocial.toStringAsFixed(2)} €)'
+          : '• Net Social Base: ${rec.netSocial.toStringAsFixed(2)} €';
+      final netSocTp = makeText(netSocText, AppColors.accentPurple, isBold: true);
       netSocTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 28));
 
       final taxText = viewMode == 2
@@ -696,13 +699,15 @@ class _SalaryChartPainter extends CustomPainter {
 
       final effText = viewMode == 2
           ? '• Net Réel Ajusté: ${val.toStringAsFixed(2)} €'
-          : '• Net Banque Base: ${rec.regularNetSalary.toStringAsFixed(2)} €';
+          : isExtraMonth
+              ? '• Net Banque Total: ${rec.netSalary.toStringAsFixed(2)} € (Base: ${rec.regularNetSalary.toStringAsFixed(2)} €)'
+              : '• Net Banque Base: ${rec.netSalary.toStringAsFixed(2)} €';
       final effTp = makeText(effText, AppColors.accentCyan, isBold: true);
       effTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 64));
 
       if (isExtraMonth) {
-        final amt = (rec.bonusAmount != null && rec.bonusAmount! > 0) ? rec.bonusAmount! : extraAmt;
-        final desc = rec.bonusDescription ?? 'Extra / Rachat / Prime';
+        final amt = rec.calculatedExtraAmount;
+        final desc = rec.bonusDescription ?? 'Extra / Rachat RTT / Prime';
         final bonusTp = makeText('• 🎁 $desc: +${amt.toStringAsFixed(0)} €', AppColors.accentGold, isBold: true, fontSize: 10);
         bonusTp.paint(canvas, Offset(tooltipX + 10, tooltipY + 82));
       } else if (hasPeeMonth) {

@@ -74,30 +74,30 @@ class SalaryRecord {
 
   /// Salaire net récurrent hors prime exceptionnel (calculé dynamiquement à partir des vraies fiches de paie!)
   double get regularNetSalary {
-    if (bonusAmount != null && bonusAmount! > 0) {
-      final ratio = (grossSalary != null && grossSalary! > 0) ? (netSalary / grossSalary!) : 0.77;
-      final netBonus = bonusAmount! * ratio;
-      return (netSalary - netBonus).clamp(0.0, double.infinity);
-    }
     if (calculatedExtraAmount > 10.0) {
-      final ratio = (grossSalary != null && grossSalary! > 0) ? (netSalary / grossSalary!) : 0.77;
-      final netExtra = calculatedExtraAmount * ratio;
-      return (netSalary - netExtra).clamp(0.0, double.infinity);
+      double netDeduction = calculatedExtraAmount;
+      if (bonusAmount != null && bonusAmount! > 0) {
+        if (bonusAmount! > 1000 && grossSalary != null && grossSalary! > 0 && bonusAmount! <= grossSalary!) {
+          final ratio = netSalary / grossSalary!;
+          netDeduction = bonusAmount! * ratio;
+        }
+      }
+      return (netSalary - netDeduction).clamp(0.0, double.infinity);
     }
     return netSalary;
   }
 
   /// Net social récurrent hors prime exceptionnel (calculé dynamiquement à partir des vraies fiches de paie!)
   double get regularNetSocial {
-    if (bonusAmount != null && bonusAmount! > 0) {
-      final ratio = (grossSalary != null && grossSalary! > 0) ? (netSocial / grossSalary!) : 0.78;
-      final netBonus = bonusAmount! * ratio;
-      return (netSocial - netBonus).clamp(0.0, double.infinity);
-    }
     if (calculatedExtraAmount > 10.0) {
-      final ratio = (grossSalary != null && grossSalary! > 0) ? (netSocial / grossSalary!) : 0.78;
-      final netExtra = calculatedExtraAmount * ratio;
-      return (netSocial - netExtra).clamp(0.0, double.infinity);
+      double netDeduction = calculatedExtraAmount;
+      if (bonusAmount != null && bonusAmount! > 0) {
+        if (bonusAmount! > 1000 && grossSalary != null && grossSalary! > 0 && bonusAmount! <= grossSalary!) {
+          final ratio = netSocial / grossSalary!;
+          netDeduction = bonusAmount! * ratio;
+        }
+      }
+      return (netSocial - netDeduction).clamp(0.0, double.infinity);
     }
     return netSocial;
   }
