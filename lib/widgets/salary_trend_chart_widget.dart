@@ -442,20 +442,6 @@ class _SalaryChartPainter extends CustomPainter {
     this.taxAdjustments,
   });
 
-  double _getEffectivePasForYear(SalaryRecord r) {
-    final yearRecs = records.where((x) => x.year == r.year && x.incomeTaxAmount.abs() > 1.0).toList();
-    if (yearRecs.isNotEmpty) {
-      final normalPasRecs = yearRecs.where((x) => x.incomeTaxAmount.abs() < 400.0).toList();
-      if (normalPasRecs.isNotEmpty) {
-        final totalPas = normalPasRecs.fold(0.0, (sum, x) => sum + x.incomeTaxAmount.abs());
-        return totalPas / normalPasRecs.length;
-      }
-      final totalPas = yearRecs.fold(0.0, (sum, x) => sum + x.incomeTaxAmount.abs());
-      return totalPas / yearRecs.length;
-    }
-    return 0.0;
-  }
-
   double _getVal(SalaryRecord r) {
     if (!separateBonus) {
       if (viewMode == 1) return r.netSocial;
@@ -472,11 +458,7 @@ class _SalaryChartPainter extends CustomPainter {
         }
       }
     }
-    if (r.incomeTaxAmount.abs() > 1.0 && r.incomeTaxAmount.abs() < 400.0) {
-      return r.regularNetSalary;
-    }
-    final pas = _getEffectivePasForYear(r);
-    return max(0.0, r.regularNetSocial - pas);
+    return r.regularNetSalary;
   }
 
   @override
@@ -637,7 +619,7 @@ class _SalaryChartPainter extends CustomPainter {
         }
       }
 
-      const tooltipWidth = 215.0;
+      const tooltipWidth = 330.0;
       final double tooltipHeight = (isExtraMonth || hasPeeMonth) ? 116.0 : 92.0;
       double tooltipX = pt.dx + 12;
       if (tooltipX + tooltipWidth > size.width) {
