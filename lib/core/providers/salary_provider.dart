@@ -81,18 +81,20 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     }
   }
 
+  String _key(String base) => userId.isEmpty ? base : '${userId}_$base';
+
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     
     // Multi-key Migration Fallback (v3 -> v2 -> v1 -> default)
-    String? rawJson = prefs.getString('${userId}_aura_salary_records_v3');
+    String? rawJson = prefs.getString(_key('aura_salary_records_v3'));
     if (rawJson == null || rawJson.isEmpty) {
-      rawJson = prefs.getString('${userId}_aura_salary_records_v2') ?? prefs.getString('${userId}_aura_salary_records');
+      rawJson = prefs.getString(_key('aura_salary_records_v2')) ?? prefs.getString(_key('aura_salary_records'));
     }
 
-    final rawTaxJson = prefs.getString('${userId}_aura_tax_adjustments_v1');
-    final rawTempJson = prefs.getString('${userId}_aura_temporary_expenses_v1');
-    final savedBalance = prefs.getDouble('${userId}_aura_account_balance_v1') ?? 1740.0;
+    final rawTaxJson = prefs.getString(_key('aura_tax_adjustments_v1'));
+    final rawTempJson = prefs.getString(_key('aura_temporary_expenses_v1'));
+    final savedBalance = prefs.getDouble(_key('aura_account_balance_v1')) ?? 1740.0;
 
     List<SalaryRecord> list = [];
     List<TaxAdjustment> taxList = [];
@@ -198,21 +200,20 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
   }
 
   Future<void> _save({bool saveHeavyBinaries = false}) async {
-    if (userId.isEmpty) return;
     try {
       final prefs = await SharedPreferences.getInstance();
 
       // Save lightweight financial JSON to SharedPreferences (Ultra-fast, < 1ms)
       final cleanJsonStr = jsonEncode(state.records.map((r) => r.toJson(includeBinary: false)).toList());
-      await prefs.setString('${userId}_aura_salary_records_v3', cleanJsonStr);
+      await prefs.setString(_key('aura_salary_records_v3'), cleanJsonStr);
 
       final taxJsonStr = jsonEncode(state.taxAdjustments.map((t) => t.toJson()).toList());
-      await prefs.setString('${userId}_aura_tax_adjustments_v1', taxJsonStr);
+      await prefs.setString(_key('aura_tax_adjustments_v1'), taxJsonStr);
 
       final tempJsonStr = jsonEncode(state.temporaryExpenses.map((e) => e.toJson()).toList());
-      await prefs.setString('${userId}_aura_temporary_expenses_v1', tempJsonStr);
+      await prefs.setString(_key('aura_temporary_expenses_v1'), tempJsonStr);
 
-      await prefs.setDouble('${userId}_aura_account_balance_v1', state.accountBalance);
+      await prefs.setDouble(_key('aura_account_balance_v1'), state.accountBalance);
 
       // Heavy IndexedDB binary save: Debounced in background so UI thread NEVER freezes!
       if (kIsWeb && state.records.isNotEmpty && saveHeavyBinaries) {
@@ -331,14 +332,13 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
 
   void clearAllRecords() async {
     state = SalaryState(records: [], taxAdjustments: [], temporaryExpenses: [], accountBalance: 1740.0);
-    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    prefs.remove('${userId}_aura_salary_records_v3');
-    prefs.remove('${userId}_aura_salary_records_v2');
-    prefs.remove('${userId}_aura_salary_records');
-    prefs.remove('${userId}_aura_tax_adjustments_v1');
-    prefs.remove('${userId}_aura_temporary_expenses_v1');
-    prefs.remove('${userId}_aura_account_balance_v1');
+    prefs.remove(_key('aura_salary_records_v3'));
+    prefs.remove(_key('aura_salary_records_v2'));
+    prefs.remove(_key('aura_salary_records'));
+    prefs.remove(_key('aura_tax_adjustments_v1'));
+    prefs.remove(_key('aura_temporary_expenses_v1'));
+    prefs.remove(_key('aura_account_balance_v1'));
   }
 }
 

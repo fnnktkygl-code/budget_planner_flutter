@@ -651,7 +651,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     final hasBonus = extraAmount > 0;
 
     final taxMonthly = salary.activeTaxAdjustmentMonthlyInstallment;
-    final tempMonthly = salary.temporaryExpenses.fold(0.0, (sum, exp) => sum + exp.monthlyAmount);
+    final tempMonthly = salary.activeTemporaryExpensesMonthlyTotal;
     final totalSavings = _savingsCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
     final totalFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary)) + taxMonthly + tempMonthly;
     final totalDaily = _dailyCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
