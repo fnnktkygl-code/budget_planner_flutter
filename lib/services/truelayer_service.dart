@@ -24,7 +24,6 @@ class TrueLayerService {
     return url;
   }
 
-  /// Exchanges the OAuth authorization code for an Access Token.
   static Future<Map<String, dynamic>?> exchangeCodeForToken({
     required String code,
     required String clientId,
@@ -32,21 +31,23 @@ class TrueLayerService {
     required String redirectUri,
     required bool isSandbox,
   }) async {
-    final baseUrl = isSandbox ? 'https://auth.truelayer-sandbox.com' : 'https://auth.truelayer.com';
-    // Use corsproxy.io to bypass CORS issues on Flutter Web for the token exchange
-    final tokenUrl = Uri.parse('https://corsproxy.io/?${Uri.encodeComponent('$baseUrl/connect/token')}');
+    // Call our own Vercel API route to bypass CORS
+    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-token');
 
-    debugPrint('[TrueLayer API] Exchanging code for token at: $tokenUrl');
+    debugPrint('[TrueLayer API] Exchanging code via proxy: $proxyUrl');
     try {
       final response = await http.post(
-        tokenUrl,
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        proxyUrl,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
         body: {
           'grant_type': 'authorization_code',
           'client_id': clientId,
           'client_secret': clientSecret,
           'redirect_uri': redirectUri,
           'code': code,
+          'is_sandbox': isSandbox.toString(),
         },
       );
 
