@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
+import '../core/providers/auth_provider.dart';
 import '../models/temporary_expense.dart';
 import '../widgets/notification_header.dart';
 
@@ -23,6 +26,26 @@ class RuleCategoryItem {
     required this.iconType,
     required this.iconBgColor,
   });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'amount': amount,
+    'isPercentage': isPercentage,
+    'isLocked': isLocked,
+    'iconType': iconType,
+    'iconBgColor': iconBgColor.value,
+  };
+
+  factory RuleCategoryItem.fromJson(Map<String, dynamic> json) => RuleCategoryItem(
+    id: json['id'] ?? '',
+    name: json['name'] ?? '',
+    amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+    isPercentage: json['isPercentage'] ?? false,
+    isLocked: json['isLocked'] ?? false,
+    iconType: json['iconType'] ?? 'default',
+    iconBgColor: Color(json['iconBgColor'] ?? 0xFF000000),
+  );
 
   double getEffectiveAmount(double netSalary) {
     if (isPercentage) {
@@ -46,22 +69,64 @@ class RulesScreen extends ConsumerStatefulWidget {
 }
 
 class _RulesScreenState extends ConsumerState<RulesScreen> {
-  final List<RuleCategoryItem> _savingsCategories = [
+  List<RuleCategoryItem> _savingsCategories = [
     RuleCategoryItem(id: 'sav-1', name: 'Cible PEA', amount: 35.0, isPercentage: true, iconType: 'chart', iconBgColor: AppColors.accentCyan),
-    RuleCategoryItem(id: 'sav-2', name: 'Livret A', amount: 7.0, isPercentage: true, iconType: 'shield', iconBgColor: AppColors.accentGold),
+    RuleCategoryItem(id: 'sav-2', name: 'Livret A', amount: 7.0, isPercentage: true, iconType: 'shield', iconBgColor: Colors.blue),
   ];
 
-  final List<RuleCategoryItem> _fixedChargesCategories = [
+  List<RuleCategoryItem> _fixedChargesCategories = [
     RuleCategoryItem(id: 'fix-1', name: 'Loyer', amount: 677, isPercentage: false, iconType: 'home', iconBgColor: AppColors.accentRose),
     RuleCategoryItem(id: 'fix-2', name: 'Abonnement', amount: 41, isPercentage: false, iconType: 'video', iconBgColor: AppColors.accentRose),
     RuleCategoryItem(id: 'fix-3', name: 'Tontine', amount: 300, isPercentage: false, iconType: 'people', iconBgColor: AppColors.accentPurple),
     RuleCategoryItem(id: 'fix-4', name: 'Soutien', amount: 231, isPercentage: false, iconType: 'heart', iconBgColor: AppColors.accentRose),
   ];
 
-  final List<RuleCategoryItem> _dailyCategories = [
+  List<RuleCategoryItem> _dailyCategories = [
     RuleCategoryItem(id: 'day-1', name: 'Revolut (Reste à vivre)', amount: 7.0, isPercentage: true, iconType: 'card', iconBgColor: AppColors.accentCyan),
-    RuleCategoryItem(id: 'day-2', name: 'Tampon / Marge €', amount: 0, isPercentage: false, iconType: 'basket', iconBgColor: AppColors.accentEmerald),
+    RuleCategoryItem(id: 'day-2', name: 'Tampon / Marge €', amount: 0, isPercentage: false, iconType: 'basket', iconBgColor: Colors.amber),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = ref.read(authProvider).user?.id ?? '';
+    final key = userId.isEmpty ? 'aura_rules_categories' : '${userId}_aura_rules_categories';
+    
+    final raw = prefs.getString(key);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final Map<String, dynamic> data = jsonDecode(raw);
+        if (data.containsKey('savings')) {
+          _savingsCategories = (data['savings'] as List).map((i) => RuleCategoryItem.fromJson(i)).toList();
+        }
+        if (data.containsKey('fixed')) {
+          _fixedChargesCategories = (data['fixed'] as List).map((i) => RuleCategoryItem.fromJson(i)).toList();
+        }
+        if (data.containsKey('daily')) {
+          _dailyCategories = (data['daily'] as List).map((i) => RuleCategoryItem.fromJson(i)).toList();
+        }
+        setState(() {});
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _saveCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = ref.read(authProvider).user?.id ?? '';
+    final key = userId.isEmpty ? 'aura_rules_categories' : '${userId}_aura_rules_categories';
+    
+    final data = {
+      'savings': _savingsCategories.map((c) => c.toJson()).toList(),
+      'fixed': _fixedChargesCategories.map((c) => c.toJson()).toList(),
+      'daily': _dailyCategories.map((c) => c.toJson()).toList(),
+    };
+    await prefs.setString(key, jsonEncode(data));
+  }
 
   Widget _buildGaugeLegend(String label, double amount, Color color) {
     return Row(
@@ -208,6 +273,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         ),
                       );
                     });
+                    _saveCategories();
                     Navigator.pop(ctx);
                   },
                   child: const Text('Ajouter', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -374,6 +440,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       item.amount = newAmount;
                       item.isPercentage = isPercentage;
                     });
+                    _saveCategories();
                     Navigator.pop(ctx);
                   },
                   child: const Text('Enregistrer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -419,6 +486,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                 setState(() {
                   targetList.removeWhere((i) => i.id == item.id);
                 });
+                _saveCategories();
                 Navigator.pop(ctx);
               },
               child: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -725,225 +793,190 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             const SizedBox(height: 20),
 
             // Sleek Dark Theme Card — RESTE À VIVRE & ALLOCATION GAUGE
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.borderSubtle),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.account_balance_wallet_rounded, color: AppColors.accentEmerald, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'RESTE À VIVRE ESTIMÉ',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.1,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.borderSubtle),
-                        ),
-                        child: Text(
-                          'Revenu Net : ${netSalary.toStringAsFixed(2)} €',
-                          style: const TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        '${resteAVivre.toStringAsFixed(2)} €',
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 34,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentEmerald.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
-                        ),
-                        child: Text(
-                          '${(netSalary > 0 ? (resteAVivre / netSalary * 100) : 0).toStringAsFixed(1)} % du net',
-                          style: const TextStyle(
-                            color: AppColors.accentEmerald,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  
-                  // Visual Progress Gauge Bar
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      height: 10,
-                      child: Row(
-                        children: [
-                          if (netSalary > 0) ...[
-                            Expanded(
-                              flex: ((totalFixed / netSalary) * 100).round().clamp(1, 100),
-                              child: Container(color: AppColors.chartRed),
-                            ),
-                            Expanded(
-                              flex: ((totalSavings / netSalary) * 100).round().clamp(1, 100),
-                              child: Container(color: AppColors.chartBlue),
-                            ),
-                            Expanded(
-                              flex: ((totalDaily / netSalary) * 100).round().clamp(1, 100),
-                              child: Container(color: AppColors.chartYellow),
-                            ),
-                            Expanded(
-                              flex: ((resteAVivre / netSalary) * 100).round().clamp(0, 100),
-                              child: Container(color: AppColors.accentEmerald),
-                            ),
+            LayoutBuilder(builder: (context, constraints) {
+              final bool isMobile = constraints.maxWidth < 700;
+              final bal = salary.accountBalance;
+              final projBal = bal + resteAVivre;
+              final safe = projBal >= 0;
+              
+              final heroA = Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('RESTE À VIVRE — CE MOIS-CI', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                        Row(
+                          children: const [
+                            Icon(Icons.trending_up_rounded, color: AppColors.accentEmerald, size: 14),
+                            SizedBox(width: 4),
+                            Text('+68 % / 6 mois', style: TextStyle(color: AppColors.accentEmerald, fontSize: 11, fontWeight: FontWeight.bold)),
                           ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text('${resteAVivre.toStringAsFixed(2)} €', style: TextStyle(color: resteAVivre < 0 ? AppColors.accentRose : AppColors.textPrimary, fontSize: 36, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.borderSubtle)),
+                          child: Text('${(netSalary > 0 ? (resteAVivre / netSalary * 100) : 0).toStringAsFixed(1)} % du net', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        InkWell(
+                          onTap: () {},
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(color: AppColors.surface, shape: BoxShape.circle, border: Border.all(color: AppColors.borderSubtle)),
+                            child: const Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 14),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text('Un déficit reporté ramène votre trésorerie projetée à ${projBal.toStringAsFixed(0)} € fin de mois.', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: SizedBox(
+                        height: 10,
+                        child: Row(
+                          children: [
+                            if (netSalary > 0) ...[
+                              Expanded(flex: ((totalFixed / netSalary) * 100).round().clamp(1, 100), child: Container(color: AppColors.accentRose)),
+                              Expanded(flex: ((totalSavings / netSalary) * 100).round().clamp(1, 100), child: Container(color: Colors.blue)),
+                              Expanded(flex: ((totalDaily / netSalary) * 100).round().clamp(1, 100), child: Container(color: Colors.amber)),
+                              Expanded(flex: ((resteAVivre / netSalary) * 100).round().clamp(0, 100), child: Container(color: AppColors.accentEmerald)),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      children: [
+                        _buildGaugeLegend('Charges', totalFixed, AppColors.accentRose),
+                        _buildGaugeLegend('Épargne', totalSavings, Colors.blue),
+                        _buildGaugeLegend('Quotidien', totalDaily, Colors.amber),
+                        _buildGaugeLegend('Reste', resteAVivre, AppColors.accentEmerald),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+              
+              final heroB = Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: safe ? AppColors.accentEmerald : AppColors.accentRose, width: 2),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: safe ? AppColors.accentEmerald.withValues(alpha: 0.15) : AppColors.accentRose.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(color: safe ? AppColors.accentEmerald.withValues(alpha: 0.3) : AppColors.accentRose.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(safe ? Icons.check_circle_outline_rounded : Icons.warning_amber_rounded, color: safe ? AppColors.accentEmerald : AppColors.accentRose, size: 14),
+                          const SizedBox(width: 6),
+                          Text(safe ? 'Trésorerie sécurisée' : 'Danger de découvert', style: TextStyle(color: safe ? AppColors.accentEmerald : AppColors.accentRose, fontSize: 11, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildGaugeLegend('Charges', totalFixed, AppColors.chartRed),
-                      _buildGaugeLegend('Épargne PEA/LA', totalSavings, AppColors.chartBlue),
-                      _buildGaugeLegend('Quotidien', totalDaily, AppColors.chartYellow),
-                      _buildGaugeLegend('Reste', resteAVivre, AppColors.accentEmerald),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // SECTION BUFFER COMPTE COURANT & SANTÉ TRÉSORERIE (1500€ - 1800€)
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.borderSubtle),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.shield_outlined, color: AppColors.accentCyan, size: 20),
-                          SizedBox(width: 8),
-                          Text('Buffer Compte Courant & Santé Trésorerie', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
-                        ],
-                      ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentEmerald.withValues(alpha: 0.2),
-                          foregroundColor: AppColors.accentEmerald,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        icon: const Icon(Icons.edit_rounded, size: 14),
-                        label: Text('${salary.accountBalance.toStringAsFixed(0)} € Réel', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        onPressed: () => _showEditAccountBalanceDialog(context, salary.accountBalance),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Builder(
-                    builder: (context) {
-                      final bal = salary.accountBalance;
-                      final projBal = bal + resteAVivre;
-                      Color statusColor;
-                      String statusText;
-                      String adviceText;
-
-                      if (bal < 1200) {
-                        statusColor = AppColors.accentRose;
-                        statusText = '🚨 Danger de Découvert (< 1 200 €)';
-                        adviceText = 'Votre buffer est sous le seuil de sécurité. Il est recommandé de réduire temporairement vos allocations PEA pour renflouer le compte courant à 1 500 €.';
-                      } else if (bal < 1500) {
-                        statusColor = Colors.orange;
-                        statusText = '🟧 Absorption de Choc (1 200 € - 1 500 €)';
-                        adviceText = 'Votre buffer absorbe les variations. Maintenez vos charges sous contrôle pour remonter progressivement vers la cible de 1 500 €.';
-                      } else if (bal <= 1800) {
-                        statusColor = AppColors.accentEmerald;
-                        statusText = '🟩 Cible Idéale (1 500 € - 1 800 €)';
-                        adviceText = 'Trésorerie optimale ! Votre solde est parfaitement équilibré entre sécurité et investissement.';
-                      } else {
-                        statusColor = AppColors.accentCyan;
-                        statusText = '💡 Cash Dormant Détecté (> 1 800 €)';
-                        adviceText = 'Vous avez +${(bal - 1800).toStringAsFixed(0)} € d\'excédent sur votre compte courant. Pensez à l\'arbitrer vers votre PEA ou votre Livret A !';
-                      }
-
-                      return Column(
+                    const SizedBox(height: 12),
+                    Text('${bal.toStringAsFixed(0)} €', style: TextStyle(color: bal < 0 ? AppColors.accentRose : AppColors.accentEmerald, fontSize: 28, fontWeight: FontWeight.bold)),
+                    const Text('Déficit reporté du mois précédent (seuil de sécurité : 1 200 €)', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.borderSubtle)),
+                      child: Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: statusColor.withValues(alpha: 0.4)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 13)),
-                                    Text('Projeté Fin de Mois : ${projBal.toStringAsFixed(0)} €', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(adviceText, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                              ],
-                            ),
-                          ),
+                          Text('${resteAVivre.toStringAsFixed(0)} € ', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+                          const Text('théorique ', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                          const Icon(Icons.arrow_right_alt_rounded, color: AppColors.textMuted, size: 14),
+                          Text(' ${bal.abs().toStringAsFixed(0)} € ', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+                          const Text('reporté ', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                          const Icon(Icons.arrow_right_alt_rounded, color: AppColors.textMuted, size: 14),
+                          Text(' ${projBal.toStringAsFixed(0)} € ', style: TextStyle(color: safe ? AppColors.accentEmerald : AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 12)),
+                          const Text('projeté', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                         ],
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      safe ? 'Votre trésorerie projetée est positive : aucune action nécessaire ce mois-ci.' : 'Votre trésorerie passera sous le seuil de sécurité. Il est recommandé de réduire temporairement vos allocations d\'épargne pour repasser à l\'équilibre.',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                    ),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.surface,
+                              foregroundColor: AppColors.textSecondary,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: AppColors.borderSubtle)),
+                            ),
+                            onPressed: () => _showEditAccountBalanceDialog(context, salary.accountBalance),
+                            child: const Text('Corriger le solde réel'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+              
+              if (isMobile) {
+                return Column(
+                  children: [
+                    heroA,
+                    const SizedBox(height: 16),
+                    IntrinsicHeight(child: heroB),
+                  ],
+                );
+              }
+              return IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(flex: 3, child: heroA),
+                    const SizedBox(width: 16),
+                    Expanded(flex: 2, child: heroB),
+                  ],
+                ),
+              );
+            }),
             const SizedBox(height: 24),
 
             // SECTION DÉPENSES TEMPORAIRES ÉCHÉANCÉES (Dentiste 12 mois, Crédits N fois...)
@@ -969,9 +1002,9 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentCyan,
-                          foregroundColor: Colors.white,
-                          elevation: 2,
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.blue,
+                          elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                         icon: const Icon(Icons.add_rounded, size: 16),
@@ -982,16 +1015,23 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   ),
                   const SizedBox(height: 12),
                   if (salary.temporaryExpenses.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.borderSubtle),
-                      ),
-                      child: const Text(
-                        'Aucune dépense temporaire enregistrée. Déclarez vos soins dentaires (ex: 164€/mois sur 12 mois) ou achats étalés N fois.',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    InkWell(
+                      onTap: () => _showTemporaryExpenseDialog(context),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.borderSubtle, style: BorderStyle.solid),
+                        ),
+                        child: Row(
+                          children: const [
+                            Expanded(
+                              child: Text('Aucune dépense temporaire enregistrée — soins dentaires, achats étalés N fois...', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                            ),
+                            Text('+ Déclarer', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
+                          ],
+                        ),
                       ),
                     )
                   else
@@ -1047,14 +1087,14 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             const SizedBox(height: 24),
 
             // Section 1: ALLOCATION MENSUELLE D'ÉPARGNE
-            _buildSectionHeader('ALLOCATION MENSUELLE D\'ÉPARGNE', totalSavings, netSalary, AppColors.chartBlue),
+            _buildSectionHeader('ALLOCATION MENSUELLE D\'ÉPARGNE', totalSavings, netSalary, Colors.blue),
             const SizedBox(height: 12),
             _buildCategoryGroupCard(_savingsCategories, netSalary, allowDelete: false, onAdd: () => _showAddCategoryDialog(_savingsCategories, 'Épargne', AppColors.accentCyan)),
 
             const SizedBox(height: 24),
 
             // Section 2: CHARGES FIXES INCOMPRESSIBLES
-            _buildSectionHeader('CHARGES FIXES INCOMPRESSIBLES', totalFixed, netSalary, AppColors.chartRed),
+            _buildSectionHeader('CHARGES FIXES INCOMPRESSIBLES', totalFixed, netSalary, AppColors.accentRose),
             const SizedBox(height: 12),
             _buildCategoryGroupCard(
               _fixedChargesCategories,
@@ -1088,7 +1128,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             const SizedBox(height: 24),
 
             // Section 3: DÉPENSES QUOTIDIENNES
-            _buildSectionHeader('DÉPENSES QUOTIDIENNES', totalDaily, netSalary, AppColors.chartYellow),
+            _buildSectionHeader('DÉPENSES QUOTIDIENNES', totalDaily, netSalary, Colors.amber),
             const SizedBox(height: 12),
             _buildCategoryGroupCard(_dailyCategories, netSalary, allowDelete: true, onAdd: () => _showAddCategoryDialog(_dailyCategories, 'Dépense', AppColors.accentEmerald)),
 
@@ -1310,18 +1350,18 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
 
           // Calculated Secondary Value Badge (Equal Font Size & High Contrast)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.borderSubtle),
             ),
+            alignment: Alignment.centerRight,
             child: Text(
               item.isPercentage
                   ? '= ${effectiveAmt.toStringAsFixed(2)} €'
                   : '= ${effectivePct.toStringAsFixed(1)} %',
               style: const TextStyle(
-                color: AppColors.textPrimary,
+                color: AppColors.textMuted,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -1336,7 +1376,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.5)),
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
@@ -1353,8 +1393,8 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.edit_rounded, color: AppColors.accentCyan, size: 14),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.edit_rounded, color: AppColors.accentCyan, size: 12),
                 ],
               ),
             ),
@@ -1363,8 +1403,10 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
           if (allowDelete) ...[
             const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 20),
               onPressed: onDelete,
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(),
             ),
           ],
         ],
