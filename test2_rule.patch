@@ -1,0 +1,77 @@
+--- lib/screens/rules_screen.dart
++++ lib/screens/rules_screen.dart
+@@ -1,5 +1,7 @@
++import 'dart:convert';
+ import 'package:flutter/material.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:shared_preferences/shared_preferences.dart';
+ import '../constants/colors.dart';
+ import '../core/providers/salary_provider.dart';
+ import '../models/temporary_expense.dart';
+@@ -46,22 +48,64 @@
+ }
+ 
+ class _RulesScreenState extends ConsumerState<RulesScreen> {
+-  final List<RuleCategoryItem> _savingsCategories = [
++  List<RuleCategoryItem> _savingsCategories = [
+     RuleCategoryItem(id: 'sav-1', name: 'Cible PEA', amount: 35.0, isPercentage: true, iconType: 'chart', iconBgColor: AppColors.accentCyan),
+     RuleCategoryItem(id: 'sav-2', name: 'Livret A', amount: 7.0, isPercentage: true, iconType: 'shield', iconBgColor: AppColors.accentGold),
+   ];
+ 
+-  final List<RuleCategoryItem> _fixedChargesCategories = [
++  List<RuleCategoryItem> _fixedChargesCategories = [
+     RuleCategoryItem(id: 'fix-1', name: 'Loyer', amount: 677, isPercentage: false, iconType: 'home', iconBgColor: AppColors.accentRose),
+     RuleCategoryItem(id: 'fix-2', name: 'Abonnement', amount: 41, isPercentage: false, iconType: 'video', iconBgColor: AppColors.accentRose),
+     RuleCategoryItem(id: 'fix-3', name: 'Tontine', amount: 300, isPercentage: false, iconType: 'people', iconBgColor: AppColors.accentPurple),
+     RuleCategoryItem(id: 'fix-4', name: 'Soutien', amount: 231, isPercentage: false, iconType: 'heart', iconBgColor: AppColors.accentRose),
+   ];
+ 
+-  final List<RuleCategoryItem> _dailyCategories = [
++  List<RuleCategoryItem> _dailyCategories = [
+     RuleCategoryItem(id: 'day-1', name: 'Revolut (Reste à vivre)', amount: 7.0, isPercentage: true, iconType: 'card', iconBgColor: AppColors.accentCyan),
+     RuleCategoryItem(id: 'day-2', name: 'Tampon / Marge €', amount: 0, isPercentage: false, iconType: 'basket', iconBgColor: AppColors.accentEmerald),
+   ];
+ 
++  @override
++  void initState() {
++    super.initState();
++    _loadCategories();
++  }
++
++  Future<void> _loadCategories() async {
++    final prefs = await SharedPreferences.getInstance();
++    final userId = ref.read(authProvider).user?.id ?? '';
++    final key = userId.isEmpty ? 'aura_rules_categories' : '${userId}_aura_rules_categories';
++    
++    final raw = prefs.getString(key);
++    if (raw != null && raw.isNotEmpty) {
++      try {
++        final Map<String, dynamic> data = jsonDecode(raw);
++        if (data.containsKey('savings')) {
++          _savingsCategories = (data['savings'] as List).map((i) => RuleCategoryItem.fromJson(i)).toList();
++        }
++        if (data.containsKey('fixed')) {
++          _fixedChargesCategories = (data['fixed'] as List).map((i) => RuleCategoryItem.fromJson(i)).toList();
++        }
++        if (data.containsKey('daily')) {
++          _dailyCategories = (data['daily'] as List).map((i) => RuleCategoryItem.fromJson(i)).toList();
++        }
++        setState(() {});
++      } catch (_) {}
++    }
++  }
++
++  Future<void> _saveCategories() async {
++    final prefs = await SharedPreferences.getInstance();
++    final userId = ref.read(authProvider).user?.id ?? '';
++    final key = userId.isEmpty ? 'aura_rules_categories' : '${userId}_aura_rules_categories';
++    
++    final data = {
++      'savings': _savingsCategories.map((c) => c.toJson()).toList(),
++      'fixed': _fixedChargesCategories.map((c) => c.toJson()).toList(),
++      'daily': _dailyCategories.map((c) => c.toJson()).toList(),
++    };
++    await prefs.setString(key, jsonEncode(data));
++  }
++
+   Widget _buildGaugeLegend(String label, double amount, Color color) {

@@ -16,12 +16,14 @@ class SalaryState {
   final List<TaxAdjustment> taxAdjustments;
   final List<TemporaryExpense> temporaryExpenses;
   final double accountBalance;
+  final double bufferMultiplier;
 
   SalaryState({
     required this.records,
     this.taxAdjustments = const [],
     this.temporaryExpenses = const [],
     this.accountBalance = 1740.0,
+    this.bufferMultiplier = 1.0,
   });
 
   SalaryRecord? get activeBaseline => getActiveBaselineSalary(records);
@@ -61,12 +63,14 @@ class SalaryState {
     List<TaxAdjustment>? taxAdjustments,
     List<TemporaryExpense>? temporaryExpenses,
     double? accountBalance,
+    double? bufferMultiplier,
   }) {
     return SalaryState(
       records: records ?? this.records,
       taxAdjustments: taxAdjustments ?? this.taxAdjustments,
       temporaryExpenses: temporaryExpenses ?? this.temporaryExpenses,
       accountBalance: accountBalance ?? this.accountBalance,
+      bufferMultiplier: bufferMultiplier ?? this.bufferMultiplier,
     );
   }
 }
@@ -94,6 +98,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     final rawTaxJson = prefs.getString(_key('aura_tax_adjustments_v1'));
     final rawTempJson = prefs.getString(_key('aura_temporary_expenses_v1'));
     final savedBalance = prefs.getDouble(_key('aura_account_balance_v1')) ?? 1740.0;
+    final savedBufferMultiplier = prefs.getDouble(_key('aura_buffer_multiplier_v1')) ?? 1.0;
 
     List<SalaryRecord> list = [];
     List<TaxAdjustment> taxList = [];
@@ -148,6 +153,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       taxAdjustments: taxList,
       temporaryExpenses: tempList,
       accountBalance: savedBalance,
+      bufferMultiplier: savedBufferMultiplier,
     );
 
     // Save to ensure v3 and IndexedDB are populated
@@ -159,6 +165,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       'version': 3,
       'exportedAt': DateTime.now().toIso8601String(),
       'accountBalance': state.accountBalance,
+      'bufferMultiplier': state.bufferMultiplier,
       'records': state.records.map((r) => r.toJson(includeBinary: true)).toList(),
       'taxAdjustments': state.taxAdjustments.map((t) => t.toJson()).toList(),
       'temporaryExpenses': state.temporaryExpenses.map((e) => e.toJson()).toList(),
@@ -173,6 +180,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       final List<dynamic> tParsed = data['taxAdjustments'] ?? [];
       final List<dynamic> eParsed = data['temporaryExpenses'] ?? [];
       final double balance = (data['accountBalance'] as num?)?.toDouble() ?? 1740.0;
+      final double bufferMult = (data['bufferMultiplier'] as num?)?.toDouble() ?? 1.0;
 
       final rList = rParsed.map((item) => SalaryRecord.fromJson(item)).toList();
       final tList = tParsed.map((item) => TaxAdjustment.fromJson(item)).toList();
@@ -189,6 +197,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
         taxAdjustments: tList,
         temporaryExpenses: eList,
         accountBalance: balance,
+        bufferMultiplier: bufferMult,
       );
 
       _save();
@@ -213,6 +222,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       await prefs.setString(_key('aura_temporary_expenses_v1'), tempJsonStr);
 
       await prefs.setDouble(_key('aura_account_balance_v1'), state.accountBalance);
+      await prefs.setDouble(_key('aura_buffer_multiplier_v1'), state.bufferMultiplier);
 
       // Heavy IndexedDB binary save: Debounced in background so UI thread NEVER freezes!
       if (kIsWeb && state.records.isNotEmpty && saveHeavyBinaries) {
@@ -329,8 +339,13 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     _save();
   }
 
+  void updateBufferMultiplier(double multiplier) {
+    state = state.copyWith(bufferMultiplier: multiplier);
+    _save();
+  }
+
   void clearAllRecords() async {
-    state = SalaryState(records: [], taxAdjustments: [], temporaryExpenses: [], accountBalance: 1740.0);
+    state = SalaryState(records: [], taxAdjustments: [], temporaryExpenses: [], accountBalance: 1740.0, bufferMultiplier: 1.0);
     final prefs = await SharedPreferences.getInstance();
     prefs.remove(_key('aura_salary_records_v3'));
     prefs.remove(_key('aura_salary_records_v2'));
@@ -338,6 +353,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     prefs.remove(_key('aura_tax_adjustments_v1'));
     prefs.remove(_key('aura_temporary_expenses_v1'));
     prefs.remove(_key('aura_account_balance_v1'));
+    prefs.remove(_key('aura_buffer_multiplier_v1'));
   }
 }
 

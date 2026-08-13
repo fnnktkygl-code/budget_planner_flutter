@@ -1,0 +1,28 @@
+--- lib/screens/rules_screen.dart
++++ lib/screens/rules_screen.dart
+@@ -23,6 +23,26 @@
+     required this.iconType,
+     required this.iconBgColor,
+   });
++
++  Map<String, dynamic> toJson() => {
++    'id': id,
++    'name': name,
++    'amount': amount,
++    'isPercentage': isPercentage,
++    'isLocked': isLocked,
++    'iconType': iconType,
++    'iconBgColor': iconBgColor.value,
++  };
++
++  factory RuleCategoryItem.fromJson(Map<String, dynamic> json) => RuleCategoryItem(
++    id: json['id'] ?? '',
++    name: json['name'] ?? '',
++    amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
++    isPercentage: json['isPercentage'] ?? false,
++    isLocked: json['isLocked'] ?? false,
++    iconType: json['iconType'] ?? 'default',
++    iconBgColor: Color(json['iconBgColor'] ?? 0xFF000000),
++  );
+ 
+   double getEffectiveAmount(double netSalary) {

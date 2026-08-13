@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
 import '../constants/colors.dart';
-import '../widgets/liquid_tank.dart';
-import '../widgets/notification_header.dart';
+import '../core/providers/bonus_provider.dart';
 
 class SavingsScreen extends ConsumerStatefulWidget {
   const SavingsScreen({super.key});
@@ -12,20 +13,160 @@ class SavingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SavingsScreenState extends ConsumerState<SavingsScreen> {
-  String _livretAName = 'Livret A / Précaution';
-  double _livretABalance = 1600;
-  double _livretATarget = 8000;
+  final _currencyFormat = NumberFormat.currency(locale: 'fr_FR', symbol: '€');
+  final _dateFormat = DateFormat('dd/MM/yyyy');
 
-  String _lddsName = 'Cible PEA & Bourse';
-  double _lddsBalance = 0;
-  double _lddsTarget = 0;
+  IconData _getIconData(String name) {
+    switch (name) {
+      case 'target':
+        return Icons.radar_rounded;
+      case 'shield':
+        return Icons.shield_rounded;
+      case 'trending':
+        return Icons.trending_up_rounded;
+      case 'gift':
+        return Icons.card_giftcard_rounded;
+      case 'banknote':
+        return Icons.payments_rounded;
+      case 'wallet':
+        return Icons.account_balance_wallet_rounded;
+      case 'business':
+        return Icons.business_center_rounded;
+      default:
+        return Icons.account_balance_wallet_rounded;
+    }
+  }
 
-  double _monthlySavingsRate = 200;
+  void _showAddEventModal() {
+    final labelCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+    String type = 'gift';
 
-  void _showEditTankDialog(String title, double currentBalance, double currentTarget, Function(String, double, double) onSave) {
-    final nameCtrl = TextEditingController(text: title);
-    final balanceCtrl = TextEditingController(text: currentBalance.toStringAsFixed(0));
-    final targetCtrl = TextEditingController(text: currentTarget.toStringAsFixed(0));
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 24,
+                right: 24,
+                top: 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Ajouter un revenu exceptionnel',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: labelCtrl,
+                    style: const TextStyle(color: AppColors.textPrimary),
+                    decoration: const InputDecoration(
+                      labelText: 'Libellé (ex: Prime, Tontine)',
+                      labelStyle: TextStyle(color: AppColors.textMuted),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.borderSubtle)),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentCyan)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                    decoration: const InputDecoration(
+                      labelText: 'Montant (€)',
+                      labelStyle: TextStyle(color: AppColors.textMuted),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.borderSubtle)),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentCyan)),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('Type de revenu', style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _buildTypeChoice('gift', Icons.card_giftcard_rounded, type, () => setModalState(() => type = 'gift')),
+                      const SizedBox(width: 12),
+                      _buildTypeChoice('banknote', Icons.payments_rounded, type, () => setModalState(() => type = 'banknote')),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accentCyan,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        final label = labelCtrl.text.trim();
+                        final amount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                        if (label.isNotEmpty && amount > 0) {
+                          ref.read(bonusProvider.notifier).addPendingEvent(
+                                label: label,
+                                amount: amount,
+                                date: DateTime.now(),
+                                type: type,
+                              );
+                          Navigator.pop(ctx);
+                        }
+                      },
+                      child: const Text('Ajouter au bucket', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildTypeChoice(String id, IconData icon, String selected, VoidCallback onTap) {
+    final isSelected = id == selected;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.15) : AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle),
+        ),
+        child: Icon(icon, color: isSelected ? AppColors.accentCyan : AppColors.textSecondary),
+      ),
+    );
+  }
+
+  void _showAddDestinationModal() {
+    final nameCtrl = TextEditingController();
 
     showDialog(
       context: context,
@@ -33,44 +174,14 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
         return AlertDialog(
           backgroundColor: AppColors.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: const [
-              Icon(Icons.edit_note_rounded, color: AppColors.accentGold),
-              SizedBox(width: 10),
-              Text('Ajuster le Réservoir', style: TextStyle(color: AppColors.textPrimary, fontSize: 18)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nom du réservoir',
-                ),
-                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: balanceCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Solde actuel (€)',
-                  suffixText: '€',
-                ),
-                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: targetCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Plafond / Cible (€)',
-                  suffixText: '€',
-                ),
-                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
-              ),
-            ],
+          title: const Text('Nouvelle Destination', style: TextStyle(color: AppColors.textPrimary)),
+          content: TextField(
+            controller: nameCtrl,
+            style: const TextStyle(color: AppColors.textPrimary),
+            decoration: const InputDecoration(
+              hintText: 'Ex: Crypto, Voyage...',
+              hintStyle: TextStyle(color: AppColors.textMuted),
+            ),
           ),
           actions: [
             TextButton(
@@ -84,13 +195,12 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
-                final newName = nameCtrl.text.trim().isEmpty ? title : nameCtrl.text.trim();
-                final newBal = double.tryParse(balanceCtrl.text.trim()) ?? currentBalance;
-                final newTarget = double.tryParse(targetCtrl.text.trim()) ?? currentTarget;
-                onSave(newName, newBal, newTarget);
-                Navigator.pop(ctx);
+                if (nameCtrl.text.trim().isNotEmpty) {
+                  ref.read(bonusProvider.notifier).addDestination(nameCtrl.text.trim());
+                  Navigator.pop(ctx);
+                }
               },
-              child: const Text('Enregistrer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text('Ajouter'),
             ),
           ],
         );
@@ -98,114 +208,257 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
     );
   }
 
-  void _showLumpSumDistributionDialog() {
-    final amountCtrl = TextEditingController(text: '3600');
-    double peaPercent = 70.0;
+  void _showAddPeeModal() {
+    final labelCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final totalAmt = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
-            final peaAmt = totalAmt * peaPercent / 100;
-            final livretAmt = totalAmt * (100 - peaPercent) / 100;
-
-            return AlertDialog(
-              backgroundColor: AppColors.surface,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Row(
-                children: const [
-                  Icon(Icons.stars_rounded, color: AppColors.accentGold),
-                  SizedBox(width: 10),
-                  Text('Ventiler un Gains / Prime / Tontine', style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 24,
+            right: 24,
+            top: 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Ajouter Intéressement / PEE',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
+              const SizedBox(height: 16),
+              TextField(
+                controller: labelCtrl,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: const InputDecoration(
+                  labelText: 'Libellé (ex: Intéressement 2026)',
+                  labelStyle: TextStyle(color: AppColors.textMuted),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.borderSubtle)),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentGold)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: AppColors.accentGold, fontSize: 18, fontWeight: FontWeight.bold),
+                decoration: const InputDecoration(
+                  labelText: 'Montant (€)',
+                  labelStyle: TextStyle(color: AppColors.textMuted),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.borderSubtle)),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentGold)),
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentGold,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    final label = labelCtrl.text.trim();
+                    final amount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                    if (label.isNotEmpty && amount > 0) {
+                      ref.read(bonusProvider.notifier).addPeeAmount(
+                            label: label,
+                            amount: amount,
+                            date: DateTime.now(),
+                          );
+                      Navigator.pop(ctx);
+                    }
+                  },
+                  child: const Text('Ajouter au PEE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showVentilateModal(List<BonusEvent> pendingEvents, List<BonusDestination> destinations) {
+    if (destinations.isEmpty) return;
+
+    final totalPending = pendingEvents.fold(0.0, (s, e) => s + e.amount);
+    final eventIds = pendingEvents.map((e) => e.id).toList();
+
+    Map<String, double> allocations = {
+      for (var d in destinations) d.id: 0.0
+    };
+    allocations[destinations.first.id] = 100.0;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75,
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextField(
-                    onChanged: (_) => setDialogState(() {}),
-                    controller: amountCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Montant à ventiler (€)',
-                      hintText: 'ex: 3600 (Tontine) ou 2000 (Prime)',
-                      suffixText: '€',
-                    ),
-                    style: const TextStyle(color: AppColors.accentGold, fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Répartition choisie :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(
-                        child: Slider(
-                          value: peaPercent,
-                          min: 0,
-                          max: 100,
-                          divisions: 10,
-                          activeColor: AppColors.accentCyan,
-                          label: '${peaPercent.round()}% PEA',
-                          onChanged: (val) => setDialogState(() => peaPercent = val),
+                      const Text(
+                        'Ventiler les revenus',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
                         ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                        onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.cardBackground,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.borderSubtle),
+                      color: AppColors.accentCyan.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
                     ),
-                    child: Column(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('🎯 PEA (${peaPercent.round()}%) :', style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
-                            Text('+ ${peaAmt.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentCyan, fontSize: 13, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('🛡️ Livret A (${(100 - peaPercent).round()}%) :', style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
-                            Text('+ ${livretAmt.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentEmerald, fontSize: 13, fontWeight: FontWeight.bold)),
-                          ],
+                        const Text('Montant à ventiler :', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+                        Text(
+                          _currencyFormat.format(totalPending),
+                          style: const TextStyle(color: AppColors.accentCyan, fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  const Text('Répartition (%)', style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: destinations.length,
+                      separatorBuilder: (c, i) => const SizedBox(height: 16),
+                      itemBuilder: (c, i) {
+                        final dest = destinations[i];
+                        final pct = allocations[dest.id] ?? 0.0;
+                        final amount = totalPending * pct / 100;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(_getIconData(dest.iconName), color: dest.color, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text(dest.name, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                                Row(
+                                  children: [
+                                    Text('${pct.round()}%', style: TextStyle(color: dest.color, fontWeight: FontWeight.bold)),
+                                    const SizedBox(width: 8),
+                                    Text(_currencyFormat.format(amount), style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Slider(
+                              value: pct,
+                              min: 0,
+                              max: 100,
+                              divisions: 20,
+                              activeColor: dest.color,
+                              inactiveColor: AppColors.borderSubtle,
+                              onChanged: (val) {
+                                setModalState(() {
+                                  allocations[dest.id] = val;
+                                });
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final totalPct = allocations.values.fold(0.0, (s, p) => s + p);
+                      final isExact = (totalPct - 100).abs() < 1;
+                      return Column(
+                        children: [
+                          if (!isExact)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Text(
+                                'Total actuel : ${totalPct.round()}% (doit être 100%)',
+                                style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isExact ? AppColors.accentCyan : AppColors.cardBackground,
+                                foregroundColor: isExact ? Colors.white : AppColors.textMuted,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: isExact
+                                  ? () {
+                                      ref.read(bonusProvider.notifier).ventilate(eventIds, allocations);
+                                      Navigator.pop(ctx);
+                                    }
+                                  : null,
+                              child: const Text('Valider la ventilation', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentGold,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _lddsBalance += peaAmt;
-                      _livretABalance += livretAmt;
-                    });
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Appliquer la ventilation', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
             );
           },
         );
@@ -215,304 +468,193 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final double totalSaved = _livretABalance + _lddsBalance;
-    final double totalTarget = _livretATarget + _lddsTarget;
-
-    final double remainingTarget = (15000 - totalSaved).clamp(0, 15000);
-    final double monthsToTarget = _monthlySavingsRate > 0 ? remainingTarget / _monthlySavingsRate : 0.0;
+    final bonusState = ref.watch(bonusProvider);
+    final pendingEvents = bonusState.pending;
+    final totalPending = pendingEvents.fold(0.0, (s, e) => s + e.amount);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const NotificationHeaderWidget(title: 'Entonnoir d\'épargne'),
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text(
+          'Entonnoir d\'Épargne',
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Section Header & One-Off Payout Button (Tontine / Prime)
+            const Text(
+              'REVENUS EXCEPTIONNELS',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Pending Bucket (Matches Screenshot)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.accentCyan.withValues(alpha: 0.4),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.hourglass_empty_rounded, color: AppColors.accentCyan, size: 16),
+                          SizedBox(width: 8),
+                          Text(
+                            'En attente de ventilation',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.textSecondary, size: 20),
+                        onPressed: _showAddEventModal,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    _currencyFormat.format(totalPending),
+                    style: const TextStyle(
+                      color: AppColors.accentCyan,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accentCyan,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                      label: const Text('Ventiler vers les comptes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      onPressed: totalPending > 0 ? () => _showVentilateModal(pendingEvents, bonusState.destinations) : null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Destinations Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'ARCHITECTURE DE SÉCURITÉ',
+                  'DESTINATIONS',
                   style: TextStyle(
                     color: AppColors.textSecondary,
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.8,
                   ),
                 ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentGold,
-                    foregroundColor: Colors.black,
-                    elevation: 2,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                GestureDetector(
+                  onTap: _showAddDestinationModal,
+                  child: Row(
+                    children: const [
+                      Icon(Icons.add_rounded, size: 14, color: AppColors.textSecondary),
+                      SizedBox(width: 4),
+                      Text('Ajouter', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    ],
                   ),
-                  icon: const Icon(Icons.stars_rounded, size: 16),
-                  label: const Text(
-                    'Ventiler Prime / Tontine',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: _showLumpSumDistributionDialog,
-                ),
+                )
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
-            // Liquid Tanks Grid / Stack
-            LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth >= 600) {
-                  return Row(
+            // Destinations Grid (Matches Screenshot: Icon top-left, close top-right, title/amount bottom-left)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.4,
+              ),
+              itemCount: bonusState.destinations.length,
+              itemBuilder: (context, index) {
+                final dest = bonusState.destinations[index];
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(
-                        child: LiquidTankWidget(
-                          title: _livretAName,
-                          currentAmount: _livretABalance,
-                          targetAmount: _livretATarget,
-                          liquidColor: AppColors.accentGold,
-                          onEdit: () => _showEditTankDialog(_livretAName, _livretABalance, _livretATarget, (n, b, t) {
-                            setState(() {
-                              _livretAName = n;
-                              _livretABalance = b;
-                              _livretATarget = t;
-                            });
-                          }),
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Icon(_getIconData(dest.iconName), color: dest.color, size: 18),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.close_rounded, size: 14, color: AppColors.textMuted),
+                            onPressed: () => ref.read(bonusProvider.notifier).removeDestination(dest.id),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: LiquidTankWidget(
-                          title: _lddsName,
-                          currentAmount: _lddsBalance,
-                          targetAmount: _lddsTarget,
-                          liquidColor: AppColors.accentCyan,
-                          onEdit: () => _showEditTankDialog(_lddsName, _lddsBalance, _lddsTarget, (n, b, t) {
-                            setState(() {
-                              _lddsName = n;
-                              _lddsBalance = b;
-                              _lddsTarget = t;
-                            });
-                          }),
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(dest.name, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                          const SizedBox(height: 2),
+                          Text(
+                            _currencyFormat.format(dest.total),
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
                     ],
-                  );
-                } else {
-                  return Column(
-                    children: [
-                      LiquidTankWidget(
-                        title: _livretAName,
-                        currentAmount: _livretABalance,
-                        targetAmount: _livretATarget,
-                        liquidColor: AppColors.accentGold,
-                        onEdit: () => _showEditTankDialog(_livretAName, _livretABalance, _livretATarget, (n, b, t) {
-                          setState(() {
-                            _livretAName = n;
-                            _livretABalance = b;
-                            _livretATarget = t;
-                          });
-                        }),
-                      ),
-                      const SizedBox(height: 14),
-                      LiquidTankWidget(
-                        title: _lddsName,
-                        currentAmount: _lddsBalance,
-                        targetAmount: _lddsTarget,
-                        liquidColor: AppColors.accentCyan,
-                        onEdit: () => _showEditTankDialog(_lddsName, _lddsBalance, _lddsTarget, (n, b, t) {
-                          setState(() {
-                            _lddsName = n;
-                            _lddsBalance = b;
-                            _lddsTarget = t;
-                          });
-                        }),
-                      ),
-                    ],
-                  );
-                }
+                  ),
+                );
               },
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 32),
 
-            // Card: Accumulateur Sécurité & Stepper (Matching Screenshot 1)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.borderSubtle),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: const [
-                      Icon(Icons.bolt_rounded, color: AppColors.accentGold, size: 20),
-                      SizedBox(width: 10),
-                      Text(
-                        'Accumulateur séquentiel',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Nous remplissons vos filets de sécurité séquentiellement : d\'abord le Livret A, puis le LDDS. Sûr et optimal.',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  const Text(
-                    'Ajuster le taux d\'épargne',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Slider Control
-                  Slider(
-                    value: _monthlySavingsRate,
-                    min: 50,
-                    max: 1000,
-                    divisions: 19,
-                    activeColor: AppColors.accentCyan,
-                    onChanged: (val) => setState(() => _monthlySavingsRate = val),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Stepper Buttons [-] [ 200 € ] [+] (Matching Screenshot 1)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.surface,
-                          side: const BorderSide(color: AppColors.borderSubtle),
-                        ),
-                        icon: const Icon(Icons.remove_rounded, color: AppColors.accentCyan),
-                        onPressed: () {
-                          if (_monthlySavingsRate > 50) {
-                            setState(() => _monthlySavingsRate -= 50);
-                          }
-                        },
-                      ),
-                      const SizedBox(width: 14),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.borderSubtle),
-                        ),
-                        child: Text(
-                          '${_monthlySavingsRate.toStringAsFixed(0)}   €',
-                          style: const TextStyle(
-                            color: AppColors.accentCyan,
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      IconButton(
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.surface,
-                          side: const BorderSide(color: AppColors.borderSubtle),
-                        ),
-                        icon: const Icon(Icons.add_rounded, color: AppColors.accentCyan),
-                        onPressed: () {
-                          if (_monthlySavingsRate < 2000) {
-                            setState(() => _monthlySavingsRate += 50);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  const Divider(color: AppColors.borderSubtle, height: 1),
-                  const SizedBox(height: 18),
-
-                  // Stats List (Matching Screenshot 1)
-                  _buildStatRow(
-                    icon: Icons.show_chart_rounded,
-                    label: 'Taux d\'épargne mensuel :',
-                    value: '${_monthlySavingsRate.toStringAsFixed(0)} €/mo',
-                    valueColor: AppColors.accentEmerald,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildStatRow(
-                    icon: Icons.wallet_outlined,
-                    label: 'Total épargné :',
-                    value: '${totalSaved.toStringAsFixed(0)} € / ${totalTarget > 0 ? totalTarget.toStringAsFixed(0) : "8000"} €',
-                    valueColor: AppColors.textPrimary,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildStatRow(
-                    icon: Icons.timer_outlined,
-                    label: 'Temps pour la cible (15k) :',
-                    value: '${monthsToTarget.toStringAsFixed(1)} mois',
-                    valueColor: AppColors.accentGold,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Footer Tip Card (Matching Screenshot 1)
+            // PEE Block (Matches Screenshot)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.borderSubtle),
-              ),
-              child: Row(
-                children: const [
-                  Icon(Icons.info_outline_rounded, color: AppColors.accentCyan, size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '💡 Astuce : Cliquez sur un réservoir ci-dessus pour modifier directement son solde et son plafond.',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Épargne Salariale (PEE / PERCO / Intéressement & Participation) Card
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
                 color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.accentGold.withValues(alpha: 0.4)),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.accentGold.withValues(alpha: 0.1),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.borderSubtle),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -522,38 +664,34 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                     children: [
                       Row(
                         children: const [
-                          Icon(Icons.business_center_rounded, color: AppColors.accentGold, size: 22),
-                          SizedBox(width: 10),
+                          Icon(Icons.business_center_rounded, color: AppColors.accentGold, size: 18),
+                          SizedBox(width: 8),
                           Text(
-                            'Épargne Salariale (PEE / PERCO)',
+                            'Épargne Salariale (PEE/PERCO)',
                             style: TextStyle(
                               color: AppColors.textPrimary,
-                              fontSize: 15,
+                              fontSize: 13,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: AppColors.accentEmerald.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
+                          color: AppColors.accentEmerald.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text(
-                          'Exonéré IR',
-                          style: TextStyle(color: AppColors.accentEmerald, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
+                        child: const Text('Exonéré IR', style: TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   const Text(
-                    'L\'intéressement et la participation versés directement sur votre PEE ne transitent pas par votre compte bancaire mais constituent une réserve de valeur majeure.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.3),
+                    'Saisissez manuellement vos intéressements et participations qui ne transitent pas par le compte courant.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -562,54 +700,134 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        Text('Cumul Intéressement & Participation PEE :', style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
-                        Text('Suivi automatique via Fiches Paie', style: TextStyle(color: AppColors.accentGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Cumul total', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                            const SizedBox(height: 2),
+                            Text(
+                              _currencyFormat.format(bonusState.peeTotal),
+                              style: const TextStyle(color: AppColors.accentGold, fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentGold.withValues(alpha: 0.15),
+                            foregroundColor: AppColors.accentGold,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          icon: const Icon(Icons.add_rounded, size: 14),
+                          label: const Text('Ajouter', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          onPressed: _showAddPeeModal,
+                        ),
                       ],
                     ),
                   ),
+                  if (bonusState.peeEvents.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Divider(color: AppColors.borderSubtle, height: 1),
+                    const SizedBox(height: 12),
+                    const Text('Historique des versements PEE', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    ...bonusState.peeEvents.map((ev) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('${_dateFormat.format(ev.date)} - ${ev.label}', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                              Text('+ ${_currencyFormat.format(ev.amount)}', style: const TextStyle(color: AppColors.accentGold, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        )),
+                  ]
                 ],
               ),
             ),
+            const SizedBox(height: 32),
+
+            // History
+            const Text(
+              'HISTORIQUE DE L\'ENTONNOIR',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (bonusState.history.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text('Aucun événement ventilé pour le moment.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: bonusState.history.length,
+                separatorBuilder: (c, i) => const Divider(color: AppColors.borderSubtle, height: 1),
+                itemBuilder: (context, index) {
+                  final ev = bonusState.history[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(_getIconData(ev.iconName), color: AppColors.textSecondary, size: 18),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(ev.label, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(height: 2),
+                              Text(_dateFormat.format(ev.date), style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _currencyFormat.format(ev.amount),
+                              style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: ev.breakdown.map((b) {
+                                final d = bonusState.destinations.firstWhere((x) => x.id == b.destId, orElse: () => BonusDestination(id: '', name: 'Inconnu', iconName: '', color: Colors.grey, total: 0));
+                                return Container(
+                                  margin: const EdgeInsets.only(left: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(color: d.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                                  child: Text('${b.pct.round()}% ${d.name}', style: TextStyle(color: d.color, fontSize: 8, fontWeight: FontWeight.bold)),
+                                );
+                              }).toList(),
+                            )
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             const SizedBox(height: 40),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildStatRow({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color valueColor,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: AppColors.textMuted, size: 18),
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            color: valueColor,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
     );
   }
 }
