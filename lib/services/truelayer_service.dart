@@ -4,16 +4,19 @@ import 'package:http/http.dart' as http;
 import '../models/budget_category.dart';
 
 class TrueLayerService {
-  /// Generates the OAuth authorization URL for TrueLayer.
   static String getAuthorizationUrl({
     required String clientId,
     required String redirectUri,
     required bool isSandbox,
+    String? providerId,
   }) {
     final baseUrl = isSandbox ? 'https://auth.truelayer-sandbox.com' : 'https://auth.truelayer.com';
     final scope = Uri.encodeComponent('info accounts balance transactions offline_access');
     final encodedRedirect = Uri.encodeComponent(redirectUri);
     var url = '$baseUrl/?response_type=code&client_id=$clientId&redirect_uri=$encodedRedirect&scope=$scope';
+    if (providerId != null && providerId.isNotEmpty) {
+      url += '&provider_id=$providerId';
+    }
     if (isSandbox) {
       url += '&enable_mock=true';
     }

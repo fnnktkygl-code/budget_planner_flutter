@@ -35,6 +35,7 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
         clientId: settings.truelayerClientId,
         redirectUri: redirectUri,
         isSandbox: settings.truelayerUseSandbox,
+        providerId: bankId,
       );
 
       final uri = Uri.parse(authUrl);
