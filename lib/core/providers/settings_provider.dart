@@ -145,8 +145,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(truelayerAccessToken: token);
   }
 
-  Future<bool> processTrueLayerCode(String code) async {
-    if (userId.isEmpty) return false;
+  Future<String?> processTrueLayerCode(String code) async {
+    if (userId.isEmpty) return 'Utilisateur non connecté';
     final redirectUri = Uri.base.origin;
     
     try {
@@ -162,12 +162,13 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         final accessToken = tokenData['access_token'] as String;
         await setAccessToken(accessToken);
         await setBankConnected(true, 'Connecté via TrueLayer');
-        return true;
+        return null; // Success (no error)
+      } else {
+        return 'Erreur inconnue lors de la récupération du token.';
       }
     } catch (e) {
-      // Ignored for now
+      return e.toString();
     }
-    return false;
   }
 
   Future<void> disconnectBank() async {

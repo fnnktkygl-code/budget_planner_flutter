@@ -123,10 +123,10 @@ class _ResponsiveMainLayoutState extends ConsumerState<ResponsiveMainLayout> {
     if (code != null && code.isNotEmpty) {
       // Process code with TrueLayer
       final settingsNotifier = ref.read(settingsProvider.notifier);
-      final success = await settingsNotifier.processTrueLayerCode(code);
+      final errorMessage = await settingsNotifier.processTrueLayerCode(code);
       
       if (mounted) {
-        if (success) {
+        if (errorMessage == null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Connexion bancaire TrueLayer réussie !'),
@@ -136,10 +136,11 @@ class _ResponsiveMainLayoutState extends ConsumerState<ResponsiveMainLayout> {
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Erreur lors de la validation TrueLayer.'),
+            SnackBar(
+              content: Text('Erreur TrueLayer : $errorMessage'),
               backgroundColor: AppColors.danger,
               behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 10),
             ),
           );
         }

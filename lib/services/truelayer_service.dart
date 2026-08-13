@@ -33,7 +33,8 @@ class TrueLayerService {
     required bool isSandbox,
   }) async {
     final baseUrl = isSandbox ? 'https://auth.truelayer-sandbox.com' : 'https://auth.truelayer.com';
-    final tokenUrl = Uri.parse('$baseUrl/connect/token');
+    // Use corsproxy.io to bypass CORS issues on Flutter Web for the token exchange
+    final tokenUrl = Uri.parse('https://corsproxy.io/?${Uri.encodeComponent('$baseUrl/connect/token')}');
 
     debugPrint('[TrueLayer API] Exchanging code for token at: $tokenUrl');
     try {
@@ -55,11 +56,11 @@ class TrueLayerService {
         return data;
       } else {
         debugPrint('[TrueLayer API] Token Exchange Error ${response.statusCode}: ${response.body}');
-        return null;
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
-      debugPrint('[TrueLayer API] Token Exchange Exception: $e');
-      return null;
+      debugPrint('[TrueLayer API] Exception during token exchange: $e');
+      throw Exception('Exception: $e');
     }
   }
 
