@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../constants/colors.dart';
 import '../core/providers/bonus_provider.dart';
+import '../widgets/dashed_border_painter.dart';
 
 class SavingsScreen extends ConsumerStatefulWidget {
   const SavingsScreen({super.key});
@@ -14,7 +15,7 @@ class SavingsScreen extends ConsumerStatefulWidget {
 
 class _SavingsScreenState extends ConsumerState<SavingsScreen> {
   final _currencyFormat = NumberFormat.currency(locale: 'fr_FR', symbol: '€');
-  final _dateFormat = DateFormat('dd/MM/yyyy');
+  final _dateFormat = DateFormat('dd MMM yyyy', 'fr_FR');
 
   IconData _getIconData(String name) {
     switch (name) {
@@ -67,7 +68,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Ajouter un revenu exceptionnel',
+                        'Ajouter un revenu',
                         style: TextStyle(
                           color: AppColors.textPrimary,
                           fontSize: 18,
@@ -88,7 +89,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                       labelText: 'Libellé (ex: Prime, Tontine)',
                       labelStyle: TextStyle(color: AppColors.textMuted),
                       enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.borderSubtle)),
-                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentCyan)),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentGold)),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -100,7 +101,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                       labelText: 'Montant (€)',
                       labelStyle: TextStyle(color: AppColors.textMuted),
                       enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.borderSubtle)),
-                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentCyan)),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accentGold)),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -119,8 +120,8 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                     height: 50,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accentCyan,
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppColors.accentGold,
+                        foregroundColor: Colors.black,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: () {
@@ -136,7 +137,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                           Navigator.pop(ctx);
                         }
                       },
-                      child: const Text('Ajouter au bucket', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      child: const Text('Ajouter', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -156,11 +157,11 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.15) : AppColors.cardBackground,
+          color: isSelected ? AppColors.accentGold.withValues(alpha: 0.15) : AppColors.cardBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle),
+          border: Border.all(color: isSelected ? AppColors.accentGold : AppColors.borderSubtle),
         ),
-        child: Icon(icon, color: isSelected ? AppColors.accentCyan : AppColors.textSecondary),
+        child: Icon(icon, color: isSelected ? AppColors.accentGold : AppColors.textSecondary),
       ),
     );
   }
@@ -190,8 +191,8 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.white,
+                backgroundColor: AppColors.accentGold,
+                foregroundColor: Colors.black,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
@@ -235,7 +236,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Ajouter Intéressement / PEE',
+                    'Ajouter PEE / PERCO',
                     style: TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 18,
@@ -353,9 +354,9 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.accentCyan.withValues(alpha: 0.1),
+                      color: AppColors.accentGold.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+                      border: Border.all(color: AppColors.accentGold.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -363,7 +364,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                         const Text('Montant à ventiler :', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
                         Text(
                           _currencyFormat.format(totalPending),
-                          style: const TextStyle(color: AppColors.accentCyan, fontSize: 20, fontWeight: FontWeight.bold),
+                          style: const TextStyle(color: AppColors.accentGold, fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -439,8 +440,8 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                             height: 50,
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: isExact ? AppColors.accentCyan : AppColors.cardBackground,
-                                foregroundColor: isExact ? Colors.white : AppColors.textMuted,
+                                backgroundColor: isExact ? AppColors.accentGold : AppColors.cardBackground,
+                                foregroundColor: isExact ? Colors.black : AppColors.textMuted,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                               onPressed: isExact
@@ -474,358 +475,449 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'Entonnoir d\'Épargne',
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'REVENUS EXCEPTIONNELS',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Pending Bucket (Matches Screenshot)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.cardBackground.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColors.accentCyan.withValues(alpha: 0.4),
-                  width: 1,
-                ),
-              ),
-              child: Column(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // HEADER
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.hourglass_empty_rounded, color: AppColors.accentCyan, size: 16),
-                          SizedBox(width: 8),
-                          Text(
-                            'En attente de ventilation',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                  const Expanded(
+                    child: Text(
+                      'Revenus exceptionnels',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
                       ),
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.textSecondary, size: 20),
-                        onPressed: _showAddEventModal,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    _currencyFormat.format(totalPending),
-                    style: const TextStyle(
-                      color: AppColors.accentCyan,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accentCyan,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        elevation: 0,
-                      ),
-                      icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                      label: const Text('Ventiler vers les comptes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      onPressed: totalPending > 0 ? () => _showVentilateModal(pendingEvents, bonusState.destinations) : null,
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBackground,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.schedule_rounded, color: AppColors.textMuted, size: 12),
+                        SizedBox(width: 6),
+                        Text(
+                          'Hors répartition mensuelle',
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 32),
-
-            // Destinations Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'DESTINATIONS',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                GestureDetector(
-                  onTap: _showAddDestinationModal,
-                  child: Row(
-                    children: const [
-                      Icon(Icons.add_rounded, size: 14, color: AppColors.textSecondary),
-                      SizedBox(width: 4),
-                      Text('Ajouter', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                    ],
-                  ),
-                )
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Destinations Grid (Matches Screenshot: Icon top-left, close top-right, title/amount bottom-left)
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.4,
+              const SizedBox(height: 6),
+              const Text(
+                'Primes, bonus, tontine — tout ce qui n\'est pas votre salaire courant',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 13),
               ),
-              itemCount: bonusState.destinations.length,
-              itemBuilder: (context, index) {
-                final dest = bonusState.destinations[index];
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardBackground,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderSubtle),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              const SizedBox(height: 24),
+
+              // PENDING BUCKET CARD
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Row(
+                  children: [
+                    // Graphic Circle
+                    Container(
+                      width: 90,
+                      height: 90,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                      child: Stack(
                         children: [
-                          Icon(_getIconData(dest.iconName), color: dest.color, size: 18),
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.close_rounded, size: 14, color: AppColors.textMuted),
-                            onPressed: () => ref.read(bonusProvider.notifier).removeDestination(dest.id),
+                          Positioned.fill(
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: Container(
+                                height: 45,
+                                decoration: BoxDecoration(
+                                  color: AppColors.background.withValues(alpha: 0.5),
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(45)),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      Column(
+                    ),
+                    const SizedBox(width: 24),
+                    // Details
+                    Expanded(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(dest.name, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                          Row(
+                            children: const [
+                              Icon(Icons.auto_awesome_rounded, color: AppColors.accentGold, size: 16),
+                              SizedBox(width: 8),
+                              Text(
+                                'En attente de ventilation',
+                                style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(totalPending),
+                            style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: -1),
+                          ),
                           const SizedBox(height: 2),
                           Text(
-                            _currencyFormat.format(dest.total),
-                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                            '${pendingEvents.length} revenus non répartis${pendingEvents.isNotEmpty ? ' - dernier : ${pendingEvents.first.label}' : ''}',
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.accentGold,
+                                  foregroundColor: Colors.black,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: totalPending > 0 ? () => _showVentilateModal(pendingEvents, bonusState.destinations) : null,
+                                child: Row(
+                                  children: const [
+                                    Text('Ventiler', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    SizedBox(width: 6),
+                                    Icon(Icons.check_rounded, size: 16),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  side: const BorderSide(color: AppColors.borderSubtle),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                icon: const Icon(Icons.add_rounded, size: 16),
+                                label: const Text('Ajouter un revenu', style: TextStyle(fontSize: 13)),
+                                onPressed: _showAddEventModal,
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 32),
-
-            // PEE Block (Matches Screenshot)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                  ],
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.business_center_rounded, color: AppColors.accentGold, size: 18),
-                          SizedBox(width: 8),
-                          Text(
-                            'Épargne Salariale (PEE/PERCO)',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
+              const SizedBox(height: 32),
+
+              // CUMUL INVESTI VIA PRIMES
+              const Text(
+                'CUMUL INVESTI VIA PRIMES',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                child: Row(
+                  children: [
+                    ...bonusState.destinations.map((dest) {
+                      return Container(
+                        width: 140,
+                        height: 140,
+                        margin: const EdgeInsets.only(right: 16),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.borderSubtle),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: dest.color.withValues(alpha: 0.15),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(_getIconData(dest.iconName), color: dest.color, size: 20),
+                                ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  icon: const Icon(Icons.delete_outline_rounded, size: 16, color: AppColors.textMuted),
+                                  onPressed: () => ref.read(bonusProvider.notifier).removeDestination(dest.id),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(dest.name, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _currencyFormat.format(dest.total),
+                                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    // Ajouter une destination
+                    GestureDetector(
+                      onTap: _showAddDestinationModal,
+                      child: CustomPaint(
+                        painter: DashedBorderPainter(color: AppColors.textMuted, radius: 20, strokeWidth: 1.5, dashWidth: 6, dashSpace: 4),
+                        child: Container(
+                          width: 140,
+                          height: 140,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.add_rounded, color: AppColors.textMuted, size: 18),
+                                SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'Ajouter une\ndestination',
+                                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // HISTORIQUE DES EVENEMENTS
+              const Text(
+                'HISTORIQUE DES ÉVÉNEMENTS',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (bonusState.events.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  child: const Center(
+                    child: Text('Aucun événement pour le moment.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: bonusState.events.length,
+                  separatorBuilder: (c, i) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final ev = bonusState.events[index];
+                    final isPending = !ev.isVentilated;
+
+                    String breakdownText = '';
+                    if (!isPending && ev.breakdown.isNotEmpty) {
+                      breakdownText = ev.breakdown.map((b) {
+                        final d = bonusState.destinations.firstWhere(
+                          (x) => x.id == b.destId,
+                          orElse: () => BonusDestination(id: '', name: 'Inconnu', iconName: '', color: Colors.grey, total: 0),
+                        );
+                        return '${b.pct.round()}% ${d.name}';
+                      }).join(' • ');
+                    }
+
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: isPending ? AppColors.accentGold.withValues(alpha: 0.15) : AppColors.cardBackground,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _getIconData(ev.iconName),
+                              color: isPending ? AppColors.accentGold : AppColors.textMuted,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(ev.label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Text(_dateFormat.format(ev.date), style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                                    if (!isPending && breakdownText.isNotEmpty) ...[
+                                      const Text(' • ', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                                      Expanded(
+                                        child: Text(
+                                          breakdownText,
+                                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                _currencyFormat.format(ev.amount),
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isPending ? AppColors.accentGold.withValues(alpha: 0.15) : AppColors.accentEmerald.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  isPending ? 'En attente' : 'Ventilé',
+                                  style: TextStyle(
+                                    color: isPending ? AppColors.accentGold : AppColors.accentEmerald,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentEmerald.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text('Exonéré IR', style: TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Saisissez manuellement vos intéressements et participations qui ne transitent pas par le compte courant.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
+                    );
+                  },
+                ),
+
+              const SizedBox(height: 32),
+
+              // PEE BLOCK
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Cumul total', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                            const SizedBox(height: 2),
+                        Row(
+                          children: const [
+                            Icon(Icons.business_center_rounded, color: AppColors.accentGold, size: 20),
+                            SizedBox(width: 12),
                             Text(
-                              _currencyFormat.format(bonusState.peeTotal),
-                              style: const TextStyle(color: AppColors.accentGold, fontSize: 15, fontWeight: FontWeight.bold),
+                              'Épargne Salariale (PEE / PERCO)',
+                              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accentGold.withValues(alpha: 0.15),
-                            foregroundColor: AppColors.accentGold,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          icon: const Icon(Icons.add_rounded, size: 14),
-                          label: const Text('Ajouter', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          onPressed: _showAddPeeModal,
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (bonusState.peeEvents.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    const Divider(color: AppColors.borderSubtle, height: 1),
-                    const SizedBox(height: 12),
-                    const Text('Historique des versements PEE', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    ...bonusState.peeEvents.map((ev) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('${_dateFormat.format(ev.date)} - ${ev.label}', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-                              Text('+ ${_currencyFormat.format(ev.amount)}', style: const TextStyle(color: AppColors.accentGold, fontSize: 11, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        )),
-                  ]
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // History
-            const Text(
-              'HISTORIQUE DE L\'ENTONNOIR',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (bonusState.history.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text('Aucun événement ventilé pour le moment.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                ),
-              )
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: bonusState.history.length,
-                separatorBuilder: (c, i) => const Divider(color: AppColors.borderSubtle, height: 1),
-                itemBuilder: (context, index) {
-                  final ev = bonusState.history[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Row(
-                      children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(10),
+                            color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Icon(_getIconData(ev.iconName), color: AppColors.textSecondary, size: 18),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(ev.label, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
-                              const SizedBox(height: 2),
-                              Text(_dateFormat.format(ev.date), style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              _currencyFormat.format(ev.amount),
-                              style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: ev.breakdown.map((b) {
-                                final d = bonusState.destinations.firstWhere((x) => x.id == b.destId, orElse: () => BonusDestination(id: '', name: 'Inconnu', iconName: '', color: Colors.grey, total: 0));
-                                return Container(
-                                  margin: const EdgeInsets.only(left: 4),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                  decoration: BoxDecoration(color: d.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                                  child: Text('${b.pct.round()}% ${d.name}', style: TextStyle(color: d.color, fontSize: 8, fontWeight: FontWeight.bold)),
-                                );
-                              }).toList(),
-                            )
-                          ],
+                          child: const Text('Exonéré IR', style: TextStyle(color: AppColors.accentEmerald, fontSize: 11, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
-                  );
-                },
+                    const SizedBox(height: 16),
+                    const Text(
+                      'L\'intéressement et la participation versés directement sur votre PEE ne transitent pas par votre compte bancaire mais constituent une réserve de valeur majeure.',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('Cumul Intéressement & Participation PEE :', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 12),
+                            Text(_currencyFormat.format(bonusState.peeTotal), style: const TextStyle(color: AppColors.accentGold, fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        TextButton.icon(
+                          onPressed: _showAddPeeModal,
+                          icon: const Icon(Icons.add_rounded, color: AppColors.accentGold, size: 18),
+                          label: const Text('Ajouter manuellement', style: TextStyle(color: AppColors.accentGold, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            const SizedBox(height: 40),
-          ],
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );
