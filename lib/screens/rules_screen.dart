@@ -470,15 +470,16 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
-  void _showAddTemporaryExpenseDialog(BuildContext context) {
+  void _showTemporaryExpenseDialog(BuildContext context, {TemporaryExpense? expense}) {
+    final isEditing = expense != null;
     final now = DateTime.now();
     final mStr = now.month < 10 ? '0${now.month}' : '${now.month}';
     final currentPeriodStr = '${now.year}-$mStr';
 
-    final labelCtrl = TextEditingController(text: 'Dentiste Couronne');
-    final amountCtrl = TextEditingController(text: '164.50');
-    final startCtrl = TextEditingController(text: currentPeriodStr);
-    final durationCtrl = TextEditingController(text: '12');
+    final labelCtrl = TextEditingController(text: isEditing ? expense.label : 'Dentiste Couronne');
+    final amountCtrl = TextEditingController(text: isEditing ? expense.monthlyAmount.toStringAsFixed(2) : '164.50');
+    final startCtrl = TextEditingController(text: isEditing ? expense.startPeriod : currentPeriodStr);
+    final durationCtrl = TextEditingController(text: isEditing ? expense.durationMonths.toString() : '12');
 
     showDialog(
       context: context,
@@ -492,10 +493,10 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               backgroundColor: AppColors.surface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: Row(
-                children: const [
-                  Icon(Icons.calendar_month_rounded, color: AppColors.accentCyan, size: 22),
-                  SizedBox(width: 10),
-                  Text('Dépense Échéancée / Temporaire', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                children: [
+                  const Icon(Icons.calendar_month_rounded, color: AppColors.accentCyan, size: 22),
+                  const SizedBox(width: 10),
+                  Text(isEditing ? 'Modifier l\'échéancier' : 'Dépense Échéancée / Temporaire', style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
                 ],
               ),
               content: SingleChildScrollView(
@@ -569,13 +570,13 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
-                  child: const Text('Ajouter l\'échéancier'),
+                  child: Text(isEditing ? 'Mettre à jour' : 'Ajouter l\'échéancier'),
                   onPressed: () {
                     final exp = TemporaryExpense(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      id: isEditing ? expense.id : DateTime.now().millisecondsSinceEpoch.toString(),
                       label: labelCtrl.text.isEmpty ? 'Dépense temporaire' : labelCtrl.text,
                       monthlyAmount: double.tryParse(amountCtrl.text) ?? 0.0,
-                      startPeriod: startCtrl.text.isEmpty ? '2026-06' : startCtrl.text,
+                      startPeriod: startCtrl.text.isEmpty ? currentPeriodStr : startCtrl.text,
                       durationMonths: int.tryParse(durationCtrl.text) ?? 12,
                     );
                     ref.read(salaryProvider.notifier).addTemporaryExpense(exp);
@@ -975,7 +976,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         ),
                         icon: const Icon(Icons.add_rounded, size: 16),
                         label: const Text('Déclarer un Échéancier', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        onPressed: () => _showAddTemporaryExpenseDialog(context),
+                        onPressed: () => _showTemporaryExpenseDialog(context),
                       ),
                     ],
                   ),
@@ -1023,10 +1024,18 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                 '-${exp.monthlyAmount.toStringAsFixed(2)} €/mois',
                                 style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
-                                onPressed: () => _confirmDeleteTemporaryExpense(exp),
-                              ),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, color: AppColors.textMuted, size: 18),
+                                    onPressed: () => _showTemporaryExpenseDialog(context, expense: exp),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
+                                    onPressed: () => _confirmDeleteTemporaryExpense(exp),
+                                  ),
+                                ],
+                              )
                             ],
                           ),
                         );
