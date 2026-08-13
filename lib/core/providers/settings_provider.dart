@@ -68,18 +68,9 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final languageCode = prefs.getString('${userId}_app_language_code') ?? 'fr';
     final bankConnected = prefs.getBool('${userId}_bank_connected') ?? false;
     final connectedBankName = prefs.getString('${userId}_connected_bank_name') ?? '';
-    final truelayerUseSandbox = prefs.getBool('${userId}_truelayer_use_sandbox') ?? false;
-
-    var clientId = await SecureStorageService.getTrueLayerClientId(userId) ?? '';
+    var clientId = await SecureStorageService.getTrueLayerClientId(userId) ?? 'aurabudgetpro-f0ea54';
     var clientSecret = await SecureStorageService.getTrueLayerClientSecret(userId) ?? '';
     final accessToken = await SecureStorageService.getTrueLayerAccessToken(userId) ?? '';
-
-    // Auto-migration vers l'ID Live si ancien sandbox trouvé
-    if (clientId.isEmpty || clientId == 'sandbox-aurabudgetpro-f0ea54') {
-      clientId = 'aurabudgetpro-f0ea54';
-      clientSecret = '';
-      await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret, userId);
-    }
 
     if (clientSecret.isEmpty) {
       try {
@@ -93,6 +84,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret, userId);
       } catch (_) {}
     }
+
+    final savedSandbox = prefs.getBool('${userId}_truelayer_use_sandbox');
+    // If client ID is sandbox (like aurabudgetpro-f0ea54), default useSandbox to true unless explicitly overridden
+    final truelayerUseSandbox = savedSandbox ?? (clientId.contains('-f0ea54') || clientId.contains('sandbox'));
 
     state = SettingsState(
       languageCode: languageCode,

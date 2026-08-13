@@ -35,7 +35,9 @@ export default async function handler(req, res) {
     is_sandbox,
   });
 
-  const baseUrl = is_sandbox === 'true' || is_sandbox === true
+  const isSandbox = is_sandbox === 'true' || is_sandbox === true || (client_id && (client_id.includes('-f0ea54') || client_id.includes('sandbox')));
+
+  const baseUrl = isSandbox
     ? 'https://auth.truelayer-sandbox.com'
     : 'https://auth.truelayer.com';
 

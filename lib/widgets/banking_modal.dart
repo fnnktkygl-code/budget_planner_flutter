@@ -27,8 +27,14 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
 
   Future<void> _connectBank(String bankName, String bankId) async {
     final settings = ref.read(settingsProvider);
-    // Dynamically use the current web origin if running on Web, fallback to a deep link scheme for mobile
-    final redirectUri = Uri.base.origin; // Will resolve to https://aurabudgetpro.vercel.app on Vercel
+    final redirectUri = Uri.base.origin;
+
+    if (settings.truelayerUseSandbox && bankId != 'mock-bank') {
+      setState(() {
+        _errorMessage = '$bankName est une vraie banque (Production Live). En mode Bac à Sable (Sandbox), veuillez utiliser "Mock Bank (Sandbox Test)" pour effectuer la démonstration sans identifiants réels.';
+      });
+      return;
+    }
 
     try {
       final authUrl = TrueLayerService.getAuthorizationUrl(

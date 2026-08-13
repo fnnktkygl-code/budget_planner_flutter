@@ -52,7 +52,7 @@ class TrueLayerService {
           'client_secret': effectiveClientSecret,
           'redirect_uri': redirectUri,
           'code': code,
-          'is_sandbox': isSandbox.toString(),
+          'is_sandbox': (isSandbox || clientId.contains('-f0ea54') || clientId.contains('sandbox')).toString(),
         }),
       );
 

@@ -386,16 +386,98 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
-  void _deleteCategory(List<RuleCategoryItem> targetList, String id) {
-    setState(() {
-      targetList.removeWhere((item) => item.id == id);
-    });
+  void _confirmDeleteCategory(RuleCategoryItem item, List<RuleCategoryItem> targetList) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: AppColors.accentRose, size: 22),
+              SizedBox(width: 8),
+              Text('Supprimer la règle', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            'Voulez-vous vraiment supprimer "${item.name}" ?',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentRose,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                setState(() {
+                  targetList.removeWhere((i) => i.id == item.id);
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmDeleteTemporaryExpense(TemporaryExpense exp) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: AppColors.accentRose, size: 22),
+              SizedBox(width: 8),
+              Text('Supprimer l\'échéancier', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            'Voulez-vous vraiment supprimer l\'échéancier "${exp.label}" (-${exp.monthlyAmount.toStringAsFixed(2)} €/mois) ?',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentRose,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                ref.read(salaryProvider.notifier).deleteTemporaryExpense(exp.id);
+                Navigator.pop(ctx);
+              },
+              child: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showAddTemporaryExpenseDialog(BuildContext context) {
+    final now = DateTime.now();
+    final mStr = now.month < 10 ? '0${now.month}' : '${now.month}';
+    final currentPeriodStr = '${now.year}-$mStr';
+
     final labelCtrl = TextEditingController(text: 'Dentiste Couronne');
     final amountCtrl = TextEditingController(text: '164.50');
-    final startCtrl = TextEditingController(text: '2026-06');
+    final startCtrl = TextEditingController(text: currentPeriodStr);
     final durationCtrl = TextEditingController(text: '12');
 
     showDialog(
@@ -569,7 +651,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     final hasBonus = extraAmount > 0;
 
     final taxMonthly = salary.activeTaxAdjustmentMonthlyInstallment;
-    final tempMonthly = salary.activeTemporaryExpensesMonthlyTotal;
+    final tempMonthly = salary.temporaryExpenses.fold(0.0, (sum, exp) => sum + exp.monthlyAmount);
     final totalSavings = _savingsCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
     final totalFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary)) + taxMonthly + tempMonthly;
     final totalDaily = _dailyCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
@@ -943,9 +1025,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted, size: 18),
-                                onPressed: () {
-                                  ref.read(salaryProvider.notifier).deleteTemporaryExpense(exp.id);
-                                },
+                                onPressed: () => _confirmDeleteTemporaryExpense(exp),
                               ),
                             ],
                           ),
@@ -1068,7 +1148,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             separatorBuilder: (_, __) => const Divider(color: AppColors.borderSubtle, height: 1),
             itemBuilder: (context, idx) {
               final cat = categories[idx];
-              return _buildCategoryRow(cat, netSalary, allowDelete: allowDelete, onDelete: () => _deleteCategory(categories, cat.id));
+              return _buildCategoryRow(cat, netSalary, allowDelete: allowDelete, onDelete: () => _confirmDeleteCategory(cat, categories));
             },
           ),
           const Divider(color: AppColors.borderSubtle, height: 1),
