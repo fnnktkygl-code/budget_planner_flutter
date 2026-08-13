@@ -76,9 +76,8 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
   Timer? _indexedDbDebounceTimer;
 
   SalaryNotifier({required this.userId}) : super(SalaryState(records: [], taxAdjustments: [], temporaryExpenses: [])) {
-    if (userId.isNotEmpty) {
-      init();
-    }
+    init();
+
   }
 
   String _key(String base) => userId.isEmpty ? base : '${userId}_$base';
