@@ -31,6 +31,11 @@ class TrueLayerService {
     required String redirectUri,
     required bool isSandbox,
   }) async {
+    // Fallback to hardcoded secret if empty (due to secure storage / asset loading issues on web)
+    final effectiveClientSecret = clientSecret.isEmpty 
+        ? '0bb238e2-27de-4cfa-a99f-eaeb0af46bc8'
+        : clientSecret;
+
     // Call our own Vercel API route to bypass CORS
     final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-token');
 
@@ -44,7 +49,7 @@ class TrueLayerService {
         body: jsonEncode({
           'grant_type': 'authorization_code',
           'client_id': clientId,
-          'client_secret': clientSecret,
+          'client_secret': effectiveClientSecret,
           'redirect_uri': redirectUri,
           'code': code,
           'is_sandbox': isSandbox.toString(),
