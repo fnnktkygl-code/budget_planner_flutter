@@ -35,32 +35,40 @@ class UserProfile {
 }
 
 class AuthService {
-  static final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
-  );
+  static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
-  /// Sign in with a specific Gmail address entered by the user
-  static Future<UserProfile> signInWithGmailAddress(String userEmail) async {
-    final cleanEmail = userEmail.trim().isEmpty ? 'fnnktkygl@gmail.com' : userEmail.trim();
-    final namePart = cleanEmail.split('@').first;
-    final formattedName = namePart[0].toUpperCase() + namePart.substring(1);
+  static Stream<GoogleSignInAccount?> get onCurrentUserChanged => 
+      _googleSignIn.authenticationEvents.map((event) {
+        if (event is GoogleSignInAuthenticationEventSignIn) {
+          return event.user;
+        }
+        return null;
+      });
 
-    final profile = UserProfile(
-      id: 'usr-gmail-${DateTime.now().millisecondsSinceEpoch}',
-      email: cleanEmail,
-      displayName: formattedName,
-      photoUrl: 'https://lh3.googleusercontent.com/a/default-user',
-      isGuest: false,
-    );
-    await saveUserProfile(profile);
-    return profile;
+  static Future<void> initGoogleSignIn() async {
+    try {
+      await _googleSignIn.initialize(
+        clientId: '398103262634-li80reb9n0rudq5s30bm5ctomucf2t1m.apps.googleusercontent.com',
+      );
+      if (kIsWeb) {
+        await _googleSignIn.attemptLightweightAuthentication();
+      }
+    } catch (_) {}
   }
+
 
   /// Native Google Sign-In trigger
   static Future<UserProfile?> signInWithGoogle() async {
     try {
       debugPrint('[AuthService] Initiating Google Sign-In...');
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      // Ensure initialized before authenticating just in case
+      await _googleSignIn.initialize(
+        clientId: '398103262634-li80reb9n0rudq5s30bm5ctomucf2t1m.apps.googleusercontent.com',
+      );
+      
+      final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate(
+        scopeHint: ['email', 'profile'],
+      );
 
       if (googleUser != null) {
         final profile = UserProfile(
@@ -80,18 +88,6 @@ class AuthService {
     }
   }
 
-  /// Sign in as Guest
-  static Future<UserProfile> signInAsGuest() async {
-    final profile = UserProfile(
-      id: 'usr-guest-12345',
-      email: 'guest@aurabudget.app',
-      displayName: 'Invité AuraBudget',
-      photoUrl: '',
-      isGuest: true,
-    );
-    await saveUserProfile(profile);
-    return profile;
-  }
 
   static Future<void> saveUserProfile(UserProfile profile) async {
     final prefs = await SharedPreferences.getInstance();

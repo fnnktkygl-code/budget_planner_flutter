@@ -10,8 +10,8 @@ class IndexedDbService {
   static const String _storeName = 'salary_records';
 
   /// Saves full salary records (including binary images) to Browser IndexedDB (Multi-Gigabyte storage quota)
-  static Future<bool> saveFullRecords(List<SalaryRecord> records) async {
-    if (!kIsWeb) return false;
+  static Future<bool> saveFullRecords(List<SalaryRecord> records, String userId) async {
+    if (!kIsWeb || userId.isEmpty) return false;
     
     try {
 
@@ -32,7 +32,7 @@ class IndexedDbService {
               var db = e.target.result;
               var tx = db.transaction("$_storeName", "readwrite");
               var store = tx.objectStore("$_storeName");
-              store.put(dataStr, "records_key");
+              store.put(dataStr, "records_key_" + "$userId");
               tx.oncomplete = function() {
                 console.log("[IndexedDbService] Full records successfully saved to IndexedDB!");
               };
@@ -52,8 +52,8 @@ class IndexedDbService {
   }
 
   /// Loads full salary records (with binary images) from Browser IndexedDB
-  static Future<List<SalaryRecord>?> loadFullRecords() async {
-    if (!kIsWeb) return null;
+  static Future<List<SalaryRecord>?> loadFullRecords(String userId) async {
+    if (!kIsWeb || userId.isEmpty) return null;
 
     try {
       final completer = Completer<List<SalaryRecord>?>();
@@ -87,7 +87,7 @@ class IndexedDbService {
               var db = e.target.result;
               var tx = db.transaction("$_storeName", "readonly");
               var store = tx.objectStore("$_storeName");
-              var getReq = store.get("records_key");
+              var getReq = store.get("records_key_" + "$userId");
               getReq.onsuccess = function() {
                 if (window.onIndexedDbLoaded) {
                   window.onIndexedDbLoaded(getReq.result || null);

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'constants/colors.dart';
 import 'core/providers/auth_provider.dart';
+import 'core/providers/settings_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/rules_screen.dart';
@@ -80,14 +81,14 @@ class AuraBudgetApp extends ConsumerWidget {
   }
 }
 
-class ResponsiveMainLayout extends StatefulWidget {
+class ResponsiveMainLayout extends ConsumerStatefulWidget {
   const ResponsiveMainLayout({super.key});
 
   @override
-  State<ResponsiveMainLayout> createState() => _ResponsiveMainLayoutState();
+  ConsumerState<ResponsiveMainLayout> createState() => _ResponsiveMainLayoutState();
 }
 
-class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
+class _ResponsiveMainLayoutState extends ConsumerState<ResponsiveMainLayout> {
   int _currentIndex = 0;
   bool _isSidebarCollapsed = false;
 
@@ -107,6 +108,43 @@ class _ResponsiveMainLayoutState extends State<ResponsiveMainLayout> {
   int _getBottomNavIndex() {
     final navIdx = _bottomNavToScreenIndex.indexOf(_currentIndex);
     return navIdx != -1 ? navIdx : 0;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForTrueLayerCode();
+    });
+  }
+
+  Future<void> _checkForTrueLayerCode() async {
+    final code = Uri.base.queryParameters['code'];
+    if (code != null && code.isNotEmpty) {
+      // Process code with TrueLayer
+      final settingsNotifier = ref.read(settingsProvider.notifier);
+      final success = await settingsNotifier.processTrueLayerCode(code);
+      
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Connexion bancaire TrueLayer réussie !'),
+              backgroundColor: AppColors.accentEmerald,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Erreur lors de la validation TrueLayer.'),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override

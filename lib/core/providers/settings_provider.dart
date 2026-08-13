@@ -2,6 +2,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/secure_storage_service.dart';
+import '../../services/truelayer_service.dart';
+import 'auth_provider.dart';
 
 class SettingsState {
   final String languageCode;
@@ -44,7 +46,9 @@ class SettingsState {
 }
 
 class SettingsNotifier extends StateNotifier<SettingsState> {
-  SettingsNotifier()
+  final String userId;
+
+  SettingsNotifier({required this.userId})
       : super(SettingsState(
           languageCode: 'fr',
           bankConnected: false,
@@ -54,25 +58,27 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           truelayerAccessToken: '',
           truelayerUseSandbox: false,
         )) {
-    init();
+    if (userId.isNotEmpty) {
+      init();
+    }
   }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final languageCode = prefs.getString('app_language_code') ?? 'fr';
-    final bankConnected = prefs.getBool('bank_connected') ?? false;
-    final connectedBankName = prefs.getString('connected_bank_name') ?? '';
-    final truelayerUseSandbox = prefs.getBool('truelayer_use_sandbox') ?? false;
+    final languageCode = prefs.getString('${userId}_app_language_code') ?? 'fr';
+    final bankConnected = prefs.getBool('${userId}_bank_connected') ?? false;
+    final connectedBankName = prefs.getString('${userId}_connected_bank_name') ?? '';
+    final truelayerUseSandbox = prefs.getBool('${userId}_truelayer_use_sandbox') ?? false;
 
-    var clientId = await SecureStorageService.getTrueLayerClientId() ?? '';
-    var clientSecret = await SecureStorageService.getTrueLayerClientSecret() ?? '';
-    final accessToken = await SecureStorageService.getTrueLayerAccessToken() ?? '';
+    var clientId = await SecureStorageService.getTrueLayerClientId(userId) ?? '';
+    var clientSecret = await SecureStorageService.getTrueLayerClientSecret(userId) ?? '';
+    final accessToken = await SecureStorageService.getTrueLayerAccessToken(userId) ?? '';
 
     // Auto-migration vers l'ID Live si ancien sandbox trouvé
     if (clientId.isEmpty || clientId == 'sandbox-aurabudgetpro-f0ea54') {
       clientId = 'aurabudgetpro-f0ea54';
       clientSecret = '';
-      await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret);
+      await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret, userId);
     }
 
     if (clientSecret.isEmpty) {
@@ -84,7 +90,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           final loadedSecret = await rootBundle.loadString('assets/sandbox-aurabudgetpro-f0ea54-secret.txt');
           clientSecret = loadedSecret.trim();
         }
-        await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret);
+        await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret, userId);
       } catch (_) {}
     }
 
@@ -100,19 +106,22 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<void> setLanguage(String code) async {
+    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('app_language_code', code);
+    await prefs.setString('${userId}_app_language_code', code);
     state = state.copyWith(languageCode: code);
   }
 
   Future<void> setSandboxMode(bool useSandbox) async {
+    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('truelayer_use_sandbox', useSandbox);
+    await prefs.setBool('${userId}_truelayer_use_sandbox', useSandbox);
     state = state.copyWith(truelayerUseSandbox: useSandbox);
   }
 
   Future<void> updateTrueLayerCredentials(String clientId, String clientSecret) async {
-    await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret);
+    if (userId.isEmpty) return;
+    await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret, userId);
     state = state.copyWith(
       truelayerClientId: clientId,
       truelayerClientSecret: clientSecret,
@@ -120,9 +129,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<void> setBankConnected(bool connected, String bankName) async {
+    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('bank_connected', connected);
-    await prefs.setString('connected_bank_name', bankName);
+    await prefs.setBool('${userId}_bank_connected', connected);
+    await prefs.setString('${userId}_connected_bank_name', bankName);
     state = state.copyWith(
       bankConnected: connected,
       connectedBankName: bankName,
@@ -130,15 +140,42 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<void> setAccessToken(String token) async {
-    await SecureStorageService.saveTrueLayerTokens(accessToken: token);
+    if (userId.isEmpty) return;
+    await SecureStorageService.saveTrueLayerTokens(accessToken: token, userId: userId);
     state = state.copyWith(truelayerAccessToken: token);
   }
 
+  Future<bool> processTrueLayerCode(String code) async {
+    if (userId.isEmpty) return false;
+    final redirectUri = Uri.base.origin;
+    
+    try {
+      final tokenData = await TrueLayerService.exchangeCodeForToken(
+        code: code,
+        clientId: state.truelayerClientId,
+        clientSecret: state.truelayerClientSecret,
+        redirectUri: redirectUri,
+        isSandbox: state.truelayerUseSandbox,
+      );
+
+      if (tokenData != null && tokenData['access_token'] != null) {
+        final accessToken = tokenData['access_token'] as String;
+        await setAccessToken(accessToken);
+        await setBankConnected(true, 'Connecté via TrueLayer');
+        return true;
+      }
+    } catch (e) {
+      // Ignored for now
+    }
+    return false;
+  }
+
   Future<void> disconnectBank() async {
+    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('bank_connected', false);
-    await prefs.setString('connected_bank_name', '');
-    await SecureStorageService.clearTrueLayerTokens();
+    await prefs.setBool('${userId}_bank_connected', false);
+    await prefs.setString('${userId}_connected_bank_name', '');
+    await SecureStorageService.clearTrueLayerTokens(userId);
     state = state.copyWith(
       bankConnected: false,
       connectedBankName: '',
@@ -148,5 +185,6 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 }
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>((ref) {
-  return SettingsNotifier();
+  final authState = ref.watch(authProvider);
+  return SettingsNotifier(userId: authState.user?.id ?? '');
 });

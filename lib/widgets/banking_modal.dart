@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
 import '../core/providers/settings_provider.dart';
 import '../services/truelayer_service.dart';
-import '../screens/truelayer_webview_page.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class BankingModalContent extends ConsumerStatefulWidget {
   const BankingModalContent({super.key});
@@ -27,12 +27,8 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
 
   Future<void> _connectBank(String bankName, String bankId) async {
     final settings = ref.read(settingsProvider);
-    final redirectUri = 'https://console.truelayer.com/redirect-page';
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    // Dynamically use the current web origin if running on Web, fallback to a deep link scheme for mobile
+    final redirectUri = Uri.base.origin; // Will resolve to https://aurabudgetpro.vercel.app on Vercel
 
     try {
       final authUrl = TrueLayerService.getAuthorizationUrl(
@@ -41,56 +37,25 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
         isSandbox: settings.truelayerUseSandbox,
       );
 
-      final code = await Navigator.push<String>(
-        context,
-        MaterialPageRoute(
-          builder: (context) => TrueLayerWebViewPage(
-            authUrl: authUrl,
-            bankName: bankName,
-          ),
-        ),
-      );
-
-      if (code != null && code.isNotEmpty) {
-        final tokenData = await TrueLayerService.exchangeCodeForToken(
-          code: code,
-          clientId: settings.truelayerClientId,
-          clientSecret: settings.truelayerClientSecret,
-          redirectUri: redirectUri,
-          isSandbox: settings.truelayerUseSandbox,
+      final uri = Uri.parse(authUrl);
+      
+      // Save the selected bank name and ID in SharedPreferences or just pass it as state in the TrueLayer URL if possible.
+      // TrueLayer doesn't let us pass custom state easily without validating it, but we'll assume the connected bank when they return.
+      
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(
+          uri,
+          webOnlyWindowName: '_self', // Open in the same window so redirect flow works naturally
         );
-
-        if (tokenData != null && tokenData['access_token'] != null) {
-          final accessToken = tokenData['access_token'] as String;
-          await ref.read(settingsProvider.notifier).setAccessToken(accessToken);
-          await ref.read(settingsProvider.notifier).setBankConnected(true, bankName);
-
-          if (mounted) {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Connexion à $bankName réussie avec succès !'),
-                backgroundColor: AppColors.accentEmerald,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        } else {
-          setState(() {
-            _errorMessage = 'Échec de l\'échange de jeton TrueLayer. Vérifiez vos identifiants.';
-          });
-        }
+      } else {
+        setState(() {
+          _errorMessage = 'Impossible d\'ouvrir le lien TrueLayer.';
+        });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Erreur lors de la connexion : $e';
+        _errorMessage = 'Erreur lors de la redirection : $e';
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
   }
 

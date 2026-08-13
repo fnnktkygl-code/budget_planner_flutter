@@ -10,36 +10,43 @@ class SecureStorageService {
   static const _kTrueLayerAccessToken = 'truelayer_access_token';
   static const _kTrueLayerRefreshToken = 'truelayer_refresh_token';
 
-  static Future<void> saveTrueLayerCredentials(String clientId, String clientSecret) async {
-    await _storage.write(key: _kTrueLayerClientId, value: clientId);
-    await _storage.write(key: _kTrueLayerClientSecret, value: clientSecret);
+  static Future<void> saveTrueLayerCredentials(String clientId, String clientSecret, String userId) async {
+    if (userId.isEmpty) return;
+    await _storage.write(key: '${userId}_$_kTrueLayerClientId', value: clientId);
+    await _storage.write(key: '${userId}_$_kTrueLayerClientSecret', value: clientSecret);
   }
 
-  static Future<String?> getTrueLayerClientId() async {
-    return await _storage.read(key: _kTrueLayerClientId);
+  static Future<String?> getTrueLayerClientId(String userId) async {
+    if (userId.isEmpty) return null;
+    return await _storage.read(key: '${userId}_$_kTrueLayerClientId');
   }
 
-  static Future<String?> getTrueLayerClientSecret() async {
-    return await _storage.read(key: _kTrueLayerClientSecret);
+  static Future<String?> getTrueLayerClientSecret(String userId) async {
+    if (userId.isEmpty) return null;
+    return await _storage.read(key: '${userId}_$_kTrueLayerClientSecret');
   }
 
-  static Future<void> saveTrueLayerTokens({required String accessToken, String? refreshToken}) async {
-    await _storage.write(key: _kTrueLayerAccessToken, value: accessToken);
+  static Future<void> saveTrueLayerTokens({required String accessToken, String? refreshToken, required String userId}) async {
+    if (userId.isEmpty) return;
+    await _storage.write(key: '${userId}_$_kTrueLayerAccessToken', value: accessToken);
     if (refreshToken != null) {
-      await _storage.write(key: _kTrueLayerRefreshToken, value: refreshToken);
+      await _storage.write(key: '${userId}_$_kTrueLayerRefreshToken', value: refreshToken);
     }
   }
 
-  static Future<String?> getTrueLayerAccessToken() async {
-    return await _storage.read(key: _kTrueLayerAccessToken);
+  static Future<String?> getTrueLayerAccessToken(String userId) async {
+    if (userId.isEmpty) return null;
+    return await _storage.read(key: '${userId}_$_kTrueLayerAccessToken');
   }
 
-  static Future<String?> getTrueLayerRefreshToken() async {
-    return await _storage.read(key: _kTrueLayerRefreshToken);
+  static Future<String?> getTrueLayerRefreshToken(String userId) async {
+    if (userId.isEmpty) return null;
+    return await _storage.read(key: '${userId}_$_kTrueLayerRefreshToken');
   }
 
-  static Future<void> clearTrueLayerTokens() async {
-    await _storage.delete(key: _kTrueLayerAccessToken);
-    await _storage.delete(key: _kTrueLayerRefreshToken);
+  static Future<void> clearTrueLayerTokens(String userId) async {
+    if (userId.isEmpty) return;
+    await _storage.delete(key: '${userId}_$_kTrueLayerAccessToken');
+    await _storage.delete(key: '${userId}_$_kTrueLayerRefreshToken');
   }
 }

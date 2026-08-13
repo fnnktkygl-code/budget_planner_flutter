@@ -7,6 +7,7 @@ import '../../models/salary_record.dart';
 import '../../models/tax_adjustment.dart';
 import '../../models/temporary_expense.dart';
 import '../../services/salary_analyzer_service.dart';
+import 'auth_provider.dart';
 
 import '../../services/indexed_db_service.dart';
 
@@ -71,22 +72,27 @@ class SalaryState {
 }
 
 class SalaryNotifier extends StateNotifier<SalaryState> {
-  SalaryNotifier() : super(SalaryState(records: [], taxAdjustments: [], temporaryExpenses: [])) {
-    init();
+  final String userId;
+  Timer? _indexedDbDebounceTimer;
+
+  SalaryNotifier({required this.userId}) : super(SalaryState(records: [], taxAdjustments: [], temporaryExpenses: [])) {
+    if (userId.isNotEmpty) {
+      init();
+    }
   }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     
     // Multi-key Migration Fallback (v3 -> v2 -> v1 -> default)
-    String? rawJson = prefs.getString('aura_salary_records_v3');
+    String? rawJson = prefs.getString('${userId}_aura_salary_records_v3');
     if (rawJson == null || rawJson.isEmpty) {
-      rawJson = prefs.getString('aura_salary_records_v2') ?? prefs.getString('aura_salary_records');
+      rawJson = prefs.getString('${userId}_aura_salary_records_v2') ?? prefs.getString('${userId}_aura_salary_records');
     }
 
-    final rawTaxJson = prefs.getString('aura_tax_adjustments_v1');
-    final rawTempJson = prefs.getString('aura_temporary_expenses_v1');
-    final savedBalance = prefs.getDouble('aura_account_balance_v1') ?? 1740.0;
+    final rawTaxJson = prefs.getString('${userId}_aura_tax_adjustments_v1');
+    final rawTempJson = prefs.getString('${userId}_aura_temporary_expenses_v1');
+    final savedBalance = prefs.getDouble('${userId}_aura_account_balance_v1') ?? 1740.0;
 
     List<SalaryRecord> list = [];
     List<TaxAdjustment> taxList = [];
@@ -107,9 +113,9 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     // Attempt to load full records with PDF images from Web IndexedDB
     if (kIsWeb) {
       try {
-        final idbRecords = await IndexedDbService.loadFullRecords();
-        if (idbRecords != null && idbRecords.isNotEmpty && idbRecords.length >= list.length) {
-          list = idbRecords;
+        final fullRecords = await IndexedDbService.loadFullRecords(userId);
+        if (fullRecords != null && fullRecords.isNotEmpty) {
+          list = fullRecords;
           list.sort((a, b) => b.period.compareTo(a.period));
         }
       } catch (e) {
@@ -191,29 +197,28 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     }
   }
 
-  Timer? _indexedDbDebounceTimer;
-
   Future<void> _save({bool saveHeavyBinaries = false}) async {
+    if (userId.isEmpty) return;
     try {
       final prefs = await SharedPreferences.getInstance();
 
       // Save lightweight financial JSON to SharedPreferences (Ultra-fast, < 1ms)
       final cleanJsonStr = jsonEncode(state.records.map((r) => r.toJson(includeBinary: false)).toList());
-      await prefs.setString('aura_salary_records_v3', cleanJsonStr);
+      await prefs.setString('${userId}_aura_salary_records_v3', cleanJsonStr);
 
       final taxJsonStr = jsonEncode(state.taxAdjustments.map((t) => t.toJson()).toList());
-      await prefs.setString('aura_tax_adjustments_v1', taxJsonStr);
+      await prefs.setString('${userId}_aura_tax_adjustments_v1', taxJsonStr);
 
       final tempJsonStr = jsonEncode(state.temporaryExpenses.map((e) => e.toJson()).toList());
-      await prefs.setString('aura_temporary_expenses_v1', tempJsonStr);
+      await prefs.setString('${userId}_aura_temporary_expenses_v1', tempJsonStr);
 
-      await prefs.setDouble('aura_account_balance_v1', state.accountBalance);
+      await prefs.setDouble('${userId}_aura_account_balance_v1', state.accountBalance);
 
       // Heavy IndexedDB binary save: Debounced in background so UI thread NEVER freezes!
       if (kIsWeb && state.records.isNotEmpty && saveHeavyBinaries) {
         _indexedDbDebounceTimer?.cancel();
         _indexedDbDebounceTimer = Timer(const Duration(seconds: 2), () {
-          IndexedDbService.saveFullRecords(state.records);
+          IndexedDbService.saveFullRecords(state.records, userId);
         });
       }
     } catch (e) {
@@ -326,16 +331,18 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
 
   void clearAllRecords() async {
     state = SalaryState(records: [], taxAdjustments: [], temporaryExpenses: [], accountBalance: 1740.0);
+    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    prefs.remove('aura_salary_records_v3');
-    prefs.remove('aura_salary_records_v2');
-    prefs.remove('aura_salary_records');
-    prefs.remove('aura_tax_adjustments_v1');
-    prefs.remove('aura_temporary_expenses_v1');
-    prefs.remove('aura_account_balance_v1');
+    prefs.remove('${userId}_aura_salary_records_v3');
+    prefs.remove('${userId}_aura_salary_records_v2');
+    prefs.remove('${userId}_aura_salary_records');
+    prefs.remove('${userId}_aura_tax_adjustments_v1');
+    prefs.remove('${userId}_aura_temporary_expenses_v1');
+    prefs.remove('${userId}_aura_account_balance_v1');
   }
 }
 
 final salaryProvider = StateNotifierProvider<SalaryNotifier, SalaryState>((ref) {
-  return SalaryNotifier();
+  final authState = ref.watch(authProvider);
+  return SalaryNotifier(userId: authState.user?.id ?? '');
 });

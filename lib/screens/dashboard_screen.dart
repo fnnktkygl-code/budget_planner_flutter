@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
+import '../core/providers/auth_provider.dart';
 import '../models/salary_record.dart';
 import '../widgets/donut_chart.dart';
 import '../widgets/notification_header.dart';
@@ -19,6 +20,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final userName = authState.user?.displayName ?? "Utilisateur";
+    
     final salaryState = ref.watch(salaryProvider);
     final activeBaseline = salaryState.activeBaseline;
 
@@ -100,7 +104,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         children: [
                           Flexible(
                             child: Text(
-                              '${activeBaseline?.employerName ?? "Entreprise Exemple"} | Salarié : ${activeBaseline?.employeeName ?? "John Doe"} (${activeBaseline?.periodLabel ?? "Juillet 2026"})',
+                              '${activeBaseline?.employerName ?? "Entreprise Exemple"} | Salarié : ${(activeBaseline?.employeeName == null || activeBaseline?.employeeName == "John Doe") ? userName : activeBaseline!.employeeName} (${activeBaseline?.periodLabel ?? "Juillet 2026"})',
                               style: const TextStyle(
                                 color: AppColors.textPrimary,
                                 fontSize: 12,
