@@ -223,7 +223,7 @@ class BonusNotifier extends StateNotifier<BonusState> {
     _loadState();
   }
 
-  static const _storageKey = 'aura_bonus_state_v1';
+  static const _storageKey = 'aura_bonus_state_v2';
 
   Future<void> _loadState() async {
     try {
