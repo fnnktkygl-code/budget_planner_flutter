@@ -39,16 +39,16 @@ class TrueLayerService {
       final response = await http.post(
         proxyUrl,
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
-        body: {
+        body: jsonEncode({
           'grant_type': 'authorization_code',
           'client_id': clientId,
           'client_secret': clientSecret,
           'redirect_uri': redirectUri,
           'code': code,
           'is_sandbox': isSandbox.toString(),
-        },
+        }),
       );
 
       if (response.statusCode == 200) {

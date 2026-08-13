@@ -27,6 +27,14 @@ export default async function handler(req, res) {
     is_sandbox,
   } = req.body;
 
+  console.log('Received TrueLayer token request:', {
+    grant_type,
+    client_id: client_id ? 'PROVIDED' : 'MISSING',
+    client_secret: client_secret ? 'PROVIDED' : 'MISSING',
+    redirect_uri,
+    is_sandbox,
+  });
+
   const baseUrl = is_sandbox === 'true' || is_sandbox === true
     ? 'https://auth.truelayer-sandbox.com'
     : 'https://auth.truelayer.com';
