@@ -80,8 +80,12 @@ export default async function handler(req, res) {
             const balData = await balResponse.json();
             const balResult = balData.results?.[0];
             if (balResult) {
-              currentBal = (balResult.current !== undefined && balResult.current !== null) ? Number(balResult.current) : 0;
-              availableBal = (balResult.available !== undefined && balResult.available !== null) ? Number(balResult.available) : currentBal;
+              currentBal = (balResult.current !== undefined && balResult.current !== null)
+                ? Number(balResult.current)
+                : ((balResult.available !== undefined && balResult.available !== null) ? Number(balResult.available) : 0);
+              availableBal = (balResult.available !== undefined && balResult.available !== null)
+                ? Number(balResult.available)
+                : currentBal;
               updateTimestamp = balResult.update_timestamp || updateTimestamp;
             }
           }
@@ -191,7 +195,15 @@ export default async function handler(req, res) {
         );
       }
 
-      // 4. First account in list
+      // 4. Any account with a balance > 0 (if current selection is 0)
+      if (!primaryAccount || primaryAccount.current_balance === 0) {
+        const nonZeroAcc = accounts.find((a) => a.category !== 'tontine' && a.category !== 'savings' && a.current_balance > 0);
+        if (nonZeroAcc) {
+          primaryAccount = nonZeroAcc;
+        }
+      }
+
+      // 5. First account in list
       if (!primaryAccount && accounts.length > 0) {
         primaryAccount = accounts[0];
       }

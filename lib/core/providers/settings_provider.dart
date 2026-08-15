@@ -70,6 +70,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   final String userId;
   final Ref ref;
 
+  String _key(String base) => userId.isEmpty ? base : '${userId}_$base';
+
   SettingsNotifier({required this.userId, required this.ref})
       : super(SettingsState(
           languageCode: 'fr',
@@ -80,22 +82,20 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           truelayerAccessToken: '',
           truelayerUseSandbox: false,
         )) {
-    if (userId.isNotEmpty) {
-      init();
-    }
+    init();
   }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final languageCode = prefs.getString('${userId}_app_language_code') ?? 'fr';
-    final bankConnected = prefs.getBool('${userId}_bank_connected') ?? false;
-    final connectedBankName = prefs.getString('${userId}_connected_bank_name') ?? '';
-    final primaryAccountId = prefs.getString('${userId}_primary_account_id');
-    final rawSyncTime = prefs.getString('${userId}_last_bank_sync');
+    final languageCode = prefs.getString(_key('app_language_code')) ?? 'fr';
+    final bankConnected = prefs.getBool(_key('bank_connected')) ?? false;
+    final connectedBankName = prefs.getString(_key('connected_bank_name')) ?? '';
+    final primaryAccountId = prefs.getString(_key('primary_account_id'));
+    final rawSyncTime = prefs.getString(_key('last_bank_sync'));
     final lastSyncTimestamp = rawSyncTime != null ? DateTime.tryParse(rawSyncTime) : null;
 
     List<Map<String, dynamic>> savedAccounts = [];
-    final rawAccountsJson = prefs.getString('${userId}_connected_accounts_json');
+    final rawAccountsJson = prefs.getString(_key('connected_accounts_json'));
     if (rawAccountsJson != null && rawAccountsJson.isNotEmpty) {
       try {
         final List<dynamic> parsed = jsonDecode(rawAccountsJson);
@@ -129,7 +129,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     // Force Live mode for aurabudget-076e60 (clean stale test flags from localStorage)
     final truelayerUseSandbox = clientId.startsWith('sandbox-');
     if (!truelayerUseSandbox) {
-      await prefs.setBool('${userId}_truelayer_use_sandbox', false);
+      await prefs.setBool(_key('truelayer_use_sandbox'), false);
     }
 
     state = SettingsState(
@@ -152,21 +152,18 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<void> setLanguage(String code) async {
-    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('${userId}_app_language_code', code);
+    await prefs.setString(_key('app_language_code'), code);
     state = state.copyWith(languageCode: code);
   }
 
   Future<void> setSandboxMode(bool useSandbox) async {
-    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('${userId}_truelayer_use_sandbox', useSandbox);
+    await prefs.setBool(_key('truelayer_use_sandbox'), useSandbox);
     state = state.copyWith(truelayerUseSandbox: useSandbox);
   }
 
   Future<void> updateTrueLayerCredentials(String clientId, String clientSecret) async {
-    if (userId.isEmpty) return;
     await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret, userId);
     state = state.copyWith(
       truelayerClientId: clientId,
@@ -175,18 +172,17 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<void> setBankConnected(bool connected, String bankName, {String? accountId, List<Map<String, dynamic>>? accounts}) async {
-    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('${userId}_bank_connected', connected);
-    await prefs.setString('${userId}_connected_bank_name', bankName);
+    await prefs.setBool(_key('bank_connected'), connected);
+    await prefs.setString(_key('connected_bank_name'), bankName);
     if (accountId != null) {
-      await prefs.setString('${userId}_primary_account_id', accountId);
+      await prefs.setString(_key('primary_account_id'), accountId);
     }
     if (accounts != null && accounts.isNotEmpty) {
-      await prefs.setString('${userId}_connected_accounts_json', jsonEncode(accounts));
+      await prefs.setString(_key('connected_accounts_json'), jsonEncode(accounts));
     }
     final now = DateTime.now();
-    await prefs.setString('${userId}_last_bank_sync', now.toIso8601String());
+    await prefs.setString(_key('last_bank_sync'), now.toIso8601String());
 
     state = state.copyWith(
       bankConnected: connected,
@@ -198,9 +194,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<void> selectPrimaryAccount(String accountId) async {
-    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('${userId}_primary_account_id', accountId);
+    await prefs.setString(_key('primary_account_id'), accountId);
 
     Map<String, dynamic>? selectedAcc;
     try {
@@ -217,21 +212,19 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         bankName: name,
         syncTime: DateTime.now(),
       );
-      await prefs.setDouble('${userId}_aura_account_balance_v1', bal);
-      await prefs.setString('${userId}_aura_sync_bank_name_v1', name);
+      await prefs.setDouble(_key('aura_account_balance_v1'), bal);
+      await prefs.setString(_key('aura_sync_bank_name_v1'), name);
     }
 
     state = state.copyWith(primaryAccountId: accountId);
   }
 
   Future<void> setAccessToken(String token) async {
-    if (userId.isEmpty) return;
     await SecureStorageService.saveTrueLayerTokens(accessToken: token, userId: userId);
     state = state.copyWith(truelayerAccessToken: token);
   }
 
   Future<String?> processTrueLayerCode(String code, {WidgetRef? ref}) async {
-    if (userId.isEmpty) return 'Utilisateur non connecté';
     final redirectUri = Uri.base.origin;
     state = state.copyWith(isSyncing: true);
     
@@ -338,13 +331,13 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           ref.read(budgetProvider.notifier).setTransactions(txs);
         }
 
-        // Direct local storage persistence
+        // Direct local storage persistence using consistent _key
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setDouble('${userId}_aura_account_balance_v1', primaryBalance);
-        await prefs.setString('${userId}_aura_sync_bank_name_v1', finalDisplayName);
-        await prefs.setString('${userId}_aura_last_bank_sync_v1', DateTime.now().toIso8601String());
+        await prefs.setDouble(_key('aura_account_balance_v1'), primaryBalance);
+        await prefs.setString(_key('aura_sync_bank_name_v1'), finalDisplayName);
+        await prefs.setString(_key('aura_last_bank_sync_v1'), DateTime.now().toIso8601String());
         if (rawAccounts.isNotEmpty) {
-          await prefs.setString('${userId}_connected_accounts_json', jsonEncode(rawAccounts));
+          await prefs.setString(_key('connected_accounts_json'), jsonEncode(rawAccounts));
         }
 
         await setBankConnected(true, finalDisplayName, accountId: finalAccountId, accounts: rawAccounts);
@@ -401,9 +394,9 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         }
 
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setDouble('${userId}_aura_account_balance_v1', balance);
-        await prefs.setString('${userId}_aura_sync_bank_name_v1', providerName);
-        await prefs.setString('${userId}_aura_last_bank_sync_v1', DateTime.now().toIso8601String());
+        await prefs.setDouble(_key('aura_account_balance_v1'), balance);
+        await prefs.setString(_key('aura_sync_bank_name_v1'), providerName);
+        await prefs.setString(_key('aura_last_bank_sync_v1'), DateTime.now().toIso8601String());
       }
 
       await setBankConnected(true, providerName, accountId: accountId, accounts: accounts);
@@ -415,13 +408,12 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<void> disconnectBank() async {
-    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('${userId}_bank_connected', false);
-    await prefs.setString('${userId}_connected_bank_name', '');
-    await prefs.remove('${userId}_primary_account_id');
-    await prefs.remove('${userId}_connected_accounts_json');
-    await prefs.remove('${userId}_last_bank_sync');
+    await prefs.setBool(_key('bank_connected'), false);
+    await prefs.setString(_key('connected_bank_name'), '');
+    await prefs.remove(_key('primary_account_id'));
+    await prefs.remove(_key('connected_accounts_json'));
+    await prefs.remove(_key('last_bank_sync'));
     await SecureStorageService.clearTrueLayerTokens(userId);
     state = state.copyWith(
       bankConnected: false,

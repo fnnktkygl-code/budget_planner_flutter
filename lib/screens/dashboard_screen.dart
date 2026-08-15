@@ -221,122 +221,139 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ? DateFormat('dd/MM à HH:mm').format(settingsState.lastSyncTimestamp!)
             : 'En direct');
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isConnected
-              ? AppColors.accentEmerald.withValues(alpha: 0.35)
-              : AppColors.accentCyan.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: (isConnected ? AppColors.accentEmerald : AppColors.accentCyan).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              Icons.account_balance_rounded,
-              color: isConnected ? AppColors.accentEmerald : AppColors.accentCyan,
-              size: 26,
-            ),
+    return InkWell(
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => const BankingModalContent(),
+        );
+      },
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isConnected
+                ? AppColors.accentEmerald.withValues(alpha: 0.35)
+                : AppColors.accentCyan.withValues(alpha: 0.3),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Solde Compte Courant',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: (isConnected ? AppColors.accentEmerald : AppColors.accentGold).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: (isConnected ? AppColors.accentEmerald : AppColors.accentCyan).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                Icons.account_balance_rounded,
+                color: isConnected ? AppColors.accentEmerald : AppColors.accentCyan,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Solde Compte Courant',
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                       ),
-                      child: Text(
-                        isConnected ? 'TrueLayer Live' : 'Non Connecté',
-                        style: TextStyle(
-                          color: isConnected ? AppColors.accentEmerald : AppColors.accentGold,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (isConnected ? AppColors.accentEmerald : AppColors.accentGold).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          isConnected ? 'TrueLayer Live' : 'Non Connecté',
+                          style: TextStyle(
+                            color: isConnected ? AppColors.accentEmerald : AppColors.accentGold,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${salaryState.accountBalance.toStringAsFixed(2)} €',
-                  style: TextStyle(
-                    color: salaryState.accountBalance >= 0 ? AppColors.textPrimary : AppColors.danger,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                    ],
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '$bankName • Synchro : $lastSyncStr',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          if (settingsState.isSyncing)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.accentCyan),
-              ),
-            )
-          else ...[
-            IconButton(
-              icon: const Icon(Icons.sync_rounded, color: AppColors.accentCyan, size: 22),
-              tooltip: 'Rafraîchir le solde en direct',
-              onPressed: () async {
-                final success = await ref.read(settingsProvider.notifier).syncTrueLayerData(ref);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        success
-                            ? 'Solde mis à jour avec succès depuis votre banque !'
-                            : 'Synchronisation bancaire effectuée.',
-                      ),
-                      backgroundColor: success ? AppColors.accentEmerald : AppColors.accentCyan,
-                      behavior: SnackBarBehavior.floating,
+                  const SizedBox(height: 2),
+                  Text(
+                    '${salaryState.accountBalance.toStringAsFixed(2)} €',
+                    style: TextStyle(
+                      color: salaryState.accountBalance >= 0 ? AppColors.textPrimary : AppColors.danger,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
                     ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isConnected
+                        ? '$bankName • Synchro : $lastSyncStr'
+                        : 'Touchez pour connecter BoursoBank →',
+                    style: TextStyle(
+                      color: isConnected ? AppColors.textMuted : AppColors.accentCyan,
+                      fontSize: 11,
+                      fontWeight: isConnected ? FontWeight.normal : FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            if (settingsState.isSyncing)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.accentCyan),
+                ),
+              )
+            else ...[
+              IconButton(
+                icon: const Icon(Icons.sync_rounded, color: AppColors.accentCyan, size: 22),
+                tooltip: 'Rafraîchir le solde en direct',
+                onPressed: () async {
+                  final success = await ref.read(settingsProvider.notifier).syncTrueLayerData(ref);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success
+                              ? 'Solde mis à jour avec succès depuis votre banque !'
+                              : 'Synchronisation bancaire effectuée.',
+                        ),
+                        backgroundColor: success ? AppColors.accentEmerald : AppColors.accentCyan,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.tune_rounded, color: AppColors.textSecondary, size: 20),
+                tooltip: 'Gérer les banques',
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => const BankingModalContent(),
                   );
-                }
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.tune_rounded, color: AppColors.textSecondary, size: 20),
-              tooltip: 'Gérer les banques',
-              onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => const BankingModalContent(),
-                );
-              },
-            ),
+                },
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
