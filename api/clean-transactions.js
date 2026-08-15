@@ -5,6 +5,89 @@ export const config = {
   maxDuration: 30,
 };
 
+function fallbackHeuristicClean(transactions) {
+  return transactions.map((t) => {
+    let name = (t.title || '').toUpperCase();
+    name = name.replace(/^(PRLV\s+SEPA|VIR\s+SEPA|PRLV|VIR|CB|PAIEMENT|FACTURE|RETRAIT|CARTE)\s*(\d\d\/\d\d)?\s*/i, '');
+    name = name.replace(/,\s*(CACP|RUM|REF|EMETTEUR|ID|CONTRAT|FACTURE|TIERS|DOSSIER|\d{4,}).*$/i, '');
+    name = name.replace(/\b(CACP|RUM|REF|EMETTEUR|ID|NOT|CONTRAT|FACTURE|DOSSIER|TIERS)\s*[:.\s]\s*\S+.*$/i, '');
+    name = name.replace(/\b04375[A-Z0-9]+\b.*$/i, '');
+    name = name.replace(/\b719754[A-Z0-9]+\b.*$/i, '');
+    name = name.replace(/\bCB\*\d+\b/i, '');
+    name = name.replace(/\bCARTE\s+X+\d+\b/i, '');
+    name = name.replace(/\d\d\/\d\d(\/\d{2,4})?/g, '');
+    name = name.replace(/[-_/]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    let cleanMerchant = name;
+    let canonicalGroupKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let category = 'Abonnement / Charge';
+    let suggestedType = 'charge_fixe';
+    let suggestedDurationMonths = 12;
+    let reason = 'Prélèvement automatique régulier identifié.';
+
+    if (name.includes('CDC HABITAT')) {
+      cleanMerchant = 'CDC Habitat (Loyer / Logement)';
+      canonicalGroupKey = 'cdc_habitat';
+      category = 'Logement / Loyer';
+      reason = 'Prélèvement mensuel pour votre loyer / logement.';
+    } else if (name.includes('TURREL')) {
+      cleanMerchant = 'Turrel Baptiste';
+      canonicalGroupKey = 'turrel_baptiste';
+      category = 'Abonnement / Charge';
+      reason = 'Prélèvement régulier récurrent.';
+    } else if (name.includes('BPCE')) {
+      cleanMerchant = 'BPCE Assurances (Habitation)';
+      canonicalGroupKey = 'bpce_assurances';
+      category = 'Assurance Habitation';
+      reason = 'Cotisation d\'assurance habitation mensuelle.';
+    } else if (name.includes('SENDWAVE')) {
+      cleanMerchant = 'Sendwave';
+      canonicalGroupKey = 'sendwave';
+      category = 'Transfert d\'argent';
+      reason = 'Paiement ou transfert ponctuel / récurrent.';
+    } else if (name.includes('LATTES') || name.includes('ORTHO') || name.includes('DENT')) {
+      cleanMerchant = 'Orthodontie Lattes';
+      canonicalGroupKey = 'lattes_ortho';
+      category = 'Santé & Soins';
+      suggestedType = 'echeance_temporaire';
+      suggestedDurationMonths = 3;
+      reason = 'Traitement d\'orthodontie / soins de santé étalables.';
+    } else if (name.includes('BOUYGUES')) {
+      cleanMerchant = 'Bouygues Telecom';
+      canonicalGroupKey = 'bouygues_telecom';
+      category = 'Télécom & Internet';
+      reason = 'Forfait mobile / Box internet.';
+    } else if (name.includes('TOTALENERGIES')) {
+      cleanMerchant = 'TotalEnergies';
+      canonicalGroupKey = 'totalenergies';
+      category = 'Énergie & Électricité';
+      reason = 'Facture mensuelle d\'énergie.';
+    } else if (name.includes('PAYPAL')) {
+      cleanMerchant = 'PayPal';
+      canonicalGroupKey = 'paypal';
+      category = 'Paiement / Abonnement';
+      reason = 'Abonnement ou paiement récurrent en ligne.';
+    } else if (name.includes('DGFIP') || name.includes('TRESOR') || name.includes('IMPOT')) {
+      cleanMerchant = 'DGFIP (Impôts & Taxes)';
+      canonicalGroupKey = 'dgfip';
+      category = 'Impôts & Taxes';
+      suggestedType = 'echeance_temporaire';
+      suggestedDurationMonths = 4;
+      reason = 'Prélèvement fiscal / impôt sur le revenu.';
+    }
+
+    return {
+      id: t.id,
+      cleanMerchant,
+      canonicalGroupKey,
+      category,
+      suggestedType,
+      suggestedDurationMonths,
+      reason,
+    };
+  });
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -18,17 +101,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const { transactions } = req.body || {};
+  if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
+    return res.status(400).json({ error: 'transactions array is required' });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY_MASTER || process.env.GEMINI_API_KEY;
+
   if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY environment variable is not configured' });
+    return res.status(200).json({
+      success: true,
+      modelUsed: 'heuristic-cleaner-fallback',
+      cleanedTransactions: fallbackHeuristicClean(transactions),
+    });
   }
 
   try {
-    const { transactions } = req.body || {};
-    if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
-      return res.status(400).json({ error: 'transactions array is required' });
-    }
-
     const rawList = transactions.slice(0, 30).map((t) => ({
       id: t.id,
       title: t.title,
@@ -47,7 +135,7 @@ Pour chaque transaction, renvoie STRICTEMENT un objet JSON dans la liste "cleane
   "cleanedTransactions": [
     {
       "id": "id_de_la_transaction",
-      "cleanMerchant": "Nom commercial ultra-propre (Ex: CDC Habitat, Turrel Baptiste, BPCE Assurances, Bouygues Telecom, TotalEnergies, Sendwave, Orthodontie Lattes, PayPal, DGFIP...)",
+      "cleanMerchant": "Nom commercial ultra-propre (Ex: CDC Habitat (Loyer), Turrel Baptiste, BPCE Assurances (Habitation), Bouygues Telecom, TotalEnergies, Sendwave, Orthodontie Lattes, PayPal, DGFIP (Impôts)...)",
       "canonicalGroupKey": "clé_canonique_unique_pour_regrouper_les_doublons_mensuels (ex: cdc_habitat, turrel_baptiste, bpce_assurances, bouygues_telecom, totalenergies, sendwave, lattes_ortho, paypal, dgfip)",
       "category": "Catégorie claire (ex: Logement / Loyer, Assurance Habitation, Télécom & Internet, Énergie & Gaz, Santé & Soins, Transfert, Abonnement, Impôts & Taxes)",
       "suggestedType": "charge_fixe" ou "echeance_temporaire",
@@ -78,9 +166,11 @@ RÈGLES STRICTES :
       cleanedTransactions: parsed.cleanedTransactions || parsed,
     });
   } catch (error) {
-    console.error('Error cleaning transactions with Gemini:', error);
-    return res.status(500).json({
-      error: error.message || 'Failed to process transactions with Gemini',
+    console.error('Gemini API call failed, falling back to heuristic clean:', error);
+    return res.status(200).json({
+      success: true,
+      modelUsed: 'heuristic-cleaner-fallback',
+      cleanedTransactions: fallbackHeuristicClean(transactions),
     });
   }
 }
