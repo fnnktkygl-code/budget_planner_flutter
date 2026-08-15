@@ -19,6 +19,7 @@ class RuleCategoryItem {
   bool isLocked;
   String iconType;
   Color iconBgColor;
+  String? note;
 
   RuleCategoryItem({
     required this.id,
@@ -28,6 +29,7 @@ class RuleCategoryItem {
     this.isLocked = true,
     required this.iconType,
     required this.iconBgColor,
+    this.note,
   });
 
   Map<String, dynamic> toJson() => {
@@ -38,6 +40,7 @@ class RuleCategoryItem {
     'isLocked': isLocked,
     'iconType': iconType,
     'iconBgColor': iconBgColor.value,
+    'note': note,
   };
 
   factory RuleCategoryItem.fromJson(Map<String, dynamic> json) => RuleCategoryItem(
@@ -48,6 +51,7 @@ class RuleCategoryItem {
     isLocked: json['isLocked'] ?? false,
     iconType: json['iconType'] ?? 'default',
     iconBgColor: Color(json['iconBgColor'] ?? 0xFF000000),
+    note: json['note'] as String?,
   );
 
   double getEffectiveAmount(double netSalary) {
@@ -208,20 +212,25 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     }
   }
 
-  void _showAssignSuggestionModal(BuildContext parentContext, DetectedRecurringExpense sugg) {
+  void _showAssignSuggestionModal(
+    BuildContext parentContext,
+    DetectedRecurringExpense sugg, {
+    VoidCallback? onAssigned,
+  }) {
     showModalBottomSheet(
       context: parentContext,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
-        int activeTab = 0; // 0 = Écraser existant, 1 = Nouveau poste dans pilier, 2 = Échéancier temporaire
+        int activeTab = 0; // 0 = Fusionner / Affecter, 1 = Nouveau poste dans pilier, 2 = Échéancier temporaire
+        int linkMode = 0; // 0 = Cumuler / Additionner (+), 1 = Écraser / Remplacer (⚡)
         int selectedPillar = 0; // 0 = Charges Fixes, 1 = Épargne, 2 = Quotidien
         bool isPercentMode = false;
         bool renameOnOverwrite = false;
+        bool appendNoteOnCumul = true;
 
         final matched = _findMatchingCategory(sugg);
-        String selectedCategoryPillar = 'Charges Fixes';
-        RuleCategoryItem? targetCategoryToOverwrite = matched ?? (_fixedChargesCategories.isNotEmpty ? _fixedChargesCategories.first : null);
+        RuleCategoryItem? targetCategory = matched ?? (_fixedChargesCategories.isNotEmpty ? _fixedChargesCategories.first : null);
 
         final nameCtrl = TextEditingController(text: sugg.merchant);
         final amountCtrl = TextEditingController(text: sugg.amount.toStringAsFixed(2));
@@ -300,7 +309,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Tab Selector: 1) Écraser existant | 2) Nouveau Pilier | 3) Échéancier
+                  // Tab Selector: 1) Fusionner / Lier | 2) Nouveau Pilier | 3) Échéancier
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
@@ -321,7 +330,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                               ),
                               alignment: Alignment.center,
                               child: Text(
-                                '⚡ Écraser / Lier',
+                                '🔗 Fusionner / Lier',
                                 style: TextStyle(
                                   color: activeTab == 0 ? Colors.black : AppColors.textSecondary,
                                   fontWeight: FontWeight.bold,
@@ -382,14 +391,19 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   Flexible(
                     child: SingleChildScrollView(
                       child: activeTab == 0
-                          ? _buildOverwriteTab(
+                          ? _buildLinkCategoryTab(
                               sheetCtx,
                               setSheetState,
                               sugg,
-                              targetCategoryToOverwrite,
+                              targetCategory,
+                              linkMode,
                               renameOnOverwrite,
-                              (newCat) => setSheetState(() => targetCategoryToOverwrite = newCat),
+                              appendNoteOnCumul,
+                              (newCat) => setSheetState(() => targetCategory = newCat),
+                              (mode) => setSheetState(() => linkMode = mode),
                               (val) => setSheetState(() => renameOnOverwrite = val),
+                              (val) => setSheetState(() => appendNoteOnCumul = val),
+                              onAssigned,
                             )
                           : activeTab == 1
                               ? _buildNewPillarTab(
@@ -402,6 +416,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                   amountCtrl,
                                   (p) => setSheetState(() => selectedPillar = p),
                                   (pct) => setSheetState(() => isPercentMode = pct),
+                                  onAssigned,
                                 )
                               : _buildTemporaryTab(
                                   sheetCtx,
@@ -411,6 +426,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                   amountCtrl,
                                   durationCtrl,
                                   startPeriodCtrl,
+                                  onAssigned,
                                 ),
                     ),
                   ),
@@ -423,14 +439,19 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
-  Widget _buildOverwriteTab(
+  Widget _buildLinkCategoryTab(
     BuildContext sheetCtx,
     StateSetter setSheetState,
     DetectedRecurringExpense sugg,
     RuleCategoryItem? targetCategory,
+    int linkMode, // 0 = Cumuler (+), 1 = Écraser (⚡)
     bool renameOnOverwrite,
+    bool appendNoteOnCumul,
     Function(RuleCategoryItem?) onSelectCategory,
+    Function(int) onToggleMode,
     Function(bool) onToggleRename,
+    Function(bool) onToggleAppendNote,
+    VoidCallback? onAssigned,
   ) {
     final allPillars = [
       {'title': 'Charges Fixes Incompressibles', 'list': _fixedChargesCategories, 'icon': Icons.lock_clock_rounded, 'color': AppColors.accentRose},
@@ -441,12 +462,91 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     final salary = ref.read(salaryProvider);
     final netSalary = salary.activeBaseline?.regularNetSalary ?? 2713.74;
 
+    final curAmt = targetCategory != null ? targetCategory.getEffectiveAmount(netSalary) : 0.0;
+    final newTotalCumul = curAmt + sugg.amount;
+    final deltaOverwrite = sugg.amount - curAmt;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Sélectionnez une catégorie existante à mettre à jour / écraser avec le montant réel débité par votre banque :',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+        // Mode Selector: Cumuler vs Écraser
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => onToggleMode(0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: linkMode == 0 ? AppColors.accentCyan.withValues(alpha: 0.2) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: linkMode == 0 ? Border.all(color: AppColors.accentCyan) : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_circle_outline_rounded, size: 14, color: linkMode == 0 ? AppColors.accentCyan : AppColors.textMuted),
+                        const SizedBox(width: 6),
+                        Text(
+                          '➕ Cumuler / Additionner',
+                          style: TextStyle(
+                            color: linkMode == 0 ? AppColors.accentCyan : AppColors.textSecondary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => onToggleMode(1),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: linkMode == 1 ? AppColors.accentEmerald.withValues(alpha: 0.2) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: linkMode == 1 ? Border.all(color: AppColors.accentEmerald) : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.bolt_rounded, size: 14, color: linkMode == 1 ? AppColors.accentEmerald : AppColors.textMuted),
+                        const SizedBox(width: 6),
+                        Text(
+                          '⚡ Écraser / Remplacer',
+                          style: TextStyle(
+                            color: linkMode == 1 ? AppColors.accentEmerald : AppColors.textSecondary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        Text(
+          linkMode == 0
+              ? 'Sélectionnez une catégorie existante à laquelle ajouter ${sugg.amount.toStringAsFixed(2)} €/mois (ex: Abonnements Bouygues + Spotify) :'
+              : 'Sélectionnez une catégorie existante à mettre à jour et remplacer par ${sugg.amount.toStringAsFixed(2)} €/mois (ex: Loyer) :',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
         ),
         const SizedBox(height: 14),
 
@@ -466,8 +566,9 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             child: Column(
               children: (p['list'] as List<RuleCategoryItem>).map((cat) {
                 final isSelected = targetCategory?.id == cat.id;
-                final curAmt = cat.getEffectiveAmount(netSalary);
-                final delta = sugg.amount - curAmt;
+                final catCurAmt = cat.getEffectiveAmount(netSalary);
+                final catTotalCumul = catCurAmt + sugg.amount;
+                final catDelta = sugg.amount - catCurAmt;
 
                 return InkWell(
                   onTap: () => onSelectCategory(cat),
@@ -500,27 +601,45 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                 ),
                               ),
                               Text(
-                                'Actuel : ${curAmt.toStringAsFixed(2)} €/mois (${cat.isPercentage ? "${cat.amount}%" : "Nominal"})',
+                                'Actuel : ${catCurAmt.toStringAsFixed(2)} €/mois (${cat.isPercentage ? "${cat.amount}%" : "Nominal"})',
                                 style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
                               ),
+                              if (cat.note != null && cat.note!.isNotEmpty)
+                                Text(
+                                  cat.note!,
+                                  style: const TextStyle(color: AppColors.accentCyan, fontSize: 9, fontStyle: FontStyle.italic),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                             ],
                           ),
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(
-                              '➔ ${sugg.amount.toStringAsFixed(2)} €',
-                              style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                            Text(
-                              delta == 0 ? 'Identique' : (delta > 0 ? '+${delta.toStringAsFixed(2)} €' : '${delta.toStringAsFixed(2)} €'),
-                              style: TextStyle(
-                                color: delta == 0 ? AppColors.textMuted : (delta > 0 ? AppColors.accentRose : AppColors.accentEmerald),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
+                            if (linkMode == 0) ...[
+                              Text(
+                                '➕ ${catTotalCumul.toStringAsFixed(2)} €',
+                                style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 13),
                               ),
-                            ),
+                              Text(
+                                '+${sugg.amount.toStringAsFixed(2)} €',
+                                style: const TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.w600),
+                              ),
+                            ] else ...[
+                              Text(
+                                '➔ ${sugg.amount.toStringAsFixed(2)} €',
+                                style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                catDelta == 0 ? 'Identique' : (catDelta > 0 ? '+${catDelta.toStringAsFixed(2)} €' : '${catDelta.toStringAsFixed(2)} €'),
+                                style: TextStyle(
+                                  color: catDelta == 0 ? AppColors.textMuted : (catDelta > 0 ? AppColors.accentRose : AppColors.accentEmerald),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ],
@@ -533,49 +652,153 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
         ],
 
         if (targetCategory != null) ...[
-          CheckboxListTile(
-            value: renameOnOverwrite,
-            onChanged: (val) => onToggleRename(val ?? false),
-            contentPadding: EdgeInsets.zero,
-            activeColor: AppColors.accentCyan,
-            title: Text(
-              'Renommer également "${targetCategory.name}" en "${sugg.merchant}"',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          // Mathematical Preview Card
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: (linkMode == 0 ? AppColors.accentCyan : AppColors.accentEmerald).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: (linkMode == 0 ? AppColors.accentCyan : AppColors.accentEmerald).withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  linkMode == 0 ? Icons.calculate_rounded : Icons.bolt_rounded,
+                  color: linkMode == 0 ? AppColors.accentCyan : AppColors.accentEmerald,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        linkMode == 0 ? 'Calcul du cumul arithmétique :' : 'Aperçu du remplacement :',
+                        style: TextStyle(
+                          color: linkMode == 0 ? AppColors.accentCyan : AppColors.accentEmerald,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        linkMode == 0
+                            ? '${curAmt.toStringAsFixed(2)} € (Actuel) + ${sugg.amount.toStringAsFixed(2)} € (${sugg.merchant}) = ${newTotalCumul.toStringAsFixed(2)} € / mois'
+                            : '${curAmt.toStringAsFixed(2)} € (Actuel) ➔ ${sugg.amount.toStringAsFixed(2)} € (${sugg.merchant})  [Delta : ${deltaOverwrite >= 0 ? "+" : ""}${deltaOverwrite.toStringAsFixed(2)} €]',
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(height: 10),
+
+          if (linkMode == 0) ...[
+            CheckboxListTile(
+              value: appendNoteOnCumul,
+              onChanged: (val) => onToggleAppendNote(val ?? true),
+              contentPadding: EdgeInsets.zero,
+              activeColor: AppColors.accentCyan,
+              title: Text(
+                'Consigner "${sugg.merchant}" dans la note de "${targetCategory.name}"',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ),
+          ] else ...[
+            CheckboxListTile(
+              value: renameOnOverwrite,
+              onChanged: (val) => onToggleRename(val ?? false),
+              contentPadding: EdgeInsets.zero,
+              activeColor: AppColors.accentEmerald,
+              title: Text(
+                'Renommer également "${targetCategory.name}" en "${sugg.merchant}"',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
+
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
+                backgroundColor: linkMode == 0 ? AppColors.accentCyan : AppColors.accentEmerald,
                 foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              icon: const Icon(Icons.check_rounded, size: 18),
+              icon: Icon(linkMode == 0 ? Icons.add_circle_rounded : Icons.check_rounded, size: 18),
               label: Text(
-                'Écraser "${targetCategory.name}" avec ${sugg.amount.toStringAsFixed(2)} €',
+                linkMode == 0
+                    ? '➕ Cumuler et valider (${newTotalCumul.toStringAsFixed(2)} € / mois)'
+                    : '⚡ Écraser "${targetCategory.name}" avec ${sugg.amount.toStringAsFixed(2)} €',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               onPressed: () async {
+                final oldAmount = targetCategory.amount;
+                final oldName = targetCategory.name;
+                final oldIsPct = targetCategory.isPercentage;
+                final oldNote = targetCategory.note;
+
                 setState(() {
-                  targetCategory.amount = sugg.amount;
-                  targetCategory.isPercentage = false;
-                  if (renameOnOverwrite) {
-                    targetCategory.name = sugg.merchant;
+                  if (linkMode == 0) {
+                    // Cumuler / Additionner
+                    if (targetCategory.isPercentage) {
+                      targetCategory.amount = double.parse(((newTotalCumul / netSalary) * 100).toStringAsFixed(1));
+                    } else {
+                      targetCategory.amount = double.parse(newTotalCumul.toStringAsFixed(2));
+                    }
+                    if (appendNoteOnCumul) {
+                      if (targetCategory.note == null || targetCategory.note!.isEmpty) {
+                        targetCategory.note = sugg.merchant;
+                      } else if (!targetCategory.note!.contains(sugg.merchant)) {
+                        targetCategory.note = '${targetCategory.note} • ${sugg.merchant}';
+                      }
+                    }
+                  } else {
+                    // Écraser / Remplacer
+                    targetCategory.amount = sugg.amount;
+                    targetCategory.isPercentage = false;
+                    if (renameOnOverwrite) {
+                      targetCategory.name = sugg.merchant;
+                    }
                   }
                   _ignoredDetectedTxIds.add(sugg.id);
                 });
+
                 await _saveCategories();
                 await _saveIgnoredSuggestions();
                 if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                onAssigned?.call();
+
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Catégorie "${targetCategory.name}" mise à jour à ${sugg.amount.toStringAsFixed(2)} €/mois.'),
+                      content: Text(
+                        linkMode == 0
+                            ? 'Catégorie "${targetCategory.name}" cumulée : ${curAmt.toStringAsFixed(2)} € + ${sugg.amount.toStringAsFixed(2)} € = ${targetCategory.getEffectiveAmount(netSalary).toStringAsFixed(2)} €/mois.'
+                            : 'Catégorie "${targetCategory.name}" écrasée à ${sugg.amount.toStringAsFixed(2)} €/mois.',
+                      ),
                       backgroundColor: AppColors.accentEmerald,
                       behavior: SnackBarBehavior.floating,
+                      action: SnackBarAction(
+                        label: 'Annuler',
+                        textColor: AppColors.accentGold,
+                        onPressed: () async {
+                          setState(() {
+                            targetCategory.amount = oldAmount;
+                            targetCategory.name = oldName;
+                            targetCategory.isPercentage = oldIsPct;
+                            targetCategory.note = oldNote;
+                            _ignoredDetectedTxIds.remove(sugg.id);
+                          });
+                          await _saveCategories();
+                          await _saveIgnoredSuggestions();
+                          onAssigned?.call();
+                        },
+                      ),
                     ),
                   );
                 }
@@ -597,6 +820,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     TextEditingController amountCtrl,
     Function(int) onSelectPillar,
     Function(bool) onTogglePercent,
+    VoidCallback? onAssigned,
   ) {
     final pillars = [
       {'name': 'Charges Fixes', 'icon': Icons.lock_clock_rounded, 'color': AppColors.accentRose, 'prefix': 'fix'},
@@ -720,12 +944,33 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               await _saveCategories();
               await _saveIgnoredSuggestions();
               if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+              onAssigned?.call();
+
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('"$name" (${amt.toStringAsFixed(2)} ${isPercentMode ? "%" : "€"}) ajouté avec succès !'),
                     backgroundColor: AppColors.accentEmerald,
                     behavior: SnackBarBehavior.floating,
+                    action: SnackBarAction(
+                      label: 'Annuler',
+                      textColor: AppColors.accentGold,
+                      onPressed: () async {
+                        setState(() {
+                          if (selectedPillar == 0) {
+                            _fixedChargesCategories.removeWhere((c) => c.id == newItem.id);
+                          } else if (selectedPillar == 1) {
+                            _savingsCategories.removeWhere((c) => c.id == newItem.id);
+                          } else {
+                            _dailyCategories.removeWhere((c) => c.id == newItem.id);
+                          }
+                          _ignoredDetectedTxIds.remove(sugg.id);
+                        });
+                        await _saveCategories();
+                        await _saveIgnoredSuggestions();
+                        onAssigned?.call();
+                      },
+                    ),
                   ),
                 );
               }
@@ -744,6 +989,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     TextEditingController amountCtrl,
     TextEditingController durationCtrl,
     TextEditingController startPeriodCtrl,
+    VoidCallback? onAssigned,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -823,12 +1069,26 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               await _saveIgnoredSuggestions();
 
               if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+              onAssigned?.call();
+
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Échéancier "$name" (${amt.toStringAsFixed(2)} €/mois sur $dur mois) créé.'),
                     backgroundColor: AppColors.accentEmerald,
                     behavior: SnackBarBehavior.floating,
+                    action: SnackBarAction(
+                      label: 'Annuler',
+                      textColor: AppColors.accentGold,
+                      onPressed: () async {
+                        ref.read(salaryProvider.notifier).deleteTemporaryExpense(exp.id);
+                        setState(() {
+                          _ignoredDetectedTxIds.remove(sugg.id);
+                        });
+                        await _saveIgnoredSuggestions();
+                        onAssigned?.call();
+                      },
+                    ),
                   ),
                 );
               }
@@ -1010,6 +1270,8 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         itemBuilder: (c, idx) {
                           final sugg = activeSuggestions[idx];
                           final matchedCat = _findMatchingCategory(sugg);
+                          final salary = ref.read(salaryProvider);
+                          final netSalary = salary.activeBaseline?.regularNetSalary ?? 2713.74;
 
                           return Container(
                             padding: const EdgeInsets.all(16),
@@ -1122,8 +1384,77 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                   spacing: 8,
                                   runSpacing: 8,
                                   children: [
-                                    // 1-Tap Overwrite shortcut if matching category exists
-                                    if (matchedCat != null)
+                                    // 1-Tap Cumuler shortcut if matching category exists
+                                    if (matchedCat != null) ...[
+                                      ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.accentCyan.withValues(alpha: 0.15),
+                                          foregroundColor: AppColors.accentCyan,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            side: BorderSide(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                                          ),
+                                        ),
+                                        icon: const Icon(Icons.add_circle_outline_rounded, size: 15),
+                                        label: Text(
+                                          '➕ Cumuler à "${matchedCat.name}" (+${sugg.amount.toStringAsFixed(2)}€ ➔ ${(matchedCat.getEffectiveAmount(netSalary) + sugg.amount).toStringAsFixed(2)}€)',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                        onPressed: () async {
+                                          final oldAmount = matchedCat.amount;
+                                          final oldIsPct = matchedCat.isPercentage;
+                                          final oldNote = matchedCat.note;
+                                          final curAmt = matchedCat.getEffectiveAmount(netSalary);
+                                          final newTotal = curAmt + sugg.amount;
+
+                                          setState(() {
+                                            if (matchedCat.isPercentage) {
+                                              matchedCat.amount = double.parse(((newTotal / netSalary) * 100).toStringAsFixed(1));
+                                            } else {
+                                              matchedCat.amount = double.parse(newTotal.toStringAsFixed(2));
+                                            }
+                                            if (matchedCat.note == null || matchedCat.note!.isEmpty) {
+                                              matchedCat.note = sugg.merchant;
+                                            } else if (!matchedCat.note!.contains(sugg.merchant)) {
+                                              matchedCat.note = '${matchedCat.note} • ${sugg.merchant}';
+                                            }
+                                            _ignoredDetectedTxIds.add(sugg.id);
+                                          });
+
+                                          await _saveCategories();
+                                          await _saveIgnoredSuggestions();
+                                          setModalState(() {});
+
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Catégorie "${matchedCat.name}" cumulée : ${curAmt.toStringAsFixed(2)} € + ${sugg.amount.toStringAsFixed(2)} € = ${newTotal.toStringAsFixed(2)} €/mois.'),
+                                                backgroundColor: AppColors.accentEmerald,
+                                                behavior: SnackBarBehavior.floating,
+                                                action: SnackBarAction(
+                                                  label: 'Annuler',
+                                                  textColor: AppColors.accentGold,
+                                                  onPressed: () async {
+                                                    setState(() {
+                                                      matchedCat.amount = oldAmount;
+                                                      matchedCat.isPercentage = oldIsPct;
+                                                      matchedCat.note = oldNote;
+                                                      _ignoredDetectedTxIds.remove(sugg.id);
+                                                    });
+                                                    await _saveCategories();
+                                                    await _saveIgnoredSuggestions();
+                                                    setModalState(() {});
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        },
+                                      ),
+
+                                      // 1-Tap Overwrite shortcut
                                       ElevatedButton.icon(
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: AppColors.accentEmerald.withValues(alpha: 0.15),
@@ -1137,44 +1468,70 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                         ),
                                         icon: const Icon(Icons.bolt_rounded, size: 15),
                                         label: Text(
-                                          'Écraser "${matchedCat.name}" (${matchedCat.amount.toStringAsFixed(0)}€ ➔ ${sugg.amount.toStringAsFixed(2)}€)',
+                                          '⚡ Écraser "${matchedCat.name}" (${matchedCat.getEffectiveAmount(netSalary).toStringAsFixed(0)}€ ➔ ${sugg.amount.toStringAsFixed(2)}€)',
                                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                         ),
-                                        onPressed: () {
+                                        onPressed: () async {
+                                          final oldAmount = matchedCat.amount;
+                                          final oldIsPct = matchedCat.isPercentage;
+
                                           setState(() {
                                             matchedCat.amount = sugg.amount;
                                             matchedCat.isPercentage = false;
                                             _ignoredDetectedTxIds.add(sugg.id);
                                           });
-                                          _saveCategories();
-                                          _saveIgnoredSuggestions();
+
+                                          await _saveCategories();
+                                          await _saveIgnoredSuggestions();
                                           setModalState(() {});
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Catégorie "${matchedCat.name}" mise à jour avec succès : ${sugg.amount.toStringAsFixed(2)} €/mois.'),
-                                              backgroundColor: AppColors.accentEmerald,
-                                              behavior: SnackBarBehavior.floating,
-                                            ),
-                                          );
+
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Catégorie "${matchedCat.name}" écrasée à ${sugg.amount.toStringAsFixed(2)} €/mois.'),
+                                                backgroundColor: AppColors.accentEmerald,
+                                                behavior: SnackBarBehavior.floating,
+                                                action: SnackBarAction(
+                                                  label: 'Annuler',
+                                                  textColor: AppColors.accentGold,
+                                                  onPressed: () async {
+                                                    setState(() {
+                                                      matchedCat.amount = oldAmount;
+                                                      matchedCat.isPercentage = oldIsPct;
+                                                      _ignoredDetectedTxIds.remove(sugg.id);
+                                                    });
+                                                    await _saveCategories();
+                                                    await _saveIgnoredSuggestions();
+                                                    setModalState(() {});
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          }
                                         },
                                       ),
+                                    ],
 
                                     // Flexible Assignment Modal button
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.accentCyan.withValues(alpha: 0.15),
-                                        foregroundColor: AppColors.accentCyan,
+                                        backgroundColor: AppColors.surface,
+                                        foregroundColor: AppColors.textPrimary,
                                         elevation: 0,
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(8),
-                                          side: BorderSide(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                                          side: const BorderSide(color: AppColors.borderSubtle),
                                         ),
                                       ),
                                       icon: const Icon(Icons.tune_rounded, size: 14),
-                                      label: const Text('Affecter / Personnaliser', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                      label: const Text('⚙️ Affecter / Autre', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                       onPressed: () {
-                                        _showAssignSuggestionModal(context, sugg);
+                                        _showAssignSuggestionModal(
+                                          context,
+                                          sugg,
+                                          onAssigned: () => setModalState(() {}),
+                                        );
                                       },
                                     ),
 
@@ -1182,7 +1539,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: AppColors.cardBackground,
-                                        foregroundColor: AppColors.textPrimary,
+                                        foregroundColor: AppColors.textSecondary,
                                         elevation: 0,
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                         shape: RoundedRectangleBorder(
@@ -1192,15 +1549,43 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                       ),
                                       icon: const Icon(Icons.calendar_month_rounded, size: 14),
                                       label: Text('+ Échéancier (${sugg.suggestedDurationMonths}m)', style: const TextStyle(fontSize: 11)),
-                                      onPressed: () {
-                                        Navigator.pop(ctx);
-                                        _showTemporaryExpenseDialog(
-                                          context,
-                                          initialLabel: sugg.merchant,
-                                          initialAmount: sugg.amount,
-                                          initialDurationMonths: sugg.suggestedDurationMonths,
-                                          initialSuggestionId: sugg.id,
+                                      onPressed: () async {
+                                        final exp = TemporaryExpense(
+                                          id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                          label: sugg.merchant,
+                                          monthlyAmount: sugg.amount,
+                                          startPeriod: _getPeriodForOffset(0),
+                                          durationMonths: sugg.suggestedDurationMonths,
                                         );
+                                        ref.read(salaryProvider.notifier).addTemporaryExpense(exp);
+
+                                        setState(() {
+                                          _ignoredDetectedTxIds.add(sugg.id);
+                                        });
+                                        await _saveIgnoredSuggestions();
+                                        setModalState(() {});
+
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Échéancier "${sugg.merchant}" (${sugg.amount.toStringAsFixed(2)} €/mois sur ${sugg.suggestedDurationMonths} mois) créé.'),
+                                              backgroundColor: AppColors.accentEmerald,
+                                              behavior: SnackBarBehavior.floating,
+                                              action: SnackBarAction(
+                                                label: 'Annuler',
+                                                textColor: AppColors.accentGold,
+                                                onPressed: () async {
+                                                  ref.read(salaryProvider.notifier).deleteTemporaryExpense(exp.id);
+                                                  setState(() {
+                                                    _ignoredDetectedTxIds.remove(sugg.id);
+                                                  });
+                                                  await _saveIgnoredSuggestions();
+                                                  setModalState(() {});
+                                                },
+                                              ),
+                                            ),
+                                          );
+                                        }
                                       },
                                     ),
 
@@ -1210,11 +1595,35 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                         foregroundColor: AppColors.textMuted,
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                       ),
-                                      icon: const Icon(Icons.close_rounded, size: 14),
+                                      icon: const Icon(Icons.visibility_off_outlined, size: 13),
                                       label: const Text('Ignorer', style: TextStyle(fontSize: 11)),
-                                      onPressed: () {
-                                        _ignoreSuggestion(sugg.id);
+                                      onPressed: () async {
+                                        setState(() {
+                                          _ignoredDetectedTxIds.add(sugg.id);
+                                        });
+                                        await _saveIgnoredSuggestions();
                                         setModalState(() {});
+
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('"${sugg.merchant}" masqué du Radar.'),
+                                              backgroundColor: AppColors.surface,
+                                              behavior: SnackBarBehavior.floating,
+                                              action: SnackBarAction(
+                                                label: 'Annuler',
+                                                textColor: AppColors.accentCyan,
+                                                onPressed: () async {
+                                                  setState(() {
+                                                    _ignoredDetectedTxIds.remove(sugg.id);
+                                                  });
+                                                  await _saveIgnoredSuggestions();
+                                                  setModalState(() {});
+                                                },
+                                              ),
+                                            ),
+                                          );
+                                        }
                                       },
                                     ),
                                   ],
@@ -1787,6 +2196,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
   void _showEditAmountDialog(RuleCategoryItem item, double netSalary) {
     final nameController = TextEditingController(text: item.name);
     final amountController = TextEditingController(text: item.amount.toStringAsFixed(item.isPercentage ? 1 : 0));
+    final noteController = TextEditingController(text: item.note ?? '');
     bool isPercentage = item.isPercentage;
     String selectedIcon = item.iconType;
     Color selectedColor = item.iconBgColor;
@@ -1816,6 +2226,15 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         labelText: 'Nom de la catégorie',
                       ),
                       style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: noteController,
+                      decoration: const InputDecoration(
+                        labelText: 'Sous-postes / Notes (optionnel)',
+                        hintText: 'ex: Bouygues • Spotify • Netflix',
+                      ),
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
                     
@@ -2028,9 +2447,11 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   onPressed: () {
                     final newName = nameController.text.trim().isEmpty ? item.name : nameController.text.trim();
                     final newAmount = double.tryParse(amountController.text.trim()) ?? item.amount;
+                    final newNote = noteController.text.trim().isEmpty ? null : noteController.text.trim();
                     setState(() {
                       item.name = newName;
                       item.amount = newAmount;
+                      item.note = newNote;
                       item.isPercentage = isPercentage;
                       item.iconType = selectedIcon;
                       item.iconBgColor = selectedColor;
@@ -3518,6 +3939,19 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     ),
                   ],
                 ),
+                if (item.note != null && item.note!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    item.note!.trim(),
+                    style: const TextStyle(
+                      color: AppColors.accentCyan,
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),
