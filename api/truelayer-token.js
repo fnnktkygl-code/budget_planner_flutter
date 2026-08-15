@@ -66,6 +66,7 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
+    console.log('[TrueLayer Token API] Token exchange status:', response.status, 'data keys:', Object.keys(data), 'token_type:', data.token_type, 'scope:', data.scope);
     res.status(response.status).json(data);
   } catch (error) {
     console.error('Error during token exchange proxy:', error);

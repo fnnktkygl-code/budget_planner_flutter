@@ -248,20 +248,26 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         state = state.copyWith(truelayerAccessToken: accessToken);
 
         // Fetch Accounts & Live Balance immediately
-        final success = await _fetchAndApplyLiveBankData(accessToken);
-
-        state = state.copyWith(isSyncing: false);
-        if (!success) {
-          return 'Token obtenu mais aucun compte BoursoBank n\'a pu être synchronisé.';
+        try {
+          final success = await _fetchAndApplyLiveBankData(accessToken);
+          state = state.copyWith(isSyncing: false);
+          if (!success) {
+            return 'Connexion autorisée mais aucun compte BoursoBank n\'a été renvoyé par TrueLayer.';
+          }
+          return null; // Success (no error)
+        } catch (fetchErr) {
+          state = state.copyWith(isSyncing: false);
+          final msg = fetchErr.toString().replaceAll('Exception: ', '');
+          return msg;
         }
-        return null; // Success (no error)
       } else {
         state = state.copyWith(isSyncing: false);
-        return 'Erreur lors de la récupération du token TrueLayer.';
+        final err = tokenData?['error_description'] ?? tokenData?['error'] ?? 'Échec de l\'échange de code TrueLayer';
+        return 'Erreur token : $err';
       }
     } catch (e) {
       state = state.copyWith(isSyncing: false);
-      return e.toString();
+      return e.toString().replaceAll('Exception: ', '');
     }
   }
 
@@ -357,6 +363,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         return true;
       }
 
+      if (summary != null && summary['error'] != null) {
+        debugPrint('[SettingsNotifier] Summary returned error: ${summary['error']}');
+      }
+
       // 2. Fallback: individual account / balance calls
       final accounts = await TrueLayerService.fetchAccounts(
         accessToken: accessToken,
@@ -364,8 +374,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       );
 
       if (accounts.isEmpty) {
-        debugPrint('[SettingsNotifier] No accounts found from TrueLayer Data API.');
-        return false;
+        final err = (summary != null && summary['error'] != null)
+            ? summary['error'].toString()
+            : 'Aucun compte BoursoBank trouvé sur ce profil TrueLayer.';
+        debugPrint('[SettingsNotifier] No accounts found: $err');
+        throw Exception(err);
       }
 
       final mainAccount = accounts.firstWhere(

@@ -32,8 +32,15 @@ export default async function handler(req, res) {
   const accountId = body.accountId || body.account_id || query.accountId || query.account_id || '';
   const isSandbox = body.isSandbox === true || body.isSandbox === 'true' || query.isSandbox === 'true';
 
+  console.log('[TrueLayer Data API] Request received:', {
+    action,
+    isSandbox,
+    hasToken: !!accessToken,
+    tokenPrefix: accessToken ? `${accessToken.substring(0, 8)}...` : 'none',
+  });
+
   if (!accessToken) {
-    return res.status(400).json({ error: 'Missing access token' });
+    return res.status(400).json({ success: false, error: 'Missing access token' });
   }
 
   const apiBase = isSandbox
@@ -47,23 +54,27 @@ export default async function handler(req, res) {
 
   try {
     if (action === 'summary') {
-      // 1. Fetch Accounts
-      const accResponse = await fetch(`${apiBase}/accounts`, { headers: authHeaders });
-      if (!accResponse.ok) {
-        const errText = await accResponse.text();
-        console.error('[TrueLayer Proxy] Accounts error:', accResponse.status, errText);
-        return res.status(accResponse.status).json({
-          error: `Accounts API error: ${accResponse.status}`,
-          details: errText,
-        });
-      }
-
-      const accData = await accResponse.json();
-      const rawAccounts = accData.results || [];
       const accounts = [];
-      let primaryCheckingBalance = 0;
-      let primaryAccountId = '';
+      const partialErrors = [];
       let providerName = 'BoursoBank';
+
+      // 1. Fetch Accounts
+      let rawAccounts = [];
+      try {
+        const accResponse = await fetch(`${apiBase}/accounts`, { headers: authHeaders });
+        const accText = await accResponse.text();
+        console.log('[TrueLayer Data] /accounts response status:', accResponse.status, 'body preview:', accText.substring(0, 300));
+        
+        if (accResponse.ok) {
+          const accData = JSON.parse(accText);
+          rawAccounts = accData.results || [];
+        } else {
+          partialErrors.push(`Accounts API (${accResponse.status}): ${accText}`);
+        }
+      } catch (e) {
+        console.error('[TrueLayer Data] Accounts fetch exception:', e);
+        partialErrors.push(`Accounts exception: ${e.message || e}`);
+      }
 
       for (const rawAcc of rawAccounts) {
         const accId = rawAcc.account_id;
@@ -95,9 +106,12 @@ export default async function handler(req, res) {
                 : currentBal;
               updateTimestamp = balResult.update_timestamp || updateTimestamp;
             }
+          } else {
+            const balErrText = await balResponse.text();
+            console.warn(`[TrueLayer Data] Balance for ${accId} failed (${balResponse.status}):`, balErrText);
           }
         } catch (balErr) {
-          console.warn(`[TrueLayer Proxy] Failed to fetch balance for account ${accId}:`, balErr);
+          console.warn(`[TrueLayer Data] Failed to fetch balance for account ${accId}:`, balErr);
         }
 
         // Smart categorization based on BoursoBank IBAN / naming patterns
@@ -137,11 +151,14 @@ export default async function handler(req, res) {
         accounts.push(accountObj);
       }
 
-      // Also fetch cards if available
+      // 2. Also fetch cards if available
       try {
         const cardsResponse = await fetch(`${apiBase}/cards`, { headers: authHeaders });
+        const cardsText = await cardsResponse.text();
+        console.log('[TrueLayer Data] /cards response status:', cardsResponse.status, 'body preview:', cardsText.substring(0, 300));
+        
         if (cardsResponse.ok) {
-          const cardsData = await cardsResponse.json();
+          const cardsData = JSON.parse(cardsText);
           const rawCards = cardsData.results || [];
           for (const rawCard of rawCards) {
             const cardId = rawCard.account_id || rawCard.card_id;
@@ -178,10 +195,11 @@ export default async function handler(req, res) {
             accounts.push(cardObj);
           }
         }
-      } catch {}
+      } catch (cardErr) {
+        console.warn('[TrueLayer Data] Cards fetch error:', cardErr);
+      }
 
       // Smart selection of primary checking account
-      // 1. Explicit main checking account (IBAN 0429 or named Richard / Courant / Bancaire)
       let primaryAccount = accounts.find((a) =>
         a.category === 'checking' &&
         (a.iban_masked.includes('0429') ||
@@ -190,19 +208,16 @@ export default async function handler(req, res) {
          a.display_name.toLowerCase().includes('bancaire'))
       );
 
-      // 2. Any checking account (excluding tontine, tampon, savings)
       if (!primaryAccount) {
         primaryAccount = accounts.find((a) => a.category === 'checking');
       }
 
-      // 3. Any account that is not tontine, tampon, or savings
       if (!primaryAccount) {
         primaryAccount = accounts.find(
           (a) => a.category !== 'tontine' && a.category !== 'tampon' && a.category !== 'savings' && a.category !== 'investment'
         );
       }
 
-      // 4. Any account with a balance > 0 (if current selection is 0)
       if (!primaryAccount || primaryAccount.current_balance === 0) {
         const nonZeroAcc = accounts.find((a) => a.category !== 'tontine' && a.category !== 'savings' && a.current_balance > 0);
         if (nonZeroAcc) {
@@ -210,10 +225,12 @@ export default async function handler(req, res) {
         }
       }
 
-      // 5. First account in list
       if (!primaryAccount && accounts.length > 0) {
         primaryAccount = accounts[0];
       }
+
+      let primaryAccountId = '';
+      let primaryCheckingBalance = 0;
 
       if (primaryAccount) {
         primaryAccountId = primaryAccount.account_id;
@@ -230,17 +247,20 @@ export default async function handler(req, res) {
             transactions = txData.results || [];
           }
         } catch (txErr) {
-          console.warn('[TrueLayer Proxy] Transactions fetch error:', txErr);
+          console.warn('[TrueLayer Data] Transactions fetch error:', txErr);
         }
       }
 
+      console.log(`[TrueLayer Data API] Summary completed: ${accounts.length} accounts found, primaryBalance: ${primaryCheckingBalance} EUR`);
+
       return res.status(200).json({
-        success: true,
+        success: accounts.length > 0,
         accounts,
         primaryAccountId,
         primaryCheckingBalance,
         providerName,
         transactions,
+        partialErrors,
         timestamp: new Date().toISOString(),
       });
     }
@@ -272,6 +292,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Unknown action: ${action}` });
   } catch (error) {
     console.error('[TrueLayer Proxy] Handler exception:', error);
-    return res.status(500).json({ error: 'Internal server error', details: error.toString() });
+    return res.status(500).json({ success: false, error: 'Internal server error', details: error.toString() });
   }
 }

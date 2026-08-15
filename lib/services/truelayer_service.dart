@@ -97,15 +97,28 @@ class TrueLayerService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        debugPrint('[TrueLayer API] Summary fetched successfully: ${data['accounts']?.length ?? 0} accounts found');
-        return data;
+        debugPrint('[TrueLayer API] Summary response: success=${data['success']}, ${data['accounts']?.length ?? 0} accounts found');
+        return Map<String, dynamic>.from(data);
       } else {
-        debugPrint('[TrueLayer API] Summary Proxy Error ${response.statusCode}: ${response.body}');
+        Map<String, dynamic>? errJson;
+        try {
+          errJson = jsonDecode(response.body);
+        } catch (_) {}
+        final errMessage = errJson?['error'] ?? errJson?['details'] ?? 'HTTP ${response.statusCode}: ${response.body}';
+        debugPrint('[TrueLayer API] Summary Proxy Error ${response.statusCode}: $errMessage');
+        return {
+          'success': false,
+          'error': errMessage,
+          'details': errJson?['details'],
+        };
       }
     } catch (e) {
       debugPrint('[TrueLayer API] Summary Proxy Exception: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
     }
-    return null;
   }
 
   /// Fetches user accounts from TrueLayer Data API.
