@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../models/budget_category.dart';
 import '../../services/secure_storage_service.dart';
 import '../../services/truelayer_service.dart';
 import 'auth_provider.dart';
@@ -62,8 +63,9 @@ class SettingsState {
 
 class SettingsNotifier extends StateNotifier<SettingsState> {
   final String userId;
+  final Ref ref;
 
-  SettingsNotifier({required this.userId})
+  SettingsNotifier({required this.userId, required this.ref})
       : super(SettingsState(
           languageCode: 'fr',
           bankConnected: false,
@@ -127,6 +129,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       primaryAccountId: primaryAccountId,
       lastSyncTimestamp: lastSyncTimestamp,
     );
+
+    // Auto-sync if token is available
+    if (accessToken.isNotEmpty) {
+      _fetchAndApplyLiveBankData(accessToken);
+    }
   }
 
   Future<void> setLanguage(String code) async {
@@ -202,7 +209,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         state = state.copyWith(truelayerAccessToken: accessToken);
 
         // Fetch Accounts & Live Balance immediately
-        await _fetchAndApplyLiveBankData(accessToken, ref: ref);
+        await _fetchAndApplyLiveBankData(accessToken);
 
         state = state.copyWith(isSyncing: false);
         return null; // Success (no error)
@@ -216,11 +223,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
   }
 
-  Future<bool> syncTrueLayerData(WidgetRef ref) async {
+  Future<bool> syncTrueLayerData([WidgetRef? ref]) async {
     if (state.truelayerAccessToken.isEmpty) return false;
     state = state.copyWith(isSyncing: true);
     try {
-      final success = await _fetchAndApplyLiveBankData(state.truelayerAccessToken, ref: ref);
+      final success = await _fetchAndApplyLiveBankData(state.truelayerAccessToken);
       state = state.copyWith(isSyncing: false);
       return success;
     } catch (e) {
@@ -230,8 +237,57 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
   }
 
-  Future<bool> _fetchAndApplyLiveBankData(String accessToken, {WidgetRef? ref}) async {
+  Future<bool> _fetchAndApplyLiveBankData(String accessToken) async {
     try {
+      debugPrint('[SettingsNotifier] Fetching live bank data with token...');
+      // 1. Try unified summary via Vercel proxy first (Fastest & avoids CORS)
+      final summary = await TrueLayerService.fetchSummary(
+        accessToken: accessToken,
+        isSandbox: state.truelayerUseSandbox,
+      );
+
+      if (summary != null && summary['success'] == true) {
+        final primaryBalance = (summary['primaryCheckingBalance'] as num?)?.toDouble() ?? 0.0;
+        final providerName = (summary['providerName'] as String?) ?? 'BoursoBank';
+        final accountId = (summary['primaryAccountId'] as String?) ?? '';
+        final rawTxs = (summary['transactions'] as List<dynamic>?) ?? [];
+
+        final List<TransactionItem> txs = rawTxs.map<TransactionItem>((t) {
+          final amountVal = (t['amount'] as num?)?.toDouble() ?? 0.0;
+          final isIncome = amountVal > 0;
+          return TransactionItem(
+            id: t['transaction_id'] ?? 'tx-${DateTime.now().millisecondsSinceEpoch}',
+            title: t['description'] ?? 'Transaction',
+            amount: amountVal.abs(),
+            date: DateTime.tryParse(t['timestamp'] ?? '') ?? DateTime.now(),
+            category: (t['transaction_classification'] as List<dynamic>?)?.first ?? 'Général',
+            isIncome: isIncome,
+          );
+        }).toList();
+
+        // Update Riverpod salaryProvider and budgetProvider
+        ref.read(salaryProvider.notifier).updateAccountBalance(
+          primaryBalance,
+          bankName: providerName,
+          syncTime: DateTime.now(),
+        );
+
+        if (txs.isNotEmpty) {
+          ref.read(budgetProvider.notifier).setTransactions(txs);
+        }
+
+        // Direct local storage persistence
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setDouble('${userId}_aura_account_balance_v1', primaryBalance);
+        await prefs.setString('${userId}_aura_sync_bank_name_v1', providerName);
+        await prefs.setString('${userId}_aura_last_bank_sync_v1', DateTime.now().toIso8601String());
+
+        await setBankConnected(true, providerName, accountId: accountId);
+        debugPrint('[SettingsNotifier] Live Bank Data successfully applied: $primaryBalance EUR ($providerName)');
+        return true;
+      }
+
+      // 2. Fallback: individual account / balance calls
       final accounts = await TrueLayerService.fetchAccounts(
         accessToken: accessToken,
         isSandbox: state.truelayerUseSandbox,
@@ -242,7 +298,6 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         return false;
       }
 
-      // Prioritize checking account (TRANSACTION) or first account
       final mainAccount = accounts.firstWhere(
         (a) => (a['account_type'] == 'TRANSACTION') || (a['account_type'] == 'CURRENT'),
         orElse: () => accounts.first,
@@ -262,15 +317,13 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         );
       }
 
-      // If ref is available, update providers dynamically
-      if (ref != null && balance != null) {
+      if (balance != null) {
         ref.read(salaryProvider.notifier).updateAccountBalance(
           balance,
           bankName: providerName,
           syncTime: DateTime.now(),
         );
 
-        // Fetch recent transactions
         if (accountId.isNotEmpty) {
           final txs = await TrueLayerService.fetchTransactions(
             accountId: accountId,
@@ -281,8 +334,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
             ref.read(budgetProvider.notifier).setTransactions(txs);
           }
         }
-      } else if (balance != null) {
-        // Fallback save to SharedPreferences directly
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setDouble('${userId}_aura_account_balance_v1', balance);
         await prefs.setString('${userId}_aura_sync_bank_name_v1', providerName);
@@ -317,6 +369,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>((ref) {
   final authState = ref.watch(authProvider);
-  return SettingsNotifier(userId: authState.user?.id ?? '');
+  return SettingsNotifier(userId: authState.user?.id ?? '', ref: ref);
 });
+
 

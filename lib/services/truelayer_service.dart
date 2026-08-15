@@ -73,11 +73,66 @@ class TrueLayerService {
     }
   }
 
+  /// Fetches unified summary (accounts, balance, transactions) via Vercel proxy to bypass browser CORS
+  static Future<Map<String, dynamic>?> fetchSummary({
+    required String accessToken,
+    required bool isSandbox,
+  }) async {
+    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data');
+    debugPrint('[TrueLayer API] Fetching summary via proxy: $proxyUrl');
+
+    try {
+      final response = await http.post(
+        proxyUrl,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'summary',
+          'accessToken': accessToken,
+          'isSandbox': isSandbox,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        debugPrint('[TrueLayer API] Summary fetched successfully: ${data['accounts']?.length ?? 0} accounts found');
+        return data;
+      } else {
+        debugPrint('[TrueLayer API] Summary Proxy Error ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('[TrueLayer API] Summary Proxy Exception: $e');
+    }
+    return null;
+  }
+
   /// Fetches user accounts from TrueLayer Data API.
   static Future<List<Map<String, dynamic>>> fetchAccounts({
     required String accessToken,
     required bool isSandbox,
   }) async {
+    // 1. Try Vercel proxy first (Web CORS bypass)
+    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data');
+    try {
+      final response = await http.post(
+        proxyUrl,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'accounts',
+          'accessToken': accessToken,
+          'isSandbox': isSandbox,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> results = data['results'] ?? [];
+        return results.cast<Map<String, dynamic>>();
+      }
+    } catch (e) {
+      debugPrint('[TrueLayer API] Accounts Proxy Exception: $e');
+    }
+
+    // 2. Fallback direct call (for Native Mobile/Desktop)
     final baseUrl = isSandbox ? 'https://api.truelayer-sandbox.com' : 'https://api.truelayer.com';
     final url = Uri.parse('$baseUrl/data/v1/accounts');
 
@@ -95,11 +150,11 @@ class TrueLayerService {
         final List<dynamic> results = data['results'] ?? [];
         return results.cast<Map<String, dynamic>>();
       } else {
-        debugPrint('[TrueLayer API] Accounts Fetch Error: ${response.statusCode}');
+        debugPrint('[TrueLayer API] Accounts Direct Error: ${response.statusCode}');
         return [];
       }
     } catch (e) {
-      debugPrint('[TrueLayer API] Accounts Exception: $e');
+      debugPrint('[TrueLayer API] Accounts Direct Exception: $e');
       return [];
     }
   }
@@ -110,6 +165,35 @@ class TrueLayerService {
     required String accessToken,
     required bool isSandbox,
   }) async {
+    // 1. Try Vercel proxy first (Web CORS bypass)
+    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data');
+    try {
+      final response = await http.post(
+        proxyUrl,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'balance',
+          'accountId': accountId,
+          'accessToken': accessToken,
+          'isSandbox': isSandbox,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> results = data['results'] ?? [];
+        if (results.isNotEmpty) {
+          final balanceData = results.first;
+          final balance = (balanceData['available'] as num?)?.toDouble() ?? 
+                          (balanceData['current'] as num?)?.toDouble();
+          return balance;
+        }
+      }
+    } catch (e) {
+      debugPrint('[TrueLayer API] Balance Proxy Exception: $e');
+    }
+
+    // 2. Fallback direct call
     final baseUrl = isSandbox ? 'https://api.truelayer-sandbox.com' : 'https://api.truelayer.com';
     final url = Uri.parse('$baseUrl/data/v1/accounts/$accountId/balance');
 
@@ -127,16 +211,15 @@ class TrueLayerService {
         final List<dynamic> results = data['results'] ?? [];
         if (results.isNotEmpty) {
           final balanceData = results.first;
-          // 'available' is the actual spendable money, 'current' includes pending txs.
           final balance = (balanceData['available'] as num?)?.toDouble() ?? 
                           (balanceData['current'] as num?)?.toDouble();
           return balance;
         }
       } else {
-        debugPrint('[TrueLayer API] Balance Fetch Error: ${response.statusCode}');
+        debugPrint('[TrueLayer API] Balance Direct Error: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('[TrueLayer API] Balance Exception: $e');
+      debugPrint('[TrueLayer API] Balance Direct Exception: $e');
     }
     return null;
   }
@@ -147,6 +230,42 @@ class TrueLayerService {
     required String accessToken,
     required bool isSandbox,
   }) async {
+    // 1. Try Vercel proxy first (Web CORS bypass)
+    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data');
+    try {
+      final response = await http.post(
+        proxyUrl,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'transactions',
+          'accountId': accountId,
+          'accessToken': accessToken,
+          'isSandbox': isSandbox,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> results = data['results'] ?? [];
+
+        return results.map((t) {
+          final amountVal = (t['amount'] as num?)?.toDouble() ?? 0.0;
+          final isIncome = amountVal > 0;
+          return TransactionItem(
+            id: t['transaction_id'] ?? 'tx-${DateTime.now().millisecondsSinceEpoch}',
+            title: t['description'] ?? 'Transaction',
+            amount: amountVal.abs(),
+            date: DateTime.tryParse(t['timestamp'] ?? '') ?? DateTime.now(),
+            category: (t['transaction_classification'] as List<dynamic>?)?.first ?? 'Général',
+            isIncome: isIncome,
+          );
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint('[TrueLayer API] Transactions Proxy Exception: $e');
+    }
+
+    // 2. Fallback direct call
     final baseUrl = isSandbox ? 'https://api.truelayer-sandbox.com' : 'https://api.truelayer.com';
     final url = Uri.parse('$baseUrl/data/v1/accounts/$accountId/transactions');
 
@@ -164,24 +283,25 @@ class TrueLayerService {
         final List<dynamic> results = data['results'] ?? [];
 
         return results.map((t) {
-          final amountVal = (t['amount'] as num).toDouble();
+          final amountVal = (t['amount'] as num?)?.toDouble() ?? 0.0;
           final isIncome = amountVal > 0;
           return TransactionItem(
             id: t['transaction_id'] ?? 'tx-${DateTime.now().millisecondsSinceEpoch}',
             title: t['description'] ?? 'Transaction',
             amount: amountVal.abs(),
             date: DateTime.tryParse(t['timestamp'] ?? '') ?? DateTime.now(),
-            category: t['transaction_classification']?.first ?? 'Général',
+            category: (t['transaction_classification'] as List<dynamic>?)?.first ?? 'Général',
             isIncome: isIncome,
           );
         }).toList();
       } else {
-        debugPrint('[TrueLayer API] Transactions Error: ${response.statusCode}');
+        debugPrint('[TrueLayer API] Transactions Direct Error: ${response.statusCode}');
         return [];
       }
     } catch (e) {
-      debugPrint('[TrueLayer API] Transactions Exception: $e');
+      debugPrint('[TrueLayer API] Transactions Direct Exception: $e');
       return [];
     }
   }
 }
+
