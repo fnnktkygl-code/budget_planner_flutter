@@ -4209,6 +4209,88 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                 ),
               ),
 
+            const SizedBox(height: 12),
+
+            // 📜 Card permanente : Journal d'Audit Temporel & Traçabilité
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentCyan.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.history_edu_rounded, color: AppColors.accentCyan, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Journal d\'Audit Temporel',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentCyan.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${_auditLogs.length} modifs',
+                                style: const TextStyle(
+                                  color: AppColors.accentCyan,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          _auditLogs.isNotEmpty
+                              ? 'Dernier événement : ${_auditLogs.first.actionLabel} sur ${_auditLogs.first.categoryName} (${_auditLogs.first.effectiveDeltaEuro >= 0 ? "+" : ""}${_auditLogs.first.effectiveDeltaEuro.toStringAsFixed(2)} €)'
+                              : 'Traçabilité temporelle infaillible de chaque arbitrage, cumul ou modification.',
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentCyan,
+                      foregroundColor: Colors.black,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.history_rounded, size: 16),
+                    label: const Text('Consulter', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: () => _showAuditHistoryModal(context),
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 16),
 
             // FORECAST HORIZON SELECTOR
