@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/colors.dart';
@@ -9,6 +10,7 @@ import '../core/providers/auth_provider.dart';
 import '../core/providers/budget_provider.dart';
 import '../services/banking_analyzer_service.dart';
 import '../models/temporary_expense.dart';
+import '../models/budget_audit_log.dart';
 import '../widgets/notification_header.dart';
 
 class RuleCategoryItem {
@@ -54,6 +56,17 @@ class RuleCategoryItem {
     note: json['note'] as String?,
   );
 
+  RuleCategoryItem clone() => RuleCategoryItem(
+    id: id,
+    name: name,
+    amount: amount,
+    isPercentage: isPercentage,
+    isLocked: isLocked,
+    iconType: iconType,
+    iconBgColor: iconBgColor,
+    note: note,
+  );
+
   double getEffectiveAmount(double netSalary) {
     if (isPercentage) {
       return (netSalary * amount / 100);
@@ -92,6 +105,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     RuleCategoryItem(id: 'day-1', name: 'Revolut (Reste à vivre)', amount: 7.0, isPercentage: true, iconType: 'card', iconBgColor: AppColors.accentCyan),
   ];
 
+  List<BudgetAuditLogEntry> _auditLogs = [];
   Set<String> _ignoredDetectedTxIds = {};
   int _selectedForecastOffset = 0; // 0 = Mois en cours (M), 1 = M+1, 2 = M+2, 3 = M+3, 4 = M+4, 5 = M+5
 
@@ -100,6 +114,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     super.initState();
     _loadCategories();
     _loadIgnoredSuggestions();
+    _loadAuditLogs();
   }
 
   DateTime _getDateForOffset(int offset) {
@@ -757,13 +772,38 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         targetCategory.note = '${targetCategory.note} • ${sugg.merchant}';
                       }
                     }
+
+                    _logBudgetChange(
+                      categoryName: targetCategory.name,
+                      pillar: 'Cumul Radar',
+                      actionType: 'cumul',
+                      previousAmount: oldAmount,
+                      previousIsPercentage: oldIsPct,
+                      newAmount: targetCategory.amount,
+                      newIsPercentage: targetCategory.isPercentage,
+                      effectiveDeltaEuro: sugg.amount,
+                      note: 'Cumul prélèvement détecté : ${sugg.merchant} (+${sugg.amount.toStringAsFixed(2)} €)',
+                    );
                   } else {
                     // Écraser / Remplacer
+                    final deltaOverwrite = sugg.amount - (oldIsPct ? (netSalary * oldAmount / 100) : oldAmount);
                     targetCategory.amount = sugg.amount;
                     targetCategory.isPercentage = false;
                     if (renameOnOverwrite) {
                       targetCategory.name = sugg.merchant;
                     }
+
+                    _logBudgetChange(
+                      categoryName: targetCategory.name,
+                      pillar: 'Écrasement Radar',
+                      actionType: 'overwrite',
+                      previousAmount: oldAmount,
+                      previousIsPercentage: oldIsPct,
+                      newAmount: targetCategory.amount,
+                      newIsPercentage: targetCategory.isPercentage,
+                      effectiveDeltaEuro: deltaOverwrite,
+                      note: 'Écrasement avec détection bancaire : ${sugg.merchant} (${sugg.amount.toStringAsFixed(2)} €)',
+                    );
                   }
                   _ignoredDetectedTxIds.add(sugg.id);
                 });
@@ -920,6 +960,9 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               final amt = double.tryParse(amountCtrl.text.trim()) ?? sugg.amount;
               final name = nameCtrl.text.trim().isEmpty ? sugg.merchant : nameCtrl.text.trim();
               final p = pillars[selectedPillar];
+              final salary = ref.read(salaryProvider);
+              final baseRecord = salary.activeBaseline;
+              final netSalary = baseRecord?.regularNetSalary ?? baseRecord?.netSalary ?? 2713.74;
 
               final newItem = RuleCategoryItem(
                 id: '${p["prefix"]}-${DateTime.now().millisecondsSinceEpoch}',
@@ -939,6 +982,17 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   _dailyCategories.add(newItem);
                 }
                 _ignoredDetectedTxIds.add(sugg.id);
+
+                _logBudgetChange(
+                  categoryName: name,
+                  pillar: p['name'] as String,
+                  actionType: 'add',
+                  previousAmount: null,
+                  newAmount: amt,
+                  newIsPercentage: isPercentMode,
+                  effectiveDeltaEuro: isPercentMode ? (netSalary * amt / 100) : amt,
+                  note: 'Nouvelle catégorie créée via détection bancaire : ${sugg.merchant}',
+                );
               });
 
               await _saveCategories();
@@ -1421,6 +1475,18 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                               matchedCat.note = '${matchedCat.note} • ${sugg.merchant}';
                                             }
                                             _ignoredDetectedTxIds.add(sugg.id);
+
+                                            _logBudgetChange(
+                                              categoryName: matchedCat.name,
+                                              pillar: 'Radar Bancaire',
+                                              actionType: 'cumul',
+                                              previousAmount: oldAmount,
+                                              previousIsPercentage: oldIsPct,
+                                              newAmount: matchedCat.amount,
+                                              newIsPercentage: matchedCat.isPercentage,
+                                              effectiveDeltaEuro: sugg.amount,
+                                              note: '1-Tap Cumul détection : ${sugg.merchant} (+${sugg.amount.toStringAsFixed(2)} €)',
+                                            );
                                           });
 
                                           await _saveCategories();
@@ -1474,11 +1540,24 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                         onPressed: () async {
                                           final oldAmount = matchedCat.amount;
                                           final oldIsPct = matchedCat.isPercentage;
+                                          final deltaOverwrite = sugg.amount - (oldIsPct ? (netSalary * oldAmount / 100) : oldAmount);
 
                                           setState(() {
                                             matchedCat.amount = sugg.amount;
                                             matchedCat.isPercentage = false;
                                             _ignoredDetectedTxIds.add(sugg.id);
+
+                                            _logBudgetChange(
+                                              categoryName: matchedCat.name,
+                                              pillar: 'Radar Bancaire',
+                                              actionType: 'overwrite',
+                                              previousAmount: oldAmount,
+                                              previousIsPercentage: oldIsPct,
+                                              newAmount: matchedCat.amount,
+                                              newIsPercentage: matchedCat.isPercentage,
+                                              effectiveDeltaEuro: deltaOverwrite,
+                                              note: '1-Tap Écrasement détection : ${sugg.merchant} (${sugg.amount.toStringAsFixed(2)} €)',
+                                            );
                                           });
 
                                           await _saveCategories();
@@ -1888,103 +1967,1033 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
-  void _showArbitrageDialog(BuildContext context, double deficitAmount, double netSalary, {String? periodLabel}) {
-    final peaIndex = _savingsCategories.indexWhere((c) => c.name.toLowerCase().contains('pea'));
-    final peaItem = peaIndex != -1 ? _savingsCategories[peaIndex] : null;
-    final currentPeaAmount = peaItem?.getEffectiveAmount(netSalary) ?? 0.0;
-    final recommendedPeaAmount = (currentPeaAmount - deficitAmount).clamp(0.0, currentPeaAmount);
-    final recommendedPeaPercent = netSalary > 0 ? (recommendedPeaAmount / netSalary * 100) : 0.0;
-
-    showDialog(
+  void _showArbitrageDialog(
+    BuildContext context,
+    double deficitAmount,
+    double netSalary, {
+    String? periodLabel,
+  }) {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              const Icon(Icons.auto_fix_high_rounded, color: AppColors.accentCyan, size: 22),
-              const SizedBox(width: 10),
-              Text(periodLabel != null ? 'Arbitrage $periodLabel' : 'Arbitrage Anti-Découvert', style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Un déficit de -${deficitAmount.toStringAsFixed(2)} € est calculé${periodLabel != null ? " pour $periodLabel" : ""}.\n\nPour préserver votre reste à vivre et éviter tout découvert, vous pouvez ajuster temporairement votre épargne PEA :',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        int selectedSafetyBufferIndex = 1; // 0: 0€, 1: +50€, 2: +100€, 3: +10%
+        int selectedStrategy = 0; // 0: PEA Prioritaire, 1: Mix Épargne, 2: Épargne & Quotidien, 3: Sur-mesure
+
+        // Collect all flexible modifiable categories
+        final modifiableItems = [
+          ..._savingsCategories,
+          ..._dailyCategories,
+        ];
+
+        // Store initial nominal values
+        final Map<String, double> initialNominals = {
+          for (var item in modifiableItems) item.id: item.getEffectiveAmount(netSalary),
+        };
+
+        // Current simulated nominal values
+        final Map<String, double> simulatedNominals = Map.from(initialNominals);
+
+        // Helper to compute target safety buffer in euros
+        double getSafetyBufferAmount(int bufferIdx) {
+          switch (bufferIdx) {
+            case 0:
+              return 0.0;
+            case 1:
+              return 50.0;
+            case 2:
+              return 100.0;
+            case 3:
+              return netSalary * 0.10;
+            default:
+              return 50.0;
+          }
+        }
+
+        // Helper to apply strategy presets
+        void applyStrategyPreset(int strategyIdx, int bufferIdx) {
+          final targetBuffer = getSafetyBufferAmount(bufferIdx);
+          final totalNeededEffort = deficitAmount + targetBuffer;
+
+          // Reset to initial nominal amounts first
+          for (var item in modifiableItems) {
+            simulatedNominals[item.id] = initialNominals[item.id] ?? 0.0;
+          }
+
+          if (strategyIdx == 0) {
+            // Strategy 0: PEA Prioritaire (absorbs everything on PEA or highest savings)
+            final peaIndex = modifiableItems.indexWhere((c) => c.name.toLowerCase().contains('pea'));
+            final targetItem = peaIndex != -1
+                ? modifiableItems[peaIndex]
+                : (_savingsCategories.isNotEmpty ? _savingsCategories.first : modifiableItems.first);
+            final initialPea = initialNominals[targetItem.id] ?? 0.0;
+
+            if (initialPea >= totalNeededEffort) {
+              simulatedNominals[targetItem.id] = (initialPea - totalNeededEffort).clamp(0.0, initialPea);
+            } else {
+              simulatedNominals[targetItem.id] = 0.0;
+              var remainingEffort = totalNeededEffort - initialPea;
+              for (var item in modifiableItems) {
+                if (item.id != targetItem.id && remainingEffort > 0) {
+                  final initAmt = initialNominals[item.id] ?? 0.0;
+                  final deduct = remainingEffort.clamp(0.0, initAmt);
+                  simulatedNominals[item.id] = initAmt - deduct;
+                  remainingEffort -= deduct;
+                }
+              }
+            }
+          } else if (strategyIdx == 1) {
+            // Strategy 1: Mix Épargne (PEA + Livret A / Épargne)
+            final totalSavingsInit = _savingsCategories.fold(0.0, (sum, c) => sum + (initialNominals[c.id] ?? 0.0));
+            if (totalSavingsInit > 0) {
+              for (var s in _savingsCategories) {
+                final initVal = initialNominals[s.id] ?? 0.0;
+                final share = (initVal / totalSavingsInit) * totalNeededEffort;
+                simulatedNominals[s.id] = (initVal - share).clamp(0.0, initVal);
+              }
+            }
+          } else if (strategyIdx == 2) {
+            // Strategy 2: Épargne & Quotidien (70% Épargne, 30% Quotidien)
+            final effortSavings = totalNeededEffort * 0.70;
+            final effortDaily = totalNeededEffort * 0.30;
+
+            final totalSavingsInit = _savingsCategories.fold(0.0, (sum, c) => sum + (initialNominals[c.id] ?? 0.0));
+            if (totalSavingsInit > 0) {
+              for (var s in _savingsCategories) {
+                final initVal = initialNominals[s.id] ?? 0.0;
+                final share = (initVal / totalSavingsInit) * effortSavings;
+                simulatedNominals[s.id] = (initVal - share).clamp(0.0, initVal);
+              }
+            }
+
+            final totalDailyInit = _dailyCategories.fold(0.0, (sum, c) => sum + (initialNominals[c.id] ?? 0.0));
+            if (totalDailyInit > 0) {
+              for (var d in _dailyCategories) {
+                final initVal = initialNominals[d.id] ?? 0.0;
+                final share = (initVal / totalDailyInit) * effortDaily;
+                simulatedNominals[d.id] = (initVal - share).clamp(0.0, initVal);
+              }
+            }
+          }
+        }
+
+        // Initialize preset
+        applyStrategyPreset(selectedStrategy, selectedSafetyBufferIndex);
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final targetBuffer = getSafetyBufferAmount(selectedSafetyBufferIndex);
+
+            // Compute total reduction effort
+            double totalEffort = 0.0;
+            for (var item in modifiableItems) {
+              final initVal = initialNominals[item.id] ?? 0.0;
+              final simVal = simulatedNominals[item.id] ?? initVal;
+              totalEffort += (initVal - simVal);
+            }
+
+            // Real-time projected reste à vivre
+            final simulatedResteAVivre = -deficitAmount + totalEffort;
+            final isSecured = simulatedResteAVivre >= targetBuffer;
+            final isBalanced = simulatedResteAVivre >= 0;
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.90,
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBackground,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.borderSubtle),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Épargne PEA Actuelle :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                        Text('${currentPeaAmount.toStringAsFixed(2)} € (${peaItem?.amount.toStringAsFixed(1)}%)', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
-                      ],
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Modal Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentCyan.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.auto_fix_high_rounded, color: AppColors.accentCyan, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                periodLabel != null ? 'Arbitrage $periodLabel' : 'Arbitrage Multi-Piliers',
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const Text(
+                                'Modulation proactive & flexible anti-découvert',
+                                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                        onPressed: () => Navigator.pop(sheetCtx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Deficit & Simulation Live Hero Card
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.cardBackground,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSecured
+                                    ? AppColors.accentEmerald.withValues(alpha: 0.5)
+                                    : (isBalanced ? AppColors.accentGold.withValues(alpha: 0.5) : AppColors.accentRose.withValues(alpha: 0.5)),
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Déficit Prévisionnel Initial', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '-${deficitAmount.toStringAsFixed(2)} €',
+                                          style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
+                                    const Icon(Icons.arrow_forward_rounded, color: AppColors.textMuted, size: 18),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        const Text('Effort d\'Arbitrage', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '+${totalEffort.toStringAsFixed(2)} €',
+                                          style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
+                                    const Icon(Icons.arrow_forward_rounded, color: AppColors.textMuted, size: 18),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        const Text('Reste à Vivre Simulé', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${simulatedResteAVivre >= 0 ? "+" : ""}${simulatedResteAVivre.toStringAsFixed(2)} €',
+                                          style: TextStyle(
+                                            color: isSecured ? AppColors.accentEmerald : (isBalanced ? AppColors.accentGold : AppColors.accentRose),
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: (isSecured ? AppColors.accentEmerald : (isBalanced ? AppColors.accentGold : AppColors.accentRose)).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isSecured ? Icons.check_circle_rounded : (isBalanced ? Icons.info_outline_rounded : Icons.warning_amber_rounded),
+                                        color: isSecured ? AppColors.accentEmerald : (isBalanced ? AppColors.accentGold : AppColors.accentRose),
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          isSecured
+                                              ? 'Équilibre parfait : Vous disposez de +${simulatedResteAVivre.toStringAsFixed(2)} € de marge de sécurité.'
+                                              : (isBalanced
+                                                  ? 'Équilibre atteint : Déficit résorbé avec +${simulatedResteAVivre.toStringAsFixed(2)} € de reste à vivre.'
+                                                  : 'Attention : Il reste encore -${simulatedResteAVivre.abs().toStringAsFixed(2)} € de déficit non couvert.'),
+                                          style: TextStyle(
+                                            color: isSecured ? AppColors.accentEmerald : (isBalanced ? AppColors.accentGold : AppColors.accentRose),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 1. Safety Buffer Selection
+                          const Text('1. MARGE DE SÉCURITÉ SOUHAITÉE', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              _buildBufferOption('0 €\nStrict', 0, selectedSafetyBufferIndex, (idx) {
+                                setModalState(() {
+                                  selectedSafetyBufferIndex = idx;
+                                  applyStrategyPreset(selectedStrategy, idx);
+                                });
+                              }),
+                              _buildBufferOption('+50 €\nConfort', 1, selectedSafetyBufferIndex, (idx) {
+                                setModalState(() {
+                                  selectedSafetyBufferIndex = idx;
+                                  applyStrategyPreset(selectedStrategy, idx);
+                                });
+                              }),
+                              _buildBufferOption('+100 €\nSérénité', 2, selectedSafetyBufferIndex, (idx) {
+                                setModalState(() {
+                                  selectedSafetyBufferIndex = idx;
+                                  applyStrategyPreset(selectedStrategy, idx);
+                                });
+                              }),
+                              _buildBufferOption('+10%\n(${(netSalary * 0.10).toStringAsFixed(0)}€)', 3, selectedSafetyBufferIndex, (idx) {
+                                setModalState(() {
+                                  selectedSafetyBufferIndex = idx;
+                                  applyStrategyPreset(selectedStrategy, idx);
+                                });
+                              }),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 2. Strategy Presets
+                          const Text('2. STRATÉGIE DE RÉPARTITION (1-CLIC)', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                          const SizedBox(height: 8),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _buildStrategyCard('🎯 PEA Prioritaire', 'Absorbe l\'effort sur le PEA seul', 0, selectedStrategy, (s) {
+                                  setModalState(() {
+                                    selectedStrategy = s;
+                                    applyStrategyPreset(s, selectedSafetyBufferIndex);
+                                  });
+                                }),
+                                _buildStrategyCard('🛡️ Mix Épargne', 'Répartit PEA & Livret A', 1, selectedStrategy, (s) {
+                                  setModalState(() {
+                                    selectedStrategy = s;
+                                    applyStrategyPreset(s, selectedSafetyBufferIndex);
+                                  });
+                                }),
+                                _buildStrategyCard('⚖️ Épargne + Plaisir', '70% Épargne / 30% Quotidien', 2, selectedStrategy, (s) {
+                                  setModalState(() {
+                                    selectedStrategy = s;
+                                    applyStrategyPreset(s, selectedSafetyBufferIndex);
+                                  });
+                                }),
+                                _buildStrategyCard('🎛️ Sur-Mesure', 'Ajustement manuel direct', 3, selectedStrategy, (s) {
+                                  setModalState(() {
+                                    selectedStrategy = s;
+                                  });
+                                }),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 3. Interactive Category Sliders & Steppers
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: const [
+                              Text('3. MODULATION INTERACTIVE EN DIRECT', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                              Text('Glissez ou ajustez', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+
+                          for (var item in modifiableItems) ...[
+                            Builder(builder: (context) {
+                              final initVal = initialNominals[item.id] ?? 0.0;
+                              final curSimVal = simulatedNominals[item.id] ?? initVal;
+                              final delta = curSimVal - initVal;
+                              final maxSlider = (initVal * 1.3).clamp(500.0, 3000.0);
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.cardBackground,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: delta != 0 ? AppColors.accentCyan.withValues(alpha: 0.4) : AppColors.borderSubtle,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              width: 10,
+                                              height: 10,
+                                              decoration: BoxDecoration(color: item.iconBgColor, shape: BoxShape.circle),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              item.name,
+                                              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '(${item.isPercentage ? "${item.amount.toStringAsFixed(1)}%" : "Nominal"})',
+                                              style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                                            ),
+                                          ],
+                                        ),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              '${curSimVal.toStringAsFixed(2)} €',
+                                              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+                                            ),
+                                            if (delta != 0) ...[
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: (delta < 0 ? AppColors.accentRose : AppColors.accentEmerald).withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  '${delta > 0 ? "+" : ""}${delta.toStringAsFixed(0)} €',
+                                                  style: TextStyle(
+                                                    color: delta < 0 ? AppColors.accentRose : AppColors.accentEmerald,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 10,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+
+                                    // Slider & Steppers Row
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.remove_circle_outline_rounded, color: AppColors.accentRose, size: 20),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          tooltip: '-50 €',
+                                          onPressed: () {
+                                            setModalState(() {
+                                              selectedStrategy = 3;
+                                              simulatedNominals[item.id] = (curSimVal - 50.0).clamp(0.0, maxSlider);
+                                            });
+                                          },
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Slider(
+                                            value: curSimVal.clamp(0.0, maxSlider),
+                                            min: 0.0,
+                                            max: maxSlider,
+                                            activeColor: AppColors.accentCyan,
+                                            inactiveColor: AppColors.borderSubtle,
+                                            onChanged: (newVal) {
+                                              setModalState(() {
+                                                selectedStrategy = 3;
+                                                simulatedNominals[item.id] = double.parse(newVal.toStringAsFixed(0));
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        IconButton(
+                                          icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.accentEmerald, size: 20),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          tooltip: '+50 €',
+                                          onPressed: () {
+                                            setModalState(() {
+                                              selectedStrategy = 3;
+                                              simulatedNominals[item.id] = (curSimVal + 50.0).clamp(0.0, maxSlider);
+                                            });
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Absorption Déficit :', style: TextStyle(color: AppColors.accentRose, fontSize: 12)),
-                        Text('-${deficitAmount.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 12)),
-                      ],
-                    ),
-                    const Divider(height: 16, color: AppColors.borderSubtle),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('PEA Modulé Recommandé :', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 12)),
-                        Text('${recommendedPeaAmount.toStringAsFixed(2)} € (${recommendedPeaPercent.toStringAsFixed(1)}%)', style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 13)),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Bottom Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textSecondary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: const BorderSide(color: AppColors.borderSubtle),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Fermer'),
+                          onPressed: () => Navigator.pop(sheetCtx),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentCyan,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                          label: Text(
+                            'Appliquer l\'Arbitrage (+${totalEffort.toStringAsFixed(0)} €)',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          onPressed: () async {
+                            // Backup for undo
+                            final backupSavings = _savingsCategories.map((c) => c.clone()).toList();
+                            final backupDaily = _dailyCategories.map((c) => c.clone()).toList();
+
+                            setState(() {
+                              for (var item in modifiableItems) {
+                                final simVal = simulatedNominals[item.id];
+                                if (simVal != null) {
+                                  final oldVal = initialNominals[item.id] ?? 0.0;
+                                  final delta = simVal - oldVal;
+
+                                  if (delta != 0) {
+                                    final oldAmount = item.amount;
+                                    final oldIsPct = item.isPercentage;
+
+                                    if (item.isPercentage) {
+                                      // Recalculate percent with 2 decimal precision to eliminate 0.34€ roundoff defect
+                                      item.amount = double.parse(((simVal / netSalary) * 100).toStringAsFixed(2));
+                                    } else {
+                                      item.amount = double.parse(simVal.toStringAsFixed(2));
+                                    }
+
+                                    _logBudgetChange(
+                                      categoryName: item.name,
+                                      pillar: 'Arbitrage Prévisionnel',
+                                      actionType: 'arbitrage',
+                                      previousAmount: oldAmount,
+                                      previousIsPercentage: oldIsPct,
+                                      newAmount: item.amount,
+                                      newIsPercentage: item.isPercentage,
+                                      effectiveDeltaEuro: delta,
+                                      note: 'Arbitrage ${periodLabel ?? "Prévisionnel"} : Marge ${targetBuffer.toStringAsFixed(0)}€ (Reste à vivre : +${simulatedResteAVivre.toStringAsFixed(2)} €)',
+                                      period: periodLabel,
+                                    );
+                                  }
+                                }
+                              }
+                            });
+
+                            await _saveCategories();
+                            if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Arbitrage appliqué avec succès : Reste à vivre prévisionnel équilibré à +${simulatedResteAVivre.toStringAsFixed(2)} €.',
+                                  ),
+                                  backgroundColor: AppColors.accentEmerald,
+                                  behavior: SnackBarBehavior.floating,
+                                  action: SnackBarAction(
+                                    label: 'Annuler',
+                                    textColor: AppColors.accentGold,
+                                    onPressed: () async {
+                                      setState(() {
+                                        _savingsCategories = backupSavings;
+                                        _dailyCategories = backupDaily;
+                                      });
+                                      await _saveCategories();
+                                    },
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Fermer', style: TextStyle(color: AppColors.textSecondary)),
-              onPressed: () => Navigator.pop(ctx),
-            ),
-            if (peaItem != null)
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.black),
-                child: const Text('Appliquer l\'arbitrage', style: TextStyle(fontWeight: FontWeight.bold)),
-                onPressed: () {
-                  setState(() {
-                    if (peaItem.isPercentage) {
-                      peaItem.amount = double.parse(recommendedPeaPercent.toStringAsFixed(1));
-                    } else {
-                      peaItem.amount = double.parse(recommendedPeaAmount.toStringAsFixed(0));
-                    }
-                  });
-                  _saveCategories();
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Modulation appliquée : Cible PEA ajustée à ${peaItem.isPercentage ? "${peaItem.amount}%" : "${peaItem.amount}€"}.'),
-                      backgroundColor: AppColors.accentEmerald,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-          ],
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget _buildBufferOption(String label, int index, int selectedIndex, Function(int) onSelect) {
+    final isSelected = index == selectedIndex;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onSelect(index),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.2) : AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isSelected ? AppColors.accentCyan : AppColors.textSecondary,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStrategyCard(String title, String subtitle, int index, int selectedIndex, Function(int) onSelect) {
+    final isSelected = index == selectedIndex;
+    return GestureDetector(
+      onTap: () => onSelect(index),
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.2) : AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: isSelected ? AppColors.accentCyan : AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _loadAuditLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = ref.read(authProvider).user?.id ?? '';
+    final key = userId.isEmpty ? 'aura_rules_audit_logs' : '${userId}_aura_rules_audit_logs';
+
+    final raw = prefs.getString(key);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final List<dynamic> data = jsonDecode(raw);
+        _auditLogs = data.map((i) => BudgetAuditLogEntry.fromJson(i as Map<String, dynamic>)).toList();
+        setState(() {});
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _saveAuditLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = ref.read(authProvider).user?.id ?? '';
+    final key = userId.isEmpty ? 'aura_rules_audit_logs' : '${userId}_aura_rules_audit_logs';
+
+    final data = _auditLogs.map((e) => e.toJson()).toList();
+    await prefs.setString(key, jsonEncode(data));
+  }
+
+  void _logBudgetChange({
+    required String categoryName,
+    required String pillar,
+    required String actionType,
+    double? previousAmount,
+    bool? previousIsPercentage,
+    double? newAmount,
+    bool? newIsPercentage,
+    double effectiveDeltaEuro = 0.0,
+    String? note,
+    String? period,
+  }) {
+    final entry = BudgetAuditLogEntry(
+      id: 'log-${DateTime.now().millisecondsSinceEpoch}-${_auditLogs.length}',
+      timestamp: DateTime.now(),
+      categoryName: categoryName,
+      pillar: pillar,
+      actionType: actionType,
+      previousAmount: previousAmount,
+      previousIsPercentage: previousIsPercentage,
+      newAmount: newAmount,
+      newIsPercentage: newIsPercentage,
+      effectiveDeltaEuro: effectiveDeltaEuro,
+      note: note,
+      period: period,
+    );
+    _auditLogs.insert(0, entry);
+    if (_auditLogs.length > 500) {
+      _auditLogs = _auditLogs.sublist(0, 500);
+    }
+    _saveAuditLogs();
+  }
+
+  void _showAuditHistoryModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        String searchQuery = '';
+        String selectedFilter = 'all';
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filteredLogs = _auditLogs.where((log) {
+              if (selectedFilter != 'all' && log.actionType != selectedFilter) {
+                return false;
+              }
+              if (searchQuery.isNotEmpty) {
+                final q = searchQuery.toLowerCase();
+                final catMatch = log.categoryName.toLowerCase().contains(q);
+                final noteMatch = (log.note ?? '').toLowerCase().contains(q);
+                final pillarMatch = log.pillar.toLowerCase().contains(q);
+                final periodMatch = (log.period ?? '').toLowerCase().contains(q);
+                return catMatch || noteMatch || pillarMatch || periodMatch;
+              }
+              return true;
+            }).toList();
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentCyan.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.history_rounded, color: AppColors.accentCyan, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Journal d\'Audit Temporel',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                '${_auditLogs.length} modifications budgétaires historisées',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          if (_auditLogs.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(Icons.copy_all_rounded, color: AppColors.accentCyan, size: 20),
+                              tooltip: 'Copier l\'historique',
+                              onPressed: () {
+                                final text = _auditLogs.map((l) {
+                                  final d = l.timestamp;
+                                  final dStr = '${d.day.toString().padLeft(2, "0")}/${d.month.toString().padLeft(2, "0")}/${d.year} ${d.hour.toString().padLeft(2, "0")}:${d.minute.toString().padLeft(2, "0")}';
+                                  return '[$dStr] ${l.actionLabel.toUpperCase()} • ${l.categoryName} (${l.pillar}) : ${l.previousAmount != null ? "${l.previousAmount}${l.previousIsPercentage == true ? "%" : "€"} ➔ " : ""}${l.newAmount != null ? "${l.newAmount}${l.newIsPercentage == true ? "%" : "€"}" : ""} [Delta: ${l.effectiveDeltaEuro >= 0 ? "+" : ""}${l.effectiveDeltaEuro.toStringAsFixed(2)} €] ${l.note != null ? "(${l.note})" : ""}';
+                                }).join('\n');
+                                Clipboard.setData(ClipboardData(text: text));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Historique copié dans le presse-papier.'),
+                                    backgroundColor: AppColors.accentEmerald,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              },
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                            onPressed: () => Navigator.pop(sheetCtx),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Search Bar
+                  TextField(
+                    onChanged: (val) => setModalState(() => searchQuery = val.trim()),
+                    decoration: InputDecoration(
+                      hintText: 'Rechercher une catégorie, note, période...',
+                      prefixIcon: const Icon(Icons.search, color: AppColors.textMuted, size: 18),
+                      filled: true,
+                      fillColor: AppColors.cardBackground,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.borderSubtle),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.borderSubtle),
+                      ),
+                    ),
+                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Filter Chips
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildFilterChip('Tous', 'all', selectedFilter, (f) => setModalState(() => selectedFilter = f)),
+                        _buildFilterChip('⚖️ Arbitrages', 'arbitrage', selectedFilter, (f) => setModalState(() => selectedFilter = f)),
+                        _buildFilterChip('➕ Cumuls', 'cumul', selectedFilter, (f) => setModalState(() => selectedFilter = f)),
+                        _buildFilterChip('⚡ Écrasements', 'overwrite', selectedFilter, (f) => setModalState(() => selectedFilter = f)),
+                        _buildFilterChip('✏️ Éditions', 'manual_edit', selectedFilter, (f) => setModalState(() => selectedFilter = f)),
+                        _buildFilterChip('✨ Créations', 'add', selectedFilter, (f) => setModalState(() => selectedFilter = f)),
+                        _buildFilterChip('🗑️ Suppr.', 'delete', selectedFilter, (f) => setModalState(() => selectedFilter = f)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Content List
+                  Expanded(
+                    child: filteredLogs.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.receipt_long_outlined, color: AppColors.textMuted.withValues(alpha: 0.4), size: 48),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _auditLogs.isEmpty
+                                      ? 'Aucun événement historisé pour le moment.'
+                                      : 'Aucun résultat pour cette recherche.',
+                                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Chaque arbitrage, cumul, écrasement ou ajustement est tracé ici.',
+                                  style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filteredLogs.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            itemBuilder: (ctx, i) {
+                              final entry = filteredLogs[i];
+                              final d = entry.timestamp;
+                              final dateStr = '${d.day.toString().padLeft(2, "0")}/${d.month.toString().padLeft(2, "0")}/${d.year} à ${d.hour.toString().padLeft(2, "0")}:${d.minute.toString().padLeft(2, "0")}:${d.second.toString().padLeft(2, "0")}';
+
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.cardBackground,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppColors.borderSubtle),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: entry.actionColor.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: entry.actionColor.withValues(alpha: 0.4)),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(entry.actionIcon, size: 12, color: entry.actionColor),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    entry.actionLabel,
+                                                    style: TextStyle(color: entry.actionColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              entry.pillar,
+                                              style: const TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.w600),
+                                            ),
+                                          ],
+                                        ),
+                                        Text(
+                                          dateStr,
+                                          style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            entry.categoryName,
+                                            style: const TextStyle(
+                                              color: AppColors.textPrimary,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        if (entry.effectiveDeltaEuro != 0)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: (entry.effectiveDeltaEuro >= 0 ? AppColors.accentEmerald : AppColors.accentRose).withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              '${entry.effectiveDeltaEuro >= 0 ? "+" : ""}${entry.effectiveDeltaEuro.toStringAsFixed(2)} €',
+                                              style: TextStyle(
+                                                color: entry.effectiveDeltaEuro >= 0 ? AppColors.accentEmerald : AppColors.accentRose,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    if (entry.previousAmount != null || entry.newAmount != null) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Valeur : ${entry.previousAmount != null ? "${entry.previousAmount!.toStringAsFixed(entry.previousIsPercentage == true ? 1 : 2)}${entry.previousIsPercentage == true ? "%" : "€"}" : "Nouveau"} ➔ ${entry.newAmount != null ? "${entry.newAmount!.toStringAsFixed(entry.newIsPercentage == true ? 1 : 2)}${entry.newIsPercentage == true ? "%" : "€"}" : "Supprimé"}',
+                                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                      ),
+                                    ],
+                                    if (entry.note != null && entry.note!.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.surface,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          entry.note!,
+                                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontStyle: FontStyle.italic),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterChip(String label, String value, String selectedValue, Function(String) onSelect) {
+    final isSelected = value == selectedValue;
+    return GestureDetector(
+      onTap: () => onSelect(value),
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.2) : AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? AppColors.accentCyan : AppColors.textSecondary,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 11,
+          ),
+        ),
+      ),
     );
   }
 
@@ -2168,6 +3177,10 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   onPressed: () {
                     final title = titleController.text.trim().isEmpty ? 'Nouvelle Catégorie' : titleController.text.trim();
                     final amount = double.tryParse(amountController.text.trim()) ?? 10.0;
+                    final salary = ref.read(salaryProvider);
+                    final baseRecord = salary.activeBaseline;
+                    final netSalary = baseRecord?.regularNetSalary ?? baseRecord?.netSalary ?? 2713.74;
+
                     setState(() {
                       targetList.add(
                         RuleCategoryItem(
@@ -2178,6 +3191,17 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                           iconType: 'default',
                           iconBgColor: color,
                         ),
+                      );
+
+                      _logBudgetChange(
+                        categoryName: title,
+                        pillar: defaultGroup,
+                        actionType: 'add',
+                        previousAmount: null,
+                        newAmount: amount,
+                        newIsPercentage: isPercentage,
+                        effectiveDeltaEuro: isPercentage ? (netSalary * amount / 100) : amount,
+                        note: 'Création manuelle : $defaultGroup',
                       );
                     });
                     _saveCategories();
@@ -2448,6 +3472,13 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     final newName = nameController.text.trim().isEmpty ? item.name : nameController.text.trim();
                     final newAmount = double.tryParse(amountController.text.trim()) ?? item.amount;
                     final newNote = noteController.text.trim().isEmpty ? null : noteController.text.trim();
+
+                    final oldAmount = item.amount;
+                    final oldIsPct = item.isPercentage;
+                    final oldNominal = oldIsPct ? (netSalary * oldAmount / 100) : oldAmount;
+                    final newNominal = isPercentage ? (netSalary * newAmount / 100) : newAmount;
+                    final delta = newNominal - oldNominal;
+
                     setState(() {
                       item.name = newName;
                       item.amount = newAmount;
@@ -2455,6 +3486,18 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       item.isPercentage = isPercentage;
                       item.iconType = selectedIcon;
                       item.iconBgColor = selectedColor;
+
+                      _logBudgetChange(
+                        categoryName: newName,
+                        pillar: 'Édition Manuelle',
+                        actionType: 'manual_edit',
+                        previousAmount: oldAmount,
+                        previousIsPercentage: oldIsPct,
+                        newAmount: newAmount,
+                        newIsPercentage: isPercentage,
+                        effectiveDeltaEuro: delta,
+                        note: newNote,
+                      );
                     });
                     _saveCategories();
                     Navigator.pop(ctx);
@@ -2499,8 +3542,24 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
+                final salary = ref.read(salaryProvider);
+                final baseRecord = salary.activeBaseline;
+                final netSalary = baseRecord?.regularNetSalary ?? baseRecord?.netSalary ?? 2713.74;
+                final lostAmount = item.getEffectiveAmount(netSalary);
+
                 setState(() {
                   targetList.removeWhere((i) => i.id == item.id);
+
+                  _logBudgetChange(
+                    categoryName: item.name,
+                    pillar: 'Suppression',
+                    actionType: 'delete',
+                    previousAmount: item.amount,
+                    previousIsPercentage: item.isPercentage,
+                    newAmount: null,
+                    effectiveDeltaEuro: -lostAmount,
+                    note: 'Suppression de la catégorie',
+                  );
                 });
                 _saveCategories();
                 Navigator.pop(ctx);
@@ -2975,12 +4034,19 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       InkWell(
                         onTap: () => _showArbitrageDialog(context, resteAVivre.abs(), netSalary, periodLabel: selectedPeriodLabel),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: AppColors.accentCyan,
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text('Arbitrer PEA', style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.auto_fix_high_rounded, color: Colors.black, size: 13),
+                              SizedBox(width: 4),
+                              Text('Arbitrer le Budget', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
                         ),
                       ),
                   ],
@@ -2988,7 +4054,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                 const SizedBox(height: 4),
                 Text(
                   isDeficit
-                      ? 'Avec les charges et échéances actives (${activeTempList.map((e) => "${e.label} ${e.monthlyAmount.toStringAsFixed(0)}€").join(", ")}), votre reste à vivre est en déficit de -${resteAVivre.abs().toStringAsFixed(2)} €. Nous vous conseillons de réallouer temporairement votre épargne PEA.'
+                      ? 'Avec les charges et échéances actives (${activeTempList.map((e) => "${e.label} ${e.monthlyAmount.toStringAsFixed(0)}€").join(", ")}), votre reste à vivre est en tension (-${resteAVivre.abs().toStringAsFixed(2)} €). Vous pouvez ajuster proactivement vos allocations d\'épargne ou vos postes quotidiens.'
                       : 'Vue simulée pour $selectedPeriodLabel : Vos flux et échéances actives (${activeTempList.isNotEmpty ? activeTempList.map((e) => e.label).join(", ") : "Socle fixe"}) sont pris en compte.',
                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
                 ),
@@ -3038,7 +4104,16 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const NotificationHeaderWidget(title: 'Règles de Répartition'),
+      appBar: NotificationHeaderWidget(
+        title: 'Règles de Répartition',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history_rounded, color: AppColors.accentCyan),
+            tooltip: 'Journal d\'Audit & Historique Temporel',
+            onPressed: () => _showAuditHistoryModal(context),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -3065,6 +4140,41 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         color: AppColors.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => _showAuditHistoryModal(context),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.history_rounded, color: AppColors.accentCyan, size: 14),
+                          const SizedBox(width: 4),
+                          const Text('Audit', style: TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.bold)),
+                          if (_auditLogs.isNotEmpty) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentCyan.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${_auditLogs.length}',
+                                style: const TextStyle(color: AppColors.accentCyan, fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
