@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:js' as js;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -121,6 +124,15 @@ class _ResponsiveMainLayoutState extends ConsumerState<ResponsiveMainLayout> {
   Future<void> _checkForTrueLayerCode() async {
     final code = Uri.base.queryParameters['code'];
     if (code != null && code.isNotEmpty) {
+      // Clear URL query parameters immediately to avoid re-triggering with an expired/used code on refresh
+      if (kIsWeb) {
+        try {
+          js.context.callMethod('eval', [
+            "window.history.replaceState({}, document.title, window.location.pathname);"
+          ]);
+        } catch (_) {}
+      }
+
       // Process code with TrueLayer
       final settingsNotifier = ref.read(settingsProvider.notifier);
       final errorMessage = await settingsNotifier.processTrueLayerCode(code, ref: ref);

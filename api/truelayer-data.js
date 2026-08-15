@@ -60,11 +60,14 @@ export default async function handler(req, res) {
 
       for (const rawAcc of rawAccounts) {
         const accId = rawAcc.account_id;
-        const displayName = rawAcc.display_name || 'Compte Courant';
+        const displayName = rawAcc.display_name || 'Compte BoursoBank';
         const currency = rawAcc.currency || 'EUR';
         const rawType = (rawAcc.account_type || '').toUpperCase();
         const provDisplayName = rawAcc.provider?.display_name || 'BoursoBank';
         providerName = provDisplayName;
+
+        const iban = rawAcc.account_number?.iban || '';
+        const ibanMasked = iban ? `••••${iban.slice(-4)}` : (rawAcc.account_number?.number ? `••••${rawAcc.account_number.number.slice(-4)}` : '');
 
         let currentBal = 0;
         let availableBal = 0;
@@ -77,8 +80,8 @@ export default async function handler(req, res) {
             const balData = await balResponse.json();
             const balResult = balData.results?.[0];
             if (balResult) {
-              currentBal = Number(balResult.current ?? 0);
-              availableBal = Number(balResult.available ?? currentBal);
+              currentBal = (balResult.current !== undefined && balResult.current !== null) ? Number(balResult.current) : 0;
+              availableBal = (balResult.available !== undefined && balResult.available !== null) ? Number(balResult.available) : currentBal;
               updateTimestamp = balResult.update_timestamp || updateTimestamp;
             }
           }
@@ -86,34 +89,44 @@ export default async function handler(req, res) {
           console.warn(`[TrueLayer Proxy] Failed to fetch balance for account ${accId}:`, balErr);
         }
 
+        // Smart categorization based on BoursoBank IBAN / naming patterns
+        let category = 'checking';
+        const lowerName = displayName.toLowerCase();
+        if (ibanMasked.includes('4455') || lowerName.includes('tampon') || lowerName.includes('autre')) {
+          category = 'tampon';
+        } else if (ibanMasked.includes('4424') || lowerName.includes('tontine') || lowerName.includes('ou o')) {
+          category = 'tontine';
+        } else if (lowerName.includes('livret') || lowerName.includes('epargne') || lowerName.includes('saving')) {
+          category = 'savings';
+        } else if (lowerName.includes('pea') || lowerName.includes('titre') || lowerName.includes('invest') || lowerName.includes('bourse')) {
+          category = 'investment';
+        } else if (ibanMasked.includes('0429') || lowerName.includes('richard') || lowerName.includes('courant') || lowerName.includes('bancaire')) {
+          category = 'checking';
+        } else if (rawType === 'TRANSACTION' || rawType === 'CURRENT') {
+          category = 'checking';
+        } else {
+          category = 'other';
+        }
+
         const accountObj = {
           account_id: accId,
           display_name: displayName,
           account_type: rawAcc.account_type || 'TRANSACTION',
+          category: category,
           currency: currency,
           current_balance: currentBal,
           available_balance: availableBal,
-          balance: availableBal !== 0 ? availableBal : currentBal,
+          balance: currentBal,
+          iban_masked: ibanMasked,
           update_timestamp: updateTimestamp,
           provider: rawAcc.provider || { display_name: provDisplayName },
           account_number: rawAcc.account_number,
         };
 
         accounts.push(accountObj);
-
-        // Select primary account
-        if (
-          !primaryAccountId ||
-          rawType === 'TRANSACTION' ||
-          rawType === 'CURRENT' ||
-          rawType.includes('CHECKING')
-        ) {
-          primaryAccountId = accId;
-          primaryCheckingBalance = availableBal !== 0 ? availableBal : currentBal;
-        }
       }
 
-      // Also fetch cards if accounts is empty or cards exist
+      // Also fetch cards if available
       try {
         const cardsResponse = await fetch(`${apiBase}/cards`, { headers: authHeaders });
         if (cardsResponse.ok) {
@@ -131,8 +144,8 @@ export default async function handler(req, res) {
                 const cardBalData = await cardBalRes.json();
                 const balResult = cardBalData.results?.[0];
                 if (balResult) {
-                  currentBal = Number(balResult.current ?? 0);
-                  availableBal = Number(balResult.available ?? currentBal);
+                  currentBal = (balResult.current !== undefined && balResult.current !== null) ? Number(balResult.current) : 0;
+                  availableBal = (balResult.available !== undefined && balResult.available !== null) ? Number(balResult.available) : currentBal;
                 }
               }
             } catch {}
@@ -142,22 +155,51 @@ export default async function handler(req, res) {
               account_id: cardId,
               display_name: displayName,
               account_type: 'TRANSACTION',
+              category: 'card',
               currency: rawCard.currency || 'EUR',
               current_balance: currentBal,
               available_balance: availableBal,
-              balance: availableBal !== 0 ? availableBal : currentBal,
+              balance: currentBal,
+              iban_masked: '',
               update_timestamp: new Date().toISOString(),
               provider: rawCard.provider || { display_name: 'BoursoBank' },
             };
             accounts.push(cardObj);
-
-            if (!primaryAccountId) {
-              primaryAccountId = cardId;
-              primaryCheckingBalance = cardObj.balance;
-            }
           }
         }
       } catch {}
+
+      // Smart selection of primary checking account
+      // 1. Explicit main checking account (IBAN 0429 or named Richard / Courant / Bancaire)
+      let primaryAccount = accounts.find((a) =>
+        a.category === 'checking' &&
+        (a.iban_masked.includes('0429') ||
+         a.display_name.toLowerCase().includes('richard') ||
+         a.display_name.toLowerCase().includes('courant') ||
+         a.display_name.toLowerCase().includes('bancaire'))
+      );
+
+      // 2. Any checking account (excluding tontine, tampon, savings)
+      if (!primaryAccount) {
+        primaryAccount = accounts.find((a) => a.category === 'checking');
+      }
+
+      // 3. Any account that is not tontine, tampon, or savings
+      if (!primaryAccount) {
+        primaryAccount = accounts.find(
+          (a) => a.category !== 'tontine' && a.category !== 'tampon' && a.category !== 'savings' && a.category !== 'investment'
+        );
+      }
+
+      // 4. First account in list
+      if (!primaryAccount && accounts.length > 0) {
+        primaryAccount = accounts[0];
+      }
+
+      if (primaryAccount) {
+        primaryAccountId = primaryAccount.account_id;
+        primaryCheckingBalance = primaryAccount.current_balance;
+      }
 
       // Fetch transactions for primary account if available
       let transactions = [];
