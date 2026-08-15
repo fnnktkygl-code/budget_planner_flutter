@@ -15,7 +15,14 @@ class SavingsScreen extends ConsumerStatefulWidget {
 
 class _SavingsScreenState extends ConsumerState<SavingsScreen> {
   final _currencyFormat = NumberFormat.currency(locale: 'fr_FR', symbol: '€');
-  final _dateFormat = DateFormat('dd MMM yyyy', 'fr_FR');
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
+      'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'
+    ];
+    return '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]} ${date.year}';
+  }
 
   IconData _getIconData(String name) {
     switch (name) {
@@ -503,6 +510,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: const [
                         Icon(Icons.schedule_rounded, color: AppColors.textMuted, size: 12),
                         SizedBox(width: 6),
@@ -600,6 +608,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                                 ),
                                 onPressed: totalPending > 0 ? () => _showVentilateModal(pendingEvents, bonusState.destinations) : null,
                                 child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: const [
                                     Text('Ventiler', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                     SizedBox(width: 6),
@@ -805,7 +814,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
-                                    Text(_dateFormat.format(ev.date), style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                                    Text(_formatDate(ev.date), style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                                     if (!isPending && breakdownText.isNotEmpty) ...[
                                       const Text(' • ', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
                                       Expanded(
@@ -870,6 +879,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: const [
                             Icon(Icons.business_center_rounded, color: AppColors.accentGold, size: 20),
                             SizedBox(width: 12),
@@ -899,6 +909,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text('Cumul Intéressement & Participation PEE :', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                             const SizedBox(width: 12),

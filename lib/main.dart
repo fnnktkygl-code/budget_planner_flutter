@@ -123,7 +123,7 @@ class _ResponsiveMainLayoutState extends ConsumerState<ResponsiveMainLayout> {
     if (code != null && code.isNotEmpty) {
       // Process code with TrueLayer
       final settingsNotifier = ref.read(settingsProvider.notifier);
-      final errorMessage = await settingsNotifier.processTrueLayerCode(code);
+      final errorMessage = await settingsNotifier.processTrueLayerCode(code, ref: ref);
       
       if (mounted) {
         if (errorMessage == null) {

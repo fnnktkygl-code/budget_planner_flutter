@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/colors.dart';
 import '../models/bank_config.dart';
 import '../models/salary_record.dart';
 import '../services/allocation_service.dart';
@@ -8,18 +9,17 @@ class AllocationRecommendationScreen extends StatelessWidget {
   final double currentBalance;
 
   const AllocationRecommendationScreen({
-    Key? key,
+    super.key,
     required this.salaryRecord,
     required this.currentBalance,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Mock Config for UI presentation (In reality, this would come from a provider/local storage)
     const config = BankConfig(
-      mainAccountId: 'mock_main_id',
-      fixedMonthlyExpenses: 1400.0, // example
-      safetyMarginPercent: 0.15, // 15% safety
+      mainAccountId: 'main_checking',
+      fixedMonthlyExpenses: 1400.0,
+      safetyMarginPercent: 0.15,
     );
 
     final recommendation = AllocationService.computeAllocation(
@@ -29,9 +29,11 @@ class AllocationRecommendationScreen extends StatelessWidget {
     );
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Recommandation Bancaire'),
-        backgroundColor: Colors.indigo,
+        title: const Text('Recommandation Bancaire Proactive'),
+        backgroundColor: AppColors.surface,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -48,57 +50,60 @@ class AllocationRecommendationScreen extends StatelessWidget {
   }
 
   Widget _buildBalanceCard(AllocationRecommendation reco, BankConfig config) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            const Text(
-              'Solde Projeté (Après virement salaire)',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Solde Projeté (Après virement salaire)',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${reco.projectedBalance.toStringAsFixed(2)} €',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: reco.isWarningLowBalance ? AppColors.accentRose : AppColors.accentEmerald,
             ),
-            const SizedBox(height: 8),
-            Text(
-              '${reco.projectedBalance.toStringAsFixed(2)} €',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: reco.isWarningLowBalance ? Colors.red : Colors.green,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _infoStat('Solde Réel Actuel', '${currentBalance.toStringAsFixed(2)} €'),
+              _infoStat('Tampon Min', '${config.minBufferAmount.toStringAsFixed(0)} €'),
+              _infoStat('Tampon Max', '${config.maxBufferAmount.toStringAsFixed(0)} €'),
+            ],
+          ),
+          if (reco.isWarningLowBalance)
+            Container(
+              margin: const EdgeInsets.only(top: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.accentRose.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.accentRose.withValues(alpha: 0.4)),
               ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _infoStat('Tampon Min', '${config.minBufferAmount.toStringAsFixed(0)} €'),
-                _infoStat('Tampon Max', '${config.maxBufferAmount.toStringAsFixed(0)} €'),
-              ],
-            ),
-            if (reco.isWarningLowBalance)
-              Container(
-                margin: const EdgeInsets.only(top: 16),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.warning, color: Colors.red),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Attention : Votre solde risque d\'être inférieur à votre seuil de sécurité après les charges.',
-                        style: TextStyle(color: Colors.red),
-                      ),
-                    )
-                  ],
-                ),
-              )
-          ],
-        ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: AppColors.accentRose),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Attention : Votre solde risque d\'être inférieur à votre seuil de sécurité après les charges.',
+                      style: TextStyle(color: AppColors.accentRose, fontSize: 12),
+                    ),
+                  )
+                ],
+              ),
+            )
+        ],
       ),
     );
   }
@@ -106,8 +111,9 @@ class AllocationRecommendationScreen extends StatelessWidget {
   Widget _infoStat(String label, String value) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
       ],
     );
   }
@@ -118,33 +124,33 @@ class AllocationRecommendationScreen extends StatelessWidget {
       children: [
         const Text(
           'Virements Recommandés',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         _buildActionTile(
           icon: Icons.trending_up,
-          color: Colors.purple,
+          color: AppColors.accentPurple,
           title: 'CTO (Actions US / Convictions)',
           subtitle: 'Allocation des primes & bonus',
           amount: reco.ctoAllocation,
         ),
         _buildActionTile(
           icon: Icons.flight_takeoff,
-          color: Colors.orange,
+          color: AppColors.accentGold,
           title: 'Revolut - Vacances',
           subtitle: 'Budget mensuel fixe',
           amount: reco.revolutHolidays,
         ),
         _buildActionTile(
           icon: Icons.shopping_cart,
-          color: Colors.blue,
+          color: AppColors.accentCyan,
           title: 'Revolut - Dépenses Courantes',
           subtitle: 'Budget mensuel fixe',
           amount: reco.revolutDaily,
         ),
         _buildActionTile(
           icon: Icons.account_balance,
-          color: Colors.green,
+          color: AppColors.accentEmerald,
           title: 'PEA',
           subtitle: 'Épargne passive (Lazy Money)',
           amount: reco.peaAllocation,
@@ -169,18 +175,23 @@ class AllocationRecommendationScreen extends StatelessWidget {
     required double amount,
   }) {
     if (amount <= 0) return const SizedBox.shrink();
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.2),
+          backgroundColor: color.withValues(alpha: 0.2),
           child: Icon(icon, color: color),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle),
+        title: Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+        subtitle: Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
         trailing: Text(
           '${amount.toStringAsFixed(2)} €',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold),
         ),
       ),
     );

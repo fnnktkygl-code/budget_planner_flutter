@@ -17,6 +17,8 @@ class SalaryState {
   final List<TemporaryExpense> temporaryExpenses;
   final double accountBalance;
   final double bufferMultiplier;
+  final DateTime? lastBankSync;
+  final String? syncBankName;
 
   SalaryState({
     required this.records,
@@ -24,6 +26,8 @@ class SalaryState {
     this.temporaryExpenses = const [],
     this.accountBalance = 1740.0,
     this.bufferMultiplier = 1.0,
+    this.lastBankSync,
+    this.syncBankName,
   });
 
   SalaryRecord? get activeBaseline => getActiveBaselineSalary(records);
@@ -64,6 +68,8 @@ class SalaryState {
     List<TemporaryExpense>? temporaryExpenses,
     double? accountBalance,
     double? bufferMultiplier,
+    DateTime? lastBankSync,
+    String? syncBankName,
   }) {
     return SalaryState(
       records: records ?? this.records,
@@ -71,6 +77,8 @@ class SalaryState {
       temporaryExpenses: temporaryExpenses ?? this.temporaryExpenses,
       accountBalance: accountBalance ?? this.accountBalance,
       bufferMultiplier: bufferMultiplier ?? this.bufferMultiplier,
+      lastBankSync: lastBankSync ?? this.lastBankSync,
+      syncBankName: syncBankName ?? this.syncBankName,
     );
   }
 }
@@ -99,6 +107,9 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     final rawTempJson = prefs.getString(_key('aura_temporary_expenses_v1'));
     final savedBalance = prefs.getDouble(_key('aura_account_balance_v1')) ?? 1740.0;
     final savedBufferMultiplier = prefs.getDouble(_key('aura_buffer_multiplier_v1')) ?? 1.0;
+    final savedSyncBank = prefs.getString(_key('aura_sync_bank_name_v1'));
+    final rawSyncTime = prefs.getString(_key('aura_last_bank_sync_v1'));
+    final savedSyncTime = rawSyncTime != null ? DateTime.tryParse(rawSyncTime) : null;
 
     List<SalaryRecord> list = [];
     List<TaxAdjustment> taxList = [];
@@ -154,6 +165,8 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       temporaryExpenses: tempList,
       accountBalance: savedBalance,
       bufferMultiplier: savedBufferMultiplier,
+      lastBankSync: savedSyncTime,
+      syncBankName: savedSyncBank,
     );
 
     // Save to ensure v3 and IndexedDB are populated
@@ -223,6 +236,12 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
 
       await prefs.setDouble(_key('aura_account_balance_v1'), state.accountBalance);
       await prefs.setDouble(_key('aura_buffer_multiplier_v1'), state.bufferMultiplier);
+      if (state.syncBankName != null) {
+        await prefs.setString(_key('aura_sync_bank_name_v1'), state.syncBankName!);
+      }
+      if (state.lastBankSync != null) {
+        await prefs.setString(_key('aura_last_bank_sync_v1'), state.lastBankSync!.toIso8601String());
+      }
 
       // Heavy IndexedDB binary save: Debounced in background so UI thread NEVER freezes!
       if (kIsWeb && state.records.isNotEmpty && saveHeavyBinaries) {
@@ -334,8 +353,12 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
     _save();
   }
 
-  void updateAccountBalance(double balance) {
-    state = state.copyWith(accountBalance: balance);
+  void updateAccountBalance(double balance, {String? bankName, DateTime? syncTime}) {
+    state = state.copyWith(
+      accountBalance: balance,
+      syncBankName: bankName ?? state.syncBankName,
+      lastBankSync: syncTime ?? DateTime.now(),
+    );
     _save();
   }
 

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../constants/colors.dart';
 import '../core/providers/settings_provider.dart';
+import '../core/providers/salary_provider.dart';
 import '../services/truelayer_service.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class BankingModalContent extends ConsumerStatefulWidget {
   const BankingModalContent({super.key});
@@ -16,51 +17,40 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  final List<Map<String, String>> _banks = [
-    {'name': 'BoursoBank', 'id': 'stet-boursorama', 'icon': '🏦'},
-    {'name': 'BNP Paribas', 'id': 'stet-bnp', 'icon': '🏛️'},
-    {'name': 'Crédit Agricole', 'id': 'stet-ca', 'icon': '🌾'},
-    {'name': 'Société Générale', 'id': 'stet-sg', 'icon': '🔴'},
-    {'name': 'Revolut', 'id': 'revolut', 'icon': '💳'},
-    {'name': 'Mock Bank (Sandbox Test)', 'id': 'mock-bank', 'icon': '🧪'},
-  ];
-
-  Future<void> _connectBank(String bankName, String bankId) async {
+  Future<void> _connectBoursoBank() async {
     final settings = ref.read(settingsProvider);
     final redirectUri = Uri.base.origin;
 
-    if (settings.truelayerUseSandbox && bankId != 'mock-bank') {
-      setState(() {
-        _errorMessage = '$bankName est une vraie banque (Production Live). En mode Bac à Sable (Sandbox), veuillez utiliser "Mock Bank (Sandbox Test)" pour effectuer la démonstration sans identifiants réels.';
-      });
-      return;
-    }
-
     try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      // Force Live mode with BoursoBank provider ID
       final authUrl = TrueLayerService.getAuthorizationUrl(
-        clientId: settings.truelayerClientId,
+        clientId: settings.truelayerClientId.isNotEmpty ? settings.truelayerClientId : 'aurabudget-076e60',
         redirectUri: redirectUri,
-        isSandbox: settings.truelayerUseSandbox,
-        providerId: bankId,
+        isSandbox: false,
+        providerId: 'stet-boursorama',
       );
 
       final uri = Uri.parse(authUrl);
       
-      // Save the selected bank name and ID in SharedPreferences or just pass it as state in the TrueLayer URL if possible.
-      // TrueLayer doesn't let us pass custom state easily without validating it, but we'll assume the connected bank when they return.
-      
       if (await canLaunchUrl(uri)) {
         await launchUrl(
           uri,
-          webOnlyWindowName: '_self', // Open in the same window so redirect flow works naturally
+          webOnlyWindowName: '_self', // Direct redirect in same tab for seamless OAuth flow
         );
       } else {
         setState(() {
-          _errorMessage = 'Impossible d\'ouvrir le lien TrueLayer.';
+          _isLoading = false;
+          _errorMessage = 'Impossible d\'ouvrir la page d\'authentification BoursoBank.';
         });
       }
     } catch (e) {
       setState(() {
+        _isLoading = false;
         _errorMessage = 'Erreur lors de la redirection : $e';
       });
     }
@@ -69,6 +59,7 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
+    final salary = ref.watch(salaryProvider);
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -83,11 +74,30 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  const Text('Connexion Bancaire Secure', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text('TrueLayer Open Banking — ${settings.truelayerUseSandbox ? 'Mode Sandbox' : 'Mode Live'}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentCyan.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.account_balance_rounded, color: AppColors.accentCyan, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'Connexion BoursoBank',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Open Banking Live — TrueLayer Secure',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
                 ],
               ),
               IconButton(
@@ -96,7 +106,7 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
           if (_errorMessage != null) ...[
             Container(
@@ -106,35 +116,179 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.danger),
               ),
-              child: Text(_errorMessage!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(_errorMessage!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
           ],
 
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: CircularProgressIndicator(color: AppColors.accentCyan),
+          if (settings.bankConnected) ...[
+            // Connected Card
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
               ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              itemCount: _banks.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, idx) {
-                final bank = _banks[idx];
-                return ListTile(
-                  tileColor: AppColors.cardBackground,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  leading: Text(bank['icon']!, style: const TextStyle(fontSize: 24)),
-                  title: Text(bank['name']!, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
-                  onTap: () => _connectBank(bank['name']!, bank['id']!),
-                );
-              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentEmerald.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.check_circle_rounded, color: AppColors.accentEmerald, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Compte BoursoBank Connecté',
+                              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            Text(
+                              'Solde synchronisé : ${salary.accountBalance.toStringAsFixed(2)} €',
+                              style: const TextStyle(color: AppColors.accentEmerald, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentEmerald,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(Icons.sync_rounded, size: 16),
+                          label: const Text('Actualiser le solde', style: TextStyle(fontWeight: FontWeight.bold)),
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await ref.read(settingsProvider.notifier).syncTrueLayerData(ref);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.accentCyan,
+                          side: BorderSide(color: AppColors.accentCyan.withValues(alpha: 0.5)),
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: _connectBoursoBank,
+                        child: const Text('Re-connecter'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
+          ] else ...[
+            // Direct Connect BoursoBank Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text('🏦', style: TextStyle(fontSize: 28)),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'BoursoBank (Compte Courant)',
+                            style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'Synchronisation sécurisée en direct',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'En connectant votre compte BoursoBank :',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildFeatureBullet('Récupération automatique de votre solde réel de compte courant'),
+                  _buildFeatureBullet('Calcul dynamique du reste à vivre et de votre seuil de sécurité'),
+                  _buildFeatureBullet('Sécurité certifiée Open Banking (ACPR / Banque de France)'),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accentCyan,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      icon: _isLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.bolt_rounded, size: 20),
+                      label: Text(
+                        _isLoading ? 'Redirection en cours...' : 'Se connecter à BoursoBank',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: _isLoading ? null : _connectBoursoBank,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureBullet(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.check_rounded, color: AppColors.accentEmerald, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+          ),
         ],
       ),
     );

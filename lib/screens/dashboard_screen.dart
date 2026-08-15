@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
+import '../core/providers/settings_provider.dart';
 import '../core/providers/auth_provider.dart';
 import '../models/salary_record.dart';
 import '../widgets/donut_chart.dart';
 import '../widgets/notification_header.dart';
+import '../widgets/banking_modal.dart';
 import 'allocation_recommendation_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -76,6 +79,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
     ];
 
+    final settingsState = ref.watch(settingsProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const NotificationHeaderWidget(title: 'Tableau de bord'),
@@ -140,6 +145,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+
+            // Live TrueLayer Open Banking Balance Card
+            _buildLiveBankBalanceCard(salaryState, settingsState),
             const SizedBox(height: 20),
 
             // Title Header
@@ -179,7 +188,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: _buildAllocationCard(segments, netSalary, activeBaseline)),
+                      Expanded(child: _buildAllocationCard(segments, netSalary, activeBaseline, salaryState.accountBalance)),
                       const SizedBox(width: 16),
                       Expanded(child: _buildNetIncomeCard(activeBaseline, grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable)),
                     ],
@@ -187,7 +196,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 } else {
                   return Column(
                     children: [
-                      _buildAllocationCard(segments, netSalary, activeBaseline),
+                      _buildAllocationCard(segments, netSalary, activeBaseline, salaryState.accountBalance),
                       const SizedBox(height: 16),
                       _buildNetIncomeCard(activeBaseline, grossSalary, netSalary, socialContrib, mealTickets, telework, nonTaxable),
                     ],
@@ -201,7 +210,138 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildAllocationCard(List<AllocationSegment> segments, double netSalary, SalaryRecord? activeBaseline) {
+  Widget _buildLiveBankBalanceCard(SalaryState salaryState, SettingsState settingsState) {
+    final isConnected = settingsState.bankConnected || settingsState.truelayerAccessToken.isNotEmpty;
+    final bankName = settingsState.connectedBankName.isNotEmpty
+        ? settingsState.connectedBankName
+        : (salaryState.syncBankName ?? 'BoursoBank');
+    final lastSyncStr = salaryState.lastBankSync != null
+        ? DateFormat('dd/MM à HH:mm').format(salaryState.lastBankSync!)
+        : (settingsState.lastSyncTimestamp != null
+            ? DateFormat('dd/MM à HH:mm').format(settingsState.lastSyncTimestamp!)
+            : 'En direct');
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isConnected
+              ? AppColors.accentEmerald.withValues(alpha: 0.35)
+              : AppColors.accentCyan.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: (isConnected ? AppColors.accentEmerald : AppColors.accentCyan).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              Icons.account_balance_rounded,
+              color: isConnected ? AppColors.accentEmerald : AppColors.accentCyan,
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Solde Compte Courant',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: (isConnected ? AppColors.accentEmerald : AppColors.accentGold).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isConnected ? 'TrueLayer Live' : 'Non Connecté',
+                        style: TextStyle(
+                          color: isConnected ? AppColors.accentEmerald : AppColors.accentGold,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${salaryState.accountBalance.toStringAsFixed(2)} €',
+                  style: TextStyle(
+                    color: salaryState.accountBalance >= 0 ? AppColors.textPrimary : AppColors.danger,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$bankName • Synchro : $lastSyncStr',
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          if (settingsState.isSyncing)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.accentCyan),
+              ),
+            )
+          else ...[
+            IconButton(
+              icon: const Icon(Icons.sync_rounded, color: AppColors.accentCyan, size: 22),
+              tooltip: 'Rafraîchir le solde en direct',
+              onPressed: () async {
+                final success = await ref.read(settingsProvider.notifier).syncTrueLayerData(ref);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        success
+                            ? 'Solde mis à jour avec succès depuis votre banque !'
+                            : 'Synchronisation bancaire effectuée.',
+                      ),
+                      backgroundColor: success ? AppColors.accentEmerald : AppColors.accentCyan,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.tune_rounded, color: AppColors.textSecondary, size: 20),
+              tooltip: 'Gérer les banques',
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => const BankingModalContent(),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllocationCard(List<AllocationSegment> segments, double netSalary, SalaryRecord? activeBaseline, double currentBalance) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -265,7 +405,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     MaterialPageRoute(
                       builder: (context) => AllocationRecommendationScreen(
                         salaryRecord: activeBaseline,
-                        currentBalance: 1250.0, // Simulation du solde TrueLayer
+                        currentBalance: currentBalance, // Solde dynamique TrueLayer
                       ),
                     ),
                   );

@@ -8,16 +8,15 @@ class TrueLayerService {
     required String clientId,
     required String redirectUri,
     required bool isSandbox,
-    String? providerId,
+    String providerId = 'stet-boursorama',
   }) {
-    final baseUrl = isSandbox ? 'https://auth.truelayer-sandbox.com' : 'https://auth.truelayer.com';
+    final effectiveClientId = clientId.isEmpty ? 'aurabudget-076e60' : clientId;
+    final effectiveIsSandbox = isSandbox || effectiveClientId.startsWith('sandbox-');
+    final baseUrl = effectiveIsSandbox ? 'https://auth.truelayer-sandbox.com' : 'https://auth.truelayer.com';
     final scope = Uri.encodeComponent('info accounts balance transactions offline_access');
     final encodedRedirect = Uri.encodeComponent(redirectUri);
-    var url = '$baseUrl/?response_type=code&client_id=$clientId&redirect_uri=$encodedRedirect&scope=$scope';
-    if (providerId != null && providerId.isNotEmpty) {
-      url += '&provider_id=$providerId';
-    }
-    if (isSandbox) {
+    var url = '$baseUrl/?response_type=code&client_id=$effectiveClientId&redirect_uri=$encodedRedirect&scope=$scope&country_code=FR&providers=$providerId&provider_id=$providerId';
+    if (effectiveIsSandbox) {
       url += '&enable_mock=true';
     }
     debugPrint('[TrueLayer Service] Auth URL: $url');
@@ -31,15 +30,19 @@ class TrueLayerService {
     required String redirectUri,
     required bool isSandbox,
   }) async {
-    // Fallback to hardcoded secret if empty (due to secure storage / asset loading issues on web)
+    // Fallback to Live secret for Aura Budget if empty (due to secure storage / asset loading issues on web)
     final effectiveClientSecret = clientSecret.isEmpty 
-        ? '0bb238e2-27de-4cfa-a99f-eaeb0af46bc8'
+        ? 'tlcs_live_93v3rjwgbbn4_UB8V1f3DirjKcNcGd3uQ0sYboJlBdbLpc1Bstac3rUN8'
         : clientSecret;
+
+    final effectiveClientId = clientId.isEmpty
+        ? 'aurabudget-076e60'
+        : clientId;
 
     // Call our own Vercel API route to bypass CORS
     final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-token');
 
-    debugPrint('[TrueLayer API] Exchanging code via proxy: $proxyUrl');
+    debugPrint('[TrueLayer API] Exchanging code via proxy: $proxyUrl (ClientId: $effectiveClientId)');
     try {
       final response = await http.post(
         proxyUrl,
@@ -48,11 +51,11 @@ class TrueLayerService {
         },
         body: jsonEncode({
           'grant_type': 'authorization_code',
-          'client_id': clientId,
+          'client_id': effectiveClientId,
           'client_secret': effectiveClientSecret,
           'redirect_uri': redirectUri,
           'code': code,
-          'is_sandbox': (isSandbox || clientId.contains('-f0ea54') || clientId.contains('sandbox')).toString(),
+          'is_sandbox': (isSandbox || effectiveClientId.contains('sandbox')).toString(),
         }),
       );
 

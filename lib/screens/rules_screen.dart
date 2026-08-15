@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
+import '../core/providers/settings_provider.dart';
 import '../core/providers/auth_provider.dart';
 import '../models/temporary_expense.dart';
 import '../widgets/notification_header.dart';
@@ -1105,9 +1106,25 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Solde bancaire actuel',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Solde bancaire actuel',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentEmerald.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            salary.syncBankName != null ? '${salary.syncBankName} • TrueLayer' : 'TrueLayer Live',
+                            style: const TextStyle(color: AppColors.accentEmerald, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Row(
@@ -1184,15 +1201,45 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: ElevatedButton(
+                          child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.surface,
                               foregroundColor: AppColors.textSecondary,
                               elevation: 0,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: AppColors.borderSubtle)),
                             ),
+                            icon: const Icon(Icons.edit_outlined, size: 14),
                             onPressed: () => _showEditAccountBalanceDialog(context, salary.accountBalance),
-                            child: const Text('Corriger le solde réel'),
+                            label: const Text('Corriger', style: TextStyle(fontSize: 12)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentCyan.withValues(alpha: 0.15),
+                              foregroundColor: AppColors.accentCyan,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: AppColors.accentCyan.withValues(alpha: 0.4))),
+                            ),
+                            icon: const Icon(Icons.sync_rounded, size: 14),
+                            onPressed: () async {
+                              final success = await ref.read(settingsProvider.notifier).syncTrueLayerData(ref);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      success
+                                          ? 'Solde bancaire synchronisé depuis TrueLayer !'
+                                          : 'Synchronisation bancaire effectuée.',
+                                    ),
+                                    backgroundColor: success ? AppColors.accentEmerald : AppColors.accentCyan,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                            label: const Text('Synchro Directe', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],

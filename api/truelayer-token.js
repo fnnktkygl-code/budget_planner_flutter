@@ -27,15 +27,18 @@ export default async function handler(req, res) {
     is_sandbox,
   } = req.body;
 
+  const effectiveClientId = client_id || process.env.TRUELAYER_CLIENT_ID || 'aurabudget-076e60';
+  const effectiveClientSecret = client_secret || process.env.TRUELAYER_CLIENT_SECRET || 'tlcs_live_93v3rjwgbbn4_UB8V1f3DirjKcNcGd3uQ0sYboJlBdbLpc1Bstac3rUN8';
+
   console.log('Received TrueLayer token request:', {
     grant_type,
-    client_id: client_id ? 'PROVIDED' : 'MISSING',
-    client_secret: client_secret ? 'PROVIDED' : 'MISSING',
+    client_id: effectiveClientId,
+    client_secret: effectiveClientSecret ? 'PROVIDED' : 'MISSING',
     redirect_uri,
     is_sandbox,
   });
 
-  const isSandbox = is_sandbox === 'true' || is_sandbox === true || (client_id && (client_id.includes('-f0ea54') || client_id.includes('sandbox')));
+  const isSandbox = is_sandbox === 'true' || is_sandbox === true || (effectiveClientId && effectiveClientId.includes('sandbox'));
 
   const baseUrl = isSandbox
     ? 'https://auth.truelayer-sandbox.com'
@@ -50,9 +53,9 @@ export default async function handler(req, res) {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        grant_type,
-        client_id,
-        client_secret,
+        grant_type: grant_type || 'authorization_code',
+        client_id: effectiveClientId,
+        client_secret: effectiveClientSecret,
         redirect_uri,
         code,
       }).toString(),

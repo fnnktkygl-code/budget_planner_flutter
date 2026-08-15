@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../constants/colors.dart';
 import '../core/providers/auth_provider.dart';
+import '../core/providers/settings_provider.dart';
+import '../core/providers/salary_provider.dart';
 import '../widgets/banking_modal.dart';
 import '../widgets/notification_header.dart';
 
@@ -11,6 +14,14 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
+    final settings = ref.watch(settingsProvider);
+    final salary = ref.watch(salaryProvider);
+
+    final lastSyncStr = salary.lastBankSync != null
+        ? DateFormat('dd/MM/yyyy HH:mm').format(salary.lastBankSync!)
+        : (settings.lastSyncTimestamp != null
+            ? DateFormat('dd/MM/yyyy HH:mm').format(settings.lastSyncTimestamp!)
+            : 'Aucune');
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -111,30 +122,94 @@ class SettingsScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Synchronisation TrueLayer', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
-                  const SizedBox(height: 4),
-                  const Text('Client ID : aurabudgetpro-f0ea54', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 44,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accentCyan,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Synchronisation TrueLayer', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: (settings.truelayerUseSandbox ? AppColors.accentGold : AppColors.accentEmerald).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: (settings.truelayerUseSandbox ? AppColors.accentGold : AppColors.accentEmerald).withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          settings.truelayerUseSandbox ? 'Mode Sandbox' : 'Mode Live (Production)',
+                          style: TextStyle(
+                            color: settings.truelayerUseSandbox ? AppColors.accentGold : AppColors.accentEmerald,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                      icon: const Icon(Icons.account_balance_rounded, size: 18),
-                      label: const Text('Gérer mes banques synchronisées'),
-                      onPressed: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (_) => const BankingModalContent(),
-                        );
-                      },
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Client ID : ${settings.truelayerClientId}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontFamily: 'monospace')),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Statut : ${settings.bankConnected ? "Connecté à ${settings.connectedBankName.isNotEmpty ? settings.connectedBankName : (salary.syncBankName ?? 'BoursoBank')}" : "Non connecté"}',
+                    style: TextStyle(
+                      color: settings.bankConnected ? AppColors.accentEmerald : AppColors.textMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Dernière synchronisation : $lastSyncStr', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 44,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentCyan,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.account_balance_rounded, size: 18),
+                            label: const Text('Gérer mes banques'),
+                            onPressed: () {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (_) => const BankingModalContent(),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      if (settings.bankConnected) ...[
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          height: 44,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.danger,
+                              side: const BorderSide(color: AppColors.danger),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.link_off_rounded, size: 18),
+                            label: const Text('Déconnecter'),
+                            onPressed: () async {
+                              await ref.read(settingsProvider.notifier).disconnectBank();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Banque déconnectée.'),
+                                    backgroundColor: AppColors.surface,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),

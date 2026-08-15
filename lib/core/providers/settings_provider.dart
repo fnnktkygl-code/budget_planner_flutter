@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/secure_storage_service.dart';
 import '../../services/truelayer_service.dart';
 import 'auth_provider.dart';
+import 'salary_provider.dart';
+import 'budget_provider.dart';
 
 class SettingsState {
   final String languageCode;
@@ -13,6 +16,9 @@ class SettingsState {
   final String truelayerClientSecret;
   final String truelayerAccessToken;
   final bool truelayerUseSandbox;
+  final String? primaryAccountId;
+  final DateTime? lastSyncTimestamp;
+  final bool isSyncing;
 
   SettingsState({
     required this.languageCode,
@@ -22,6 +28,9 @@ class SettingsState {
     required this.truelayerClientSecret,
     required this.truelayerAccessToken,
     required this.truelayerUseSandbox,
+    this.primaryAccountId,
+    this.lastSyncTimestamp,
+    this.isSyncing = false,
   });
 
   SettingsState copyWith({
@@ -32,6 +41,9 @@ class SettingsState {
     String? truelayerClientSecret,
     String? truelayerAccessToken,
     bool? truelayerUseSandbox,
+    String? primaryAccountId,
+    DateTime? lastSyncTimestamp,
+    bool? isSyncing,
   }) {
     return SettingsState(
       languageCode: languageCode ?? this.languageCode,
@@ -41,6 +53,9 @@ class SettingsState {
       truelayerClientSecret: truelayerClientSecret ?? this.truelayerClientSecret,
       truelayerAccessToken: truelayerAccessToken ?? this.truelayerAccessToken,
       truelayerUseSandbox: truelayerUseSandbox ?? this.truelayerUseSandbox,
+      primaryAccountId: primaryAccountId ?? this.primaryAccountId,
+      lastSyncTimestamp: lastSyncTimestamp ?? this.lastSyncTimestamp,
+      isSyncing: isSyncing ?? this.isSyncing,
     );
   }
 }
@@ -53,8 +68,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           languageCode: 'fr',
           bankConnected: false,
           connectedBankName: '',
-          truelayerClientId: 'aurabudgetpro-f0ea54',
-          truelayerClientSecret: '',
+          truelayerClientId: 'aurabudget-076e60',
+          truelayerClientSecret: 'tlcs_live_93v3rjwgbbn4_UB8V1f3DirjKcNcGd3uQ0sYboJlBdbLpc1Bstac3rUN8',
           truelayerAccessToken: '',
           truelayerUseSandbox: false,
         )) {
@@ -68,35 +83,49 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final languageCode = prefs.getString('${userId}_app_language_code') ?? 'fr';
     final bankConnected = prefs.getBool('${userId}_bank_connected') ?? false;
     final connectedBankName = prefs.getString('${userId}_connected_bank_name') ?? '';
-    var clientId = await SecureStorageService.getTrueLayerClientId(userId) ?? 'aurabudgetpro-f0ea54';
+    final primaryAccountId = prefs.getString('${userId}_primary_account_id');
+    final rawSyncTime = prefs.getString('${userId}_last_bank_sync');
+    final lastSyncTimestamp = rawSyncTime != null ? DateTime.tryParse(rawSyncTime) : null;
+
+    var clientId = await SecureStorageService.getTrueLayerClientId(userId);
+    if (clientId == null || clientId.isEmpty || clientId == 'aurabudgetpro-f0ea54') {
+      clientId = 'aurabudget-076e60';
+      await SecureStorageService.saveTrueLayerCredentials(clientId, 'tlcs_live_93v3rjwgbbn4_UB8V1f3DirjKcNcGd3uQ0sYboJlBdbLpc1Bstac3rUN8', userId);
+    }
+
     var clientSecret = await SecureStorageService.getTrueLayerClientSecret(userId) ?? '';
     final accessToken = await SecureStorageService.getTrueLayerAccessToken(userId) ?? '';
 
-    if (clientSecret.isEmpty) {
+    if (clientSecret.isEmpty || clientSecret.startsWith('0bb238e2')) {
       try {
         try {
-          final loadedSecret = await rootBundle.loadString('assets/aurabudgetpro-f0ea54-secret.txt');
+          final loadedSecret = await rootBundle.loadString('assets/aurabudget-076e60-secret.txt');
           clientSecret = loadedSecret.trim();
         } catch (_) {
-          final loadedSecret = await rootBundle.loadString('assets/sandbox-aurabudgetpro-f0ea54-secret.txt');
-          clientSecret = loadedSecret.trim();
+          clientSecret = 'tlcs_live_93v3rjwgbbn4_UB8V1f3DirjKcNcGd3uQ0sYboJlBdbLpc1Bstac3rUN8';
         }
         await SecureStorageService.saveTrueLayerCredentials(clientId, clientSecret, userId);
-      } catch (_) {}
+      } catch (_) {
+        clientSecret = 'tlcs_live_93v3rjwgbbn4_UB8V1f3DirjKcNcGd3uQ0sYboJlBdbLpc1Bstac3rUN8';
+      }
     }
 
-    final savedSandbox = prefs.getBool('${userId}_truelayer_use_sandbox');
-    // If client ID is sandbox (like aurabudgetpro-f0ea54), default useSandbox to true unless explicitly overridden
-    final truelayerUseSandbox = savedSandbox ?? (clientId.contains('-f0ea54') || clientId.contains('sandbox'));
+    // Force Live mode for aurabudget-076e60 (clean stale test flags from localStorage)
+    final truelayerUseSandbox = clientId.startsWith('sandbox-');
+    if (!truelayerUseSandbox) {
+      await prefs.setBool('${userId}_truelayer_use_sandbox', false);
+    }
 
     state = SettingsState(
       languageCode: languageCode,
       bankConnected: bankConnected,
-      connectedBankName: connectedBankName,
+      connectedBankName: connectedBankName.isNotEmpty ? connectedBankName : 'BoursoBank',
       truelayerClientId: clientId,
       truelayerClientSecret: clientSecret,
       truelayerAccessToken: accessToken,
       truelayerUseSandbox: truelayerUseSandbox,
+      primaryAccountId: primaryAccountId,
+      lastSyncTimestamp: lastSyncTimestamp,
     );
   }
 
@@ -123,14 +152,22 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     );
   }
 
-  Future<void> setBankConnected(bool connected, String bankName) async {
+  Future<void> setBankConnected(bool connected, String bankName, {String? accountId}) async {
     if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('${userId}_bank_connected', connected);
     await prefs.setString('${userId}_connected_bank_name', bankName);
+    if (accountId != null) {
+      await prefs.setString('${userId}_primary_account_id', accountId);
+    }
+    final now = DateTime.now();
+    await prefs.setString('${userId}_last_bank_sync', now.toIso8601String());
+
     state = state.copyWith(
       bankConnected: connected,
       connectedBankName: bankName,
+      primaryAccountId: accountId ?? state.primaryAccountId,
+      lastSyncTimestamp: now,
     );
   }
 
@@ -140,9 +177,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(truelayerAccessToken: token);
   }
 
-  Future<String?> processTrueLayerCode(String code) async {
+  Future<String?> processTrueLayerCode(String code, {WidgetRef? ref}) async {
     if (userId.isEmpty) return 'Utilisateur non connecté';
     final redirectUri = Uri.base.origin;
+    state = state.copyWith(isSyncing: true);
     
     try {
       final tokenData = await TrueLayerService.exchangeCodeForToken(
@@ -155,14 +193,107 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 
       if (tokenData != null && tokenData['access_token'] != null) {
         final accessToken = tokenData['access_token'] as String;
-        await setAccessToken(accessToken);
-        await setBankConnected(true, 'Connecté via TrueLayer');
+        final refreshToken = tokenData['refresh_token'] as String?;
+        await SecureStorageService.saveTrueLayerTokens(
+          accessToken: accessToken,
+          refreshToken: refreshToken,
+          userId: userId,
+        );
+        state = state.copyWith(truelayerAccessToken: accessToken);
+
+        // Fetch Accounts & Live Balance immediately
+        await _fetchAndApplyLiveBankData(accessToken, ref: ref);
+
+        state = state.copyWith(isSyncing: false);
         return null; // Success (no error)
       } else {
+        state = state.copyWith(isSyncing: false);
         return 'Erreur inconnue lors de la récupération du token.';
       }
     } catch (e) {
+      state = state.copyWith(isSyncing: false);
       return e.toString();
+    }
+  }
+
+  Future<bool> syncTrueLayerData(WidgetRef ref) async {
+    if (state.truelayerAccessToken.isEmpty) return false;
+    state = state.copyWith(isSyncing: true);
+    try {
+      final success = await _fetchAndApplyLiveBankData(state.truelayerAccessToken, ref: ref);
+      state = state.copyWith(isSyncing: false);
+      return success;
+    } catch (e) {
+      debugPrint('[SettingsNotifier] Sync exception: $e');
+      state = state.copyWith(isSyncing: false);
+      return false;
+    }
+  }
+
+  Future<bool> _fetchAndApplyLiveBankData(String accessToken, {WidgetRef? ref}) async {
+    try {
+      final accounts = await TrueLayerService.fetchAccounts(
+        accessToken: accessToken,
+        isSandbox: state.truelayerUseSandbox,
+      );
+
+      if (accounts.isEmpty) {
+        await setBankConnected(true, 'Compte Connecté');
+        return false;
+      }
+
+      // Prioritize checking account (TRANSACTION) or first account
+      final mainAccount = accounts.firstWhere(
+        (a) => (a['account_type'] == 'TRANSACTION') || (a['account_type'] == 'CURRENT'),
+        orElse: () => accounts.first,
+      );
+
+      final accountId = mainAccount['account_id'] as String? ?? '';
+      final providerName = (mainAccount['provider']?['display_name'] as String?) ??
+                           (mainAccount['display_name'] as String?) ??
+                           'BoursoBank';
+
+      double? balance;
+      if (accountId.isNotEmpty) {
+        balance = await TrueLayerService.fetchBalance(
+          accountId: accountId,
+          accessToken: accessToken,
+          isSandbox: state.truelayerUseSandbox,
+        );
+      }
+
+      // If ref is available, update providers dynamically
+      if (ref != null && balance != null) {
+        ref.read(salaryProvider.notifier).updateAccountBalance(
+          balance,
+          bankName: providerName,
+          syncTime: DateTime.now(),
+        );
+
+        // Fetch recent transactions
+        if (accountId.isNotEmpty) {
+          final txs = await TrueLayerService.fetchTransactions(
+            accountId: accountId,
+            accessToken: accessToken,
+            isSandbox: state.truelayerUseSandbox,
+          );
+          if (txs.isNotEmpty) {
+            ref.read(budgetProvider.notifier).setTransactions(txs);
+          }
+        }
+      } else if (balance != null) {
+        // Fallback save to SharedPreferences directly
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setDouble('${userId}_aura_account_balance_v1', balance);
+        await prefs.setString('${userId}_aura_sync_bank_name_v1', providerName);
+        await prefs.setString('${userId}_aura_last_bank_sync_v1', DateTime.now().toIso8601String());
+      }
+
+      await setBankConnected(true, providerName, accountId: accountId);
+      return true;
+    } catch (e) {
+      debugPrint('[SettingsNotifier] Live bank fetch error: $e');
+      return false;
     }
   }
 
@@ -171,11 +302,15 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('${userId}_bank_connected', false);
     await prefs.setString('${userId}_connected_bank_name', '');
+    await prefs.remove('${userId}_primary_account_id');
+    await prefs.remove('${userId}_last_bank_sync');
     await SecureStorageService.clearTrueLayerTokens(userId);
     state = state.copyWith(
       bankConnected: false,
       connectedBankName: '',
       truelayerAccessToken: '',
+      primaryAccountId: null,
+      lastSyncTimestamp: null,
     );
   }
 }
@@ -184,3 +319,4 @@ final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(
   final authState = ref.watch(authProvider);
   return SettingsNotifier(userId: authState.user?.id ?? '');
 });
+
