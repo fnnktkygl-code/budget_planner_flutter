@@ -128,16 +128,11 @@ final budgetProvider = StateNotifierProvider<BudgetNotifier, BudgetState>((ref) 
 });
 
 final List<BudgetCategory> defaultCategories = [
-  BudgetCategory(id: 'cat-1', name: 'Logement & Loyer', allocatedAmount: 1100, spentAmount: 1100, iconName: 'home', colorHex: '#06B6D4'),
-  BudgetCategory(id: 'cat-2', name: 'Alimentation & Courses', allocatedAmount: 500, spentAmount: 380, iconName: 'shopping_cart', colorHex: '#10B981'),
-  BudgetCategory(id: 'cat-3', name: 'Transports & Véhicule', allocatedAmount: 250, spentAmount: 190, iconName: 'directions_car', colorHex: '#F59E0B'),
-  BudgetCategory(id: 'cat-4', name: 'Loisirs & Sorties', allocatedAmount: 400, spentAmount: 280, iconName: 'sports_esports', colorHex: '#EC4899'),
-  BudgetCategory(id: 'cat-5', name: 'Épargne & Investissement (DCA)', allocatedAmount: 1200, spentAmount: 1200, iconName: 'savings', colorHex: '#8B5CF6'),
+  BudgetCategory(id: 'cat-1', name: 'Logement & Loyer', allocatedAmount: 0, spentAmount: 0, iconName: 'home', colorHex: '#06B6D4'),
+  BudgetCategory(id: 'cat-2', name: 'Alimentation & Courses', allocatedAmount: 0, spentAmount: 0, iconName: 'shopping_cart', colorHex: '#10B981'),
+  BudgetCategory(id: 'cat-3', name: 'Transports & Véhicule', allocatedAmount: 0, spentAmount: 0, iconName: 'directions_car', colorHex: '#F59E0B'),
+  BudgetCategory(id: 'cat-4', name: 'Loisirs & Sorties', allocatedAmount: 0, spentAmount: 0, iconName: 'sports_esports', colorHex: '#EC4899'),
+  BudgetCategory(id: 'cat-5', name: 'Épargne & Investissement (DCA)', allocatedAmount: 0, spentAmount: 0, iconName: 'savings', colorHex: '#8B5CF6'),
 ];
 
-final List<TransactionItem> defaultTransactions = [
-  TransactionItem(id: 'tx-1', title: 'Virement Salaire Juin 2026', amount: 3850, date: DateTime(2026, 6, 28), category: 'Revenu', isIncome: true),
-  TransactionItem(id: 'tx-2', title: 'Prélèvement Loyer Juin', amount: 1100, date: DateTime(2026, 6, 30), category: 'Logement', isIncome: false),
-  TransactionItem(id: 'tx-3', title: 'Virement DCA PEA & ETF World', amount: 1200, date: DateTime(2026, 7, 1), category: 'Épargne', isIncome: false),
-  TransactionItem(id: 'tx-4', title: 'Courses Carrefour', amount: 142.50, date: DateTime(2026, 7, 3), category: 'Alimentation', isIncome: false),
-];
+final List<TransactionItem> defaultTransactions = [];

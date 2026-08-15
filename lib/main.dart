@@ -121,9 +121,19 @@ class _ResponsiveMainLayoutState extends ConsumerState<ResponsiveMainLayout> {
     });
   }
 
+  static final Set<String> _processedCodes = <String>{};
+  static bool _isProcessingCode = false;
+
   Future<void> _checkForTrueLayerCode() async {
     final code = Uri.base.queryParameters['code'];
     if (code != null && code.isNotEmpty) {
+      if (_processedCodes.contains(code) || _isProcessingCode) {
+        debugPrint('[TrueLayer] Code $code already processed or in progress. Skipping.');
+        return;
+      }
+      _isProcessingCode = true;
+      _processedCodes.add(code);
+
       // Clear URL query parameters immediately to avoid re-triggering with an expired/used code on refresh
       if (kIsWeb) {
         try {
@@ -133,29 +143,33 @@ class _ResponsiveMainLayoutState extends ConsumerState<ResponsiveMainLayout> {
         } catch (_) {}
       }
 
-      // Process code with TrueLayer
-      final settingsNotifier = ref.read(settingsProvider.notifier);
-      final errorMessage = await settingsNotifier.processTrueLayerCode(code, ref: ref);
-      
-      if (mounted) {
-        if (errorMessage == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Connexion bancaire TrueLayer réussie !'),
-              backgroundColor: AppColors.accentEmerald,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Erreur TrueLayer : $errorMessage'),
-              backgroundColor: AppColors.danger,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 10),
-            ),
-          );
+      try {
+        // Process code with TrueLayer
+        final settingsNotifier = ref.read(settingsProvider.notifier);
+        final errorMessage = await settingsNotifier.processTrueLayerCode(code, ref: ref);
+        
+        if (mounted) {
+          if (errorMessage == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Connexion bancaire TrueLayer réussie !'),
+                backgroundColor: AppColors.accentEmerald,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Erreur TrueLayer : $errorMessage'),
+                backgroundColor: AppColors.danger,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 10),
+              ),
+            );
+          }
         }
+      } finally {
+        _isProcessingCode = false;
       }
     }
   }

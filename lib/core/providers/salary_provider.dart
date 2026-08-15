@@ -24,7 +24,7 @@ class SalaryState {
     required this.records,
     this.taxAdjustments = const [],
     this.temporaryExpenses = const [],
-    this.accountBalance = 1740.0,
+    this.accountBalance = 0.0,
     this.bufferMultiplier = 1.0,
     this.lastBankSync,
     this.syncBankName,
@@ -105,11 +105,13 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
 
     final rawTaxJson = prefs.getString(_key('aura_tax_adjustments_v1'));
     final rawTempJson = prefs.getString(_key('aura_temporary_expenses_v1'));
-    final savedBalance = prefs.getDouble(_key('aura_account_balance_v1')) ?? 1740.0;
+    final savedBalance = prefs.getDouble(_key('aura_account_balance_v1')) ?? 0.0;
     final savedBufferMultiplier = prefs.getDouble(_key('aura_buffer_multiplier_v1')) ?? 1.0;
     final savedSyncBank = prefs.getString(_key('aura_sync_bank_name_v1'));
     final rawSyncTime = prefs.getString(_key('aura_last_bank_sync_v1'));
     final savedSyncTime = rawSyncTime != null ? DateTime.tryParse(rawSyncTime) : null;
+    // Auto-heal legacy fake default 1740.0 if no real bank sync timestamp exists
+    final effectiveBalance = (savedBalance == 1740.0 && savedSyncTime == null) ? 0.0 : savedBalance;
 
     List<SalaryRecord> list = [];
     List<TaxAdjustment> taxList = [];
@@ -163,7 +165,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       records: list,
       taxAdjustments: taxList,
       temporaryExpenses: tempList,
-      accountBalance: savedBalance,
+      accountBalance: effectiveBalance,
       bufferMultiplier: savedBufferMultiplier,
       lastBankSync: savedSyncTime,
       syncBankName: savedSyncBank,
@@ -192,7 +194,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
       final List<dynamic> rParsed = data['records'] ?? [];
       final List<dynamic> tParsed = data['taxAdjustments'] ?? [];
       final List<dynamic> eParsed = data['temporaryExpenses'] ?? [];
-      final double balance = (data['accountBalance'] as num?)?.toDouble() ?? 1740.0;
+      final double balance = (data['accountBalance'] as num?)?.toDouble() ?? 0.0;
       final double bufferMult = (data['bufferMultiplier'] as num?)?.toDouble() ?? 1.0;
 
       final rList = rParsed.map((item) => SalaryRecord.fromJson(item)).toList();
@@ -368,7 +370,7 @@ class SalaryNotifier extends StateNotifier<SalaryState> {
   }
 
   void clearAllRecords() async {
-    state = SalaryState(records: [], taxAdjustments: [], temporaryExpenses: [], accountBalance: 1740.0, bufferMultiplier: 1.0);
+    state = SalaryState(records: [], taxAdjustments: [], temporaryExpenses: [], accountBalance: 0.0, bufferMultiplier: 1.0);
     final prefs = await SharedPreferences.getInstance();
     prefs.remove(_key('aura_salary_records_v3'));
     prefs.remove(_key('aura_salary_records_v2'));
