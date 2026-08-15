@@ -303,11 +303,17 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         isSandbox: state.truelayerUseSandbox,
       );
 
-      if (summary != null && summary['success'] == true) {
-        final rawAccounts = (summary['accounts'] as List<dynamic>?)?.map((a) => Map<String, dynamic>.from(a as Map)).toList() ?? [];
+      if (summary != null && (summary['success'] == true || (summary['accounts'] as List?)?.isNotEmpty == true)) {
+        final rawAccountsList = summary['accounts'] as List<dynamic>? ?? [];
+        final rawAccounts = rawAccountsList.map((a) => Map<String, dynamic>.from(a as Map)).toList();
         final providerName = (summary['providerName'] as String?) ?? 'BoursoBank';
         final returnedPrimaryAccountId = (summary['primaryAccountId'] as String?) ?? '';
-        final rawTxs = (summary['transactions'] as List<dynamic>?) ?? [];
+        final rawTxs = summary['transactions'] as List<dynamic>? ?? [];
+
+        if (rawAccounts.isEmpty) {
+          debugPrint('[SettingsNotifier] TrueLayer returned 0 accounts in summary.');
+          throw Exception('Aucun compte BoursoBank n\'a été trouvé sur cette autorisation.');
+        }
 
         // Check if user already had a selected primary account ID or use the smartly detected one
         final targetPrimaryId = state.primaryAccountId ?? returnedPrimaryAccountId;
@@ -317,6 +323,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
             (a) => a['account_id'] == targetPrimaryId,
             orElse: () => rawAccounts.first,
           );
+        } else if (rawAccounts.isNotEmpty) {
+          selectedAcc = rawAccounts.first;
         }
 
         final primaryBalance = selectedAcc != null
@@ -325,18 +333,32 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         final finalAccountId = selectedAcc != null ? (selectedAcc['account_id'] as String? ?? returnedPrimaryAccountId) : returnedPrimaryAccountId;
         final finalDisplayName = selectedAcc != null ? (selectedAcc['display_name'] as String? ?? providerName) : providerName;
 
-        final List<TransactionItem> txs = rawTxs.map<TransactionItem>((t) {
-          final amountVal = (t['amount'] as num?)?.toDouble() ?? 0.0;
-          final isIncome = amountVal > 0;
-          return TransactionItem(
-            id: t['transaction_id'] ?? 'tx-${DateTime.now().millisecondsSinceEpoch}',
-            title: t['description'] ?? 'Transaction',
-            amount: amountVal.abs(),
-            date: DateTime.tryParse(t['timestamp'] ?? '') ?? DateTime.now(),
-            category: (t['transaction_classification'] as List<dynamic>?)?.first ?? 'Général',
-            isIncome: isIncome,
-          );
-        }).toList();
+        final List<TransactionItem> txs = [];
+        for (final t in rawTxs) {
+          try {
+            final tMap = Map<String, dynamic>.from(t as Map);
+            final amountVal = (tMap['amount'] as num?)?.toDouble() ?? 0.0;
+            final isIncome = amountVal > 0;
+            String catName = 'Général';
+            final rawCat = tMap['transaction_classification'];
+            if (rawCat is List && rawCat.isNotEmpty) {
+              catName = rawCat.first.toString();
+            } else if (rawCat is String && rawCat.isNotEmpty) {
+              catName = rawCat;
+            }
+
+            txs.add(TransactionItem(
+              id: (tMap['transaction_id'] ?? 'tx-${DateTime.now().millisecondsSinceEpoch}').toString(),
+              title: (tMap['description'] ?? 'Transaction').toString(),
+              amount: amountVal.abs(),
+              date: DateTime.tryParse(tMap['timestamp']?.toString() ?? '') ?? DateTime.now(),
+              category: catName,
+              isIncome: isIncome,
+            ));
+          } catch (txErr) {
+            debugPrint('[SettingsNotifier] Skipping malformed transaction: $txErr');
+          }
+        }
 
         // Update Riverpod salaryProvider and budgetProvider
         ref.read(salaryProvider.notifier).updateAccountBalance(
@@ -354,12 +376,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         await prefs.setDouble(_key('aura_account_balance_v1'), primaryBalance);
         await prefs.setString(_key('aura_sync_bank_name_v1'), finalDisplayName);
         await prefs.setString(_key('aura_last_bank_sync_v1'), DateTime.now().toIso8601String());
-        if (rawAccounts.isNotEmpty) {
-          await prefs.setString(_key('connected_accounts_json'), jsonEncode(rawAccounts));
-        }
+        await prefs.setString(_key('connected_accounts_json'), jsonEncode(rawAccounts));
 
         await setBankConnected(true, finalDisplayName, accountId: finalAccountId, accounts: rawAccounts);
-        debugPrint('[SettingsNotifier] Live Bank Data successfully applied: $primaryBalance EUR ($finalDisplayName)');
+        debugPrint('[SettingsNotifier] Live Bank Data successfully applied: $primaryBalance EUR ($finalDisplayName, ${rawAccounts.length} accounts)');
         return true;
       }
 
@@ -400,14 +420,15 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         );
       }
 
-      if (balance != null) {
-        ref.read(salaryProvider.notifier).updateAccountBalance(
-          balance,
-          bankName: providerName,
-          syncTime: DateTime.now(),
-        );
+      final effectiveBal = balance ?? ((mainAccount['current_balance'] ?? mainAccount['balance']) as num?)?.toDouble() ?? 0.0;
+      ref.read(salaryProvider.notifier).updateAccountBalance(
+        effectiveBal,
+        bankName: providerName,
+        syncTime: DateTime.now(),
+      );
 
-        if (accountId.isNotEmpty) {
+      if (accountId.isNotEmpty) {
+        try {
           final txs = await TrueLayerService.fetchTransactions(
             accountId: accountId,
             accessToken: accessToken,
@@ -416,19 +437,20 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           if (txs.isNotEmpty) {
             ref.read(budgetProvider.notifier).setTransactions(txs);
           }
-        }
-
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setDouble(_key('aura_account_balance_v1'), balance);
-        await prefs.setString(_key('aura_sync_bank_name_v1'), providerName);
-        await prefs.setString(_key('aura_last_bank_sync_v1'), DateTime.now().toIso8601String());
+        } catch (_) {}
       }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_key('aura_account_balance_v1'), effectiveBal);
+      await prefs.setString(_key('aura_sync_bank_name_v1'), providerName);
+      await prefs.setString(_key('aura_last_bank_sync_v1'), DateTime.now().toIso8601String());
+      await prefs.setString(_key('connected_accounts_json'), jsonEncode(accounts));
 
       await setBankConnected(true, providerName, accountId: accountId, accounts: accounts);
       return true;
-    } catch (e) {
-      debugPrint('[SettingsNotifier] Live bank fetch error: $e');
-      return false;
+    } catch (e, stack) {
+      debugPrint('[SettingsNotifier] Live bank fetch exception: $e\n$stack');
+      rethrow;
     }
   }
 
