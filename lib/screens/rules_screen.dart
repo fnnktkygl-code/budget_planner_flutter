@@ -152,6 +152,245 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     }
   }
 
+  void _showRadarModal(BuildContext context, List<DetectedRecurringExpense> suggestions) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final activeSuggestions = suggestions.where((s) => !_ignoredDetectedTxIds.contains(s.id)).toList();
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              ),
+              decoration: const BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border(
+                  top: BorderSide(color: AppColors.accentCyan, width: 1.5),
+                  left: BorderSide(color: AppColors.borderSubtle),
+                  right: BorderSide(color: AppColors.borderSubtle),
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.borderSubtle,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentCyan.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.radar_rounded, color: AppColors.accentCyan, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Radar Open Banking',
+                              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              activeSuggestions.isEmpty
+                                  ? 'Toutes les suggestions sont traitées'
+                                  : '${activeSuggestions.length} flux identifié${activeSuggestions.length > 1 ? "s" : ""}',
+                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Aura a analysé les transactions de votre compte BoursoBank pour détecter vos prélèvements récurrents ou échéances temporaires non encore déclarés.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  if (activeSuggestions.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      alignment: Alignment.center,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.check_circle_outline_rounded, color: AppColors.accentEmerald, size: 44),
+                          SizedBox(height: 12),
+                          Text(
+                            'Aucun autre flux en attente !',
+                            style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Toutes les suggestions bancaires ont été prises en compte.',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: activeSuggestions.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (c, idx) {
+                          final sugg = activeSuggestions[idx];
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppColors.borderSubtle),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                sugg.merchant,
+                                                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.accentCyan.withValues(alpha: 0.12),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  sugg.suggestedCategory,
+                                                  style: const TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            sugg.reason,
+                                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(
+                                      '-${sugg.amount.toStringAsFixed(2)} €',
+                                      style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 15),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.accentCyan.withValues(alpha: 0.15),
+                                        foregroundColor: AppColors.accentCyan,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          side: BorderSide(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                                        ),
+                                      ),
+                                      icon: const Icon(Icons.calendar_month_rounded, size: 14),
+                                      label: Text(
+                                        '+ Échéancier (${sugg.suggestedDurationMonths} mois)',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        _showTemporaryExpenseDialog(
+                                          context,
+                                          initialLabel: sugg.merchant,
+                                          initialAmount: sugg.amount,
+                                          initialDurationMonths: sugg.suggestedDurationMonths,
+                                          initialSuggestionId: sugg.id,
+                                        );
+                                      },
+                                    ),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.cardBackground,
+                                        foregroundColor: AppColors.textPrimary,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          side: const BorderSide(color: AppColors.borderSubtle),
+                                        ),
+                                      ),
+                                      icon: const Icon(Icons.lock_clock_rounded, size: 14),
+                                      label: const Text('+ Charge Fixe', style: TextStyle(fontSize: 11)),
+                                      onPressed: () {
+                                        _addFixedChargeFromSuggestion(sugg);
+                                        setModalState(() {});
+                                      },
+                                    ),
+                                    TextButton.icon(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: AppColors.textMuted,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                      ),
+                                      icon: const Icon(Icons.close_rounded, size: 14),
+                                      label: const Text('Ignorer', style: TextStyle(fontSize: 11)),
+                                      onPressed: () {
+                                        _ignoreSuggestion(sugg.id);
+                                        setModalState(() {});
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showArbitrageDialog(BuildContext context, double deficitAmount, double netSalary) {
     final peaIndex = _savingsCategories.indexWhere((c) => c.name.toLowerCase().contains('pea'));
     final peaItem = peaIndex != -1 ? _savingsCategories[peaIndex] : null;
@@ -1130,19 +1369,6 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               final seuilSecurite = totalFixed * salary.bufferMultiplier; // Dynamic buffer based on fixed charges
               final lowerBound = seuilSecurite * 0.8;
               final upperBound = seuilSecurite * 1.2;
-              final projBal = bal + resteAVivre;
-              
-              final isDanger = projBal < lowerBound;
-              final isSurplus = projBal > upperBound;
-              final isSafe = !isDanger && !isSurplus;
-
-              Color getBalanceColor(double amount) {
-                if (amount < lowerBound) return AppColors.accentRose;
-                if (amount > upperBound) return AppColors.accentGold;
-                return AppColors.accentEmerald;
-              }
-              
-              final realDiscretionary = bal < 0 ? resteAVivre + bal : resteAVivre;
 
               final heroA = Container(
                 padding: const EdgeInsets.all(24),
@@ -1150,8 +1376,8 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   color: AppColors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: bal < 0 ? AppColors.accentRose.withValues(alpha: 0.4) : AppColors.borderSubtle,
-                    width: bal < 0 ? 1.5 : 1.0,
+                    color: AppColors.borderSubtle,
+                    width: 1.0,
                   ),
                 ),
                 child: Column(
@@ -1160,19 +1386,18 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          bal < 0 ? 'TRÉSORERIE RÉELLE RESTANTE (APRÈS DÉCOUVERT)' : 'RESTE À VIVRE — CE MOIS-CI',
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                        const Text(
+                          'RESTE À VIVRE THÉORIQUE — MODÈLE MENSUEL',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
                         ),
-                        if (salary.syncBankName != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.accentEmerald.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text('Solde Live', style: TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentEmerald.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
                           ),
+                          child: const Text('Modèle 50/30/20', style: TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold)),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -1181,11 +1406,9 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          '${realDiscretionary.toStringAsFixed(2)} €',
+                          '${resteAVivre.toStringAsFixed(2)} €',
                           style: TextStyle(
-                            color: realDiscretionary < 0
-                                ? AppColors.accentRose
-                                : (realDiscretionary < 100 ? Colors.amber : AppColors.textPrimary),
+                            color: resteAVivre < 0 ? AppColors.accentRose : AppColors.textPrimary,
                             fontSize: 36,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1199,11 +1422,9 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                             border: Border.all(color: AppColors.borderSubtle),
                           ),
                           child: Text(
-                            bal < 0
-                                ? 'Absorption du découvert'
-                                : '${(netSalary > 0 ? (resteAVivre / netSalary * 100) : 0).toStringAsFixed(1)} % du net',
-                            style: TextStyle(
-                              color: bal < 0 ? AppColors.accentRose : AppColors.textSecondary,
+                            '${(netSalary > 0 ? (resteAVivre / netSalary * 100) : 0).toStringAsFixed(1)} % du net récurrent',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1211,106 +1432,12 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    if (bal < 0) ...[
-                      // Interactive Formula Breakdown Pill
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.borderSubtle),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('${resteAVivre.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 11)),
-                            const Text(' théoriq. ', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
-                            const Text('— ', style: TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold)),
-                            Text('${bal.abs().toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 11)),
-                            const Text(' découv. ', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
-                            const Text('= ', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold)),
-                            Text(
-                              '${realDiscretionary.toStringAsFixed(2)} €',
-                              style: TextStyle(
-                                color: realDiscretionary < 0 ? AppColors.accentRose : AppColors.accentEmerald,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                              ),
-                            ),
-                            const Text(' dispo', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // Smart Arbitrage Recommendation Banner
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentCyan.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.25)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.auto_fix_high_rounded, color: AppColors.accentCyan, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Conseil Trésorerie : Réduire temporairement le versement PEA de ${bal.abs().toStringAsFixed(0)} € restaure instantanément votre sécurité.',
-                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            InkWell(
-                              onTap: () => _showArbitrageDialog(context, bal.abs(), netSalary),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: AppColors.accentCyan,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Text('Arbitrer', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ] else ...[
-                      Row(
-                        children: [
-                          InkWell(
-                            onTap: () {},
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(color: AppColors.surface, shape: BoxShape.circle, border: Border.all(color: AppColors.borderSubtle)),
-                              child: const Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 14),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: RichText(
-                              text: TextSpan(
-                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4, fontFamily: 'Inter'),
-                                children: [
-                                  const TextSpan(text: 'Votre solde bancaire actuel porte votre trésorerie projetée à '),
-                                  TextSpan(
-                                    text: '${projBal.toStringAsFixed(2)} €',
-                                    style: TextStyle(
-                                      color: projBal < 0 ? AppColors.accentRose : AppColors.accentEmerald,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const TextSpan(text: ' fin de mois.'),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                    const SizedBox(height: 10),
+                    Text(
+                      'Marge mensuelle non allouée issue de votre salaire net (${netSalary.toStringAsFixed(2)} €), après déduction des charges fixes (${totalFixed.toStringAsFixed(2)} €), de l\'épargne (${totalSavings.toStringAsFixed(2)} €) et du quotidien (${totalDaily.toStringAsFixed(2)} €).',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                    ),
+                    const SizedBox(height: 14),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: SizedBox(
@@ -1348,10 +1475,10 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   color: AppColors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: isSafe
-                        ? AppColors.accentEmerald
-                        : (isSurplus ? AppColors.accentGold : AppColors.accentRose),
-                    width: 2,
+                    color: bal < 0
+                        ? AppColors.accentRose
+                        : (bal < lowerBound ? Colors.amber : (bal > upperBound ? AppColors.accentGold : AppColors.accentEmerald)),
+                    width: 1.5,
                   ),
                 ),
                 child: Column(
@@ -1360,37 +1487,41 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: isSafe
-                            ? AppColors.accentEmerald.withValues(alpha: 0.15)
-                            : (isSurplus ? AppColors.accentGold.withValues(alpha: 0.15) : AppColors.accentRose.withValues(alpha: 0.15)),
+                        color: bal < 0
+                            ? AppColors.accentRose.withValues(alpha: 0.15)
+                            : (bal < lowerBound
+                                ? Colors.amber.withValues(alpha: 0.15)
+                                : (bal > upperBound ? AppColors.accentGold.withValues(alpha: 0.15) : AppColors.accentEmerald.withValues(alpha: 0.15))),
                         borderRadius: BorderRadius.circular(100),
                         border: Border.all(
-                          color: isSafe
-                              ? AppColors.accentEmerald.withValues(alpha: 0.3)
-                              : (isSurplus ? AppColors.accentGold.withValues(alpha: 0.3) : AppColors.accentRose.withValues(alpha: 0.3)),
+                          color: bal < 0
+                              ? AppColors.accentRose.withValues(alpha: 0.3)
+                              : (bal < lowerBound
+                                  ? Colors.amber.withValues(alpha: 0.3)
+                                  : (bal > upperBound ? AppColors.accentGold.withValues(alpha: 0.3) : AppColors.accentEmerald.withValues(alpha: 0.3))),
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            isSafe
-                                ? Icons.check_circle_outline_rounded
-                                : (isSurplus ? Icons.savings_outlined : Icons.warning_amber_rounded),
-                            color: isSafe
-                                ? AppColors.accentEmerald
-                                : (isSurplus ? AppColors.accentGold : AppColors.accentRose),
+                            bal < 0
+                                ? Icons.warning_amber_rounded
+                                : (bal < lowerBound ? Icons.info_outline_rounded : (bal > upperBound ? Icons.savings_outlined : Icons.check_circle_outline_rounded)),
+                            color: bal < 0
+                                ? AppColors.accentRose
+                                : (bal < lowerBound ? Colors.amber : (bal > upperBound ? AppColors.accentGold : AppColors.accentEmerald)),
                             size: 14,
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            isSafe
-                                ? 'Trésorerie sécurisée'
-                                : (isSurplus ? 'Surplus dormant' : 'Danger de découvert'),
+                            bal < 0
+                                ? 'Découvert bancaire actuel'
+                                : (bal < lowerBound ? 'Sous le matelas de sécurité' : (bal > upperBound ? 'Excédent de trésorerie' : 'Trésorerie sécurisée')),
                             style: TextStyle(
-                              color: isSafe
-                                  ? AppColors.accentEmerald
-                                  : (isSurplus ? AppColors.accentGold : AppColors.accentRose),
+                              color: bal < 0
+                                  ? AppColors.accentRose
+                                  : (bal < lowerBound ? Colors.amber : (bal > upperBound ? AppColors.accentGold : AppColors.accentEmerald)),
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1403,8 +1534,8 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Solde bancaire actuel',
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          'SOLDE BANCAIRE RÉEL',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1413,20 +1544,20 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            salary.syncBankName != null ? '${salary.syncBankName} • TrueLayer' : 'TrueLayer Live',
+                            salary.syncBankName != null ? '${salary.syncBankName} • Live' : 'BoursoBank Live',
                             style: const TextStyle(color: AppColors.accentEmerald, fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 6),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Text(
-                          '${bal.toStringAsFixed(0)} €',
+                          '${bal.toStringAsFixed(2)} €',
                           style: TextStyle(
-                            color: getBalanceColor(bal),
+                            color: bal < 0 ? AppColors.accentRose : AppColors.accentEmerald,
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1448,7 +1579,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                 const Icon(Icons.settings_outlined, size: 14, color: AppColors.accentCyan),
                                 const SizedBox(width: 6),
                                 Text(
-                                  'Seuil de sécurité : ${salary.bufferMultiplier}x (${seuilSecurite.toStringAsFixed(0)} €)',
+                                  'Seuil cible : ${salary.bufferMultiplier}x (${seuilSecurite.toStringAsFixed(0)} €)',
                                   style: const TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
                               ],
@@ -1457,39 +1588,48 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.borderSubtle)),
-                      child: Row(
-                        children: [
-                          Text('${resteAVivre.toStringAsFixed(0)} € ', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
-                          const Text('théorique ', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                          const Icon(Icons.arrow_right_alt_rounded, color: AppColors.textMuted, size: 14),
-                          Text(' ${bal.toStringAsFixed(0)} € ', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
-                          const Text('actuel ', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                          const Icon(Icons.arrow_right_alt_rounded, color: AppColors.textMuted, size: 14),
-                          Text(
-                            ' ${projBal.toStringAsFixed(0)} € ',
-                            style: TextStyle(
-                              color: getBalanceColor(projBal),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                    const SizedBox(height: 10),
+                    if (bal < 0) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentRose.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.accentRose.withValues(alpha: 0.25)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.auto_fix_high_rounded, color: AppColors.accentCyan, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Découvert de ${bal.abs().toStringAsFixed(2)} € : Vous pouvez moduler l\'épargne PEA pour résorber ce découvert.',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
+                              ),
                             ),
-                          ),
-                          const Text('projeté', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                        ],
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: () => _showArbitrageDialog(context, bal.abs(), netSalary),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentCyan,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text('Arbitrer', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      isSafe
-                          ? 'Votre trésorerie projetée est dans l\'intervalle idéal de sécurité : aucune action nécessaire ce mois-ci.'
-                          : (isSurplus
-                              ? 'Attention, il y a un surplus d\'argent dormant d\'au moins ${(projBal - upperBound).toStringAsFixed(0)} €. Pensez à l\'investir ou le répartir, sinon l\'inflation risque de le grignoter.'
-                              : 'Attention, vous vous éloignez de votre seuil de sécurité. Il est recommandé de rajouter au minimum ${(lowerBound - projBal).toStringAsFixed(0)} € (ou réduire vos dépenses/épargne d\'autant) pour repasser à l\'équilibre.'),
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
-                    ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      Text(
+                        'Solde réel instantané disponible sur votre compte bancaire synchronisé.',
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     const Spacer(),
                     Row(
                       children: [
@@ -1565,176 +1705,76 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             if (detectedSuggestions.isNotEmpty) ...[
               Container(
                 margin: const EdgeInsets.only(bottom: 20),
-                padding: const EdgeInsets.all(18),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: BoxDecoration(
                   color: AppColors.cardBackground,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.5), width: 1.5),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.accentCyan.withValues(alpha: 0.08),
-                      blurRadius: 16,
-                      spreadRadius: 2,
+                      color: AppColors.accentCyan.withValues(alpha: 0.05),
+                      blurRadius: 12,
+                      spreadRadius: 1,
                     ),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentCyan.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.radar_rounded, color: AppColors.accentCyan, size: 20),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Text('Radar Open Banking', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.accentCyan,
-                                      borderRadius: BorderRadius.circular(100),
-                                    ),
-                                    child: Text(
-                                      '${detectedSuggestions.length} flux détecté${detectedSuggestions.length > 1 ? "s" : ""}',
-                                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              const Text('Dépenses récurrentes ou échéances identifiées sur votre compte BoursoBank', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                            ],
-                          ),
-                        ),
-                      ],
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentCyan.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.radar_rounded, color: AppColors.accentCyan, size: 20),
                     ),
-                    const SizedBox(height: 14),
-                    Column(
-                      children: detectedSuggestions.map((sugg) {
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.borderSubtle),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Text(sugg.merchant, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: AppColors.accentCyan.withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(sugg.suggestedCategory, style: const TextStyle(color: AppColors.accentCyan, fontSize: 9, fontWeight: FontWeight.bold)),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          sugg.reason,
-                                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Libellé brut : ${sugg.rawTitle}',
-                                          style: const TextStyle(color: AppColors.textMuted, fontSize: 10, fontStyle: FontStyle.italic),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '-${sugg.amount.toStringAsFixed(2)} €',
-                                    style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 14),
-                                  ),
-                                ],
+                              const Text(
+                                'Radar Open Banking',
+                                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
                               ),
-                              const SizedBox(height: 10),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.accentCyan.withValues(alpha: 0.15),
-                                      foregroundColor: AppColors.accentCyan,
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        side: BorderSide(color: AppColors.accentCyan.withValues(alpha: 0.4)),
-                                      ),
-                                    ),
-                                    icon: const Icon(Icons.add_rounded, size: 14),
-                                    label: Text('+ Échéance (${sugg.suggestedDurationMonths} mois)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                    onPressed: () {
-                                      _showTemporaryExpenseDialog(
-                                        context,
-                                        initialLabel: sugg.merchant,
-                                        initialAmount: sugg.amount,
-                                        initialDurationMonths: sugg.suggestedDurationMonths,
-                                        initialSuggestionId: sugg.id,
-                                      );
-                                    },
-                                  ),
-                                  ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.surface,
-                                      foregroundColor: AppColors.textPrimary,
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        side: const BorderSide(color: AppColors.borderSubtle),
-                                      ),
-                                    ),
-                                    icon: const Icon(Icons.lock_clock_rounded, size: 14),
-                                    label: const Text('+ Charge Fixe', style: TextStyle(fontSize: 11)),
-                                    onPressed: () => _addFixedChargeFromSuggestion(sugg),
-                                  ),
-                                  TextButton.icon(
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: AppColors.textMuted,
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                    ),
-                                    icon: const Icon(Icons.close_rounded, size: 14),
-                                    label: const Text('Ignorer', style: TextStyle(fontSize: 11)),
-                                    onPressed: () => _ignoreSuggestion(sugg.id),
-                                  ),
-                                ],
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentCyan,
+                                  borderRadius: BorderRadius.circular(100),
+                                ),
+                                child: Text(
+                                  '${detectedSuggestions.length} flux',
+                                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10),
+                                ),
                               ),
                             ],
                           ),
-                        );
-                      }).toList(),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Des dépenses récurrentes ou échéances non déclarées ont été identifiées sur votre compte.',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accentCyan,
+                        foregroundColor: Colors.black,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                      label: const Text('Examiner', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      onPressed: () => _showRadarModal(context, detectedSuggestions),
                     ),
                   ],
                 ),
