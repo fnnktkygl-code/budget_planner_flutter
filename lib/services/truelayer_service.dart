@@ -78,13 +78,16 @@ class TrueLayerService {
     required String accessToken,
     required bool isSandbox,
   }) async {
-    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data');
+    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data?action=summary');
     debugPrint('[TrueLayer API] Fetching summary via proxy: $proxyUrl');
 
     try {
       final response = await http.post(
         proxyUrl,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
         body: jsonEncode({
           'action': 'summary',
           'accessToken': accessToken,
@@ -111,11 +114,14 @@ class TrueLayerService {
     required bool isSandbox,
   }) async {
     // 1. Try Vercel proxy first (Web CORS bypass)
-    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data');
+    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data?action=accounts');
     try {
       final response = await http.post(
         proxyUrl,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
         body: jsonEncode({
           'action': 'accounts',
           'accessToken': accessToken,
@@ -125,7 +131,7 @@ class TrueLayerService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final List<dynamic> results = data['results'] ?? [];
+        final List<dynamic> results = data['results'] ?? data['accounts'] ?? [];
         return results.cast<Map<String, dynamic>>();
       }
     } catch (e) {
@@ -166,11 +172,14 @@ class TrueLayerService {
     required bool isSandbox,
   }) async {
     // 1. Try Vercel proxy first (Web CORS bypass)
-    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data');
+    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data?action=balance');
     try {
       final response = await http.post(
         proxyUrl,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
         body: jsonEncode({
           'action': 'balance',
           'accountId': accountId,
@@ -231,11 +240,14 @@ class TrueLayerService {
     required bool isSandbox,
   }) async {
     // 1. Try Vercel proxy first (Web CORS bypass)
-    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data');
+    final proxyUrl = Uri.parse('${Uri.base.origin}/api/truelayer-data?action=transactions');
     try {
       final response = await http.post(
         proxyUrl,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
         body: jsonEncode({
           'action': 'transactions',
           'accountId': accountId,

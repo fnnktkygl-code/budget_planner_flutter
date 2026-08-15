@@ -14,18 +14,22 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  let body = req.body || {};
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch (_) {
+      body = {};
+    }
   }
+  const query = req.query || {};
 
-  const {
-    grant_type,
-    client_id,
-    client_secret,
-    redirect_uri,
-    code,
-    is_sandbox,
-  } = req.body;
+  const grant_type = body.grant_type || query.grant_type || 'authorization_code';
+  const client_id = body.client_id || query.client_id;
+  const client_secret = body.client_secret || query.client_secret;
+  const redirect_uri = body.redirect_uri || query.redirect_uri;
+  const code = body.code || query.code;
+  const is_sandbox = body.is_sandbox || query.is_sandbox;
 
   const effectiveClientId = client_id || process.env.TRUELAYER_CLIENT_ID || 'aurabudget-076e60';
   const effectiveClientSecret = client_secret || process.env.TRUELAYER_CLIENT_SECRET || 'tlcs_live_93v3rjwgbbn4_UB8V1f3DirjKcNcGd3uQ0sYboJlBdbLpc1Bstac3rUN8';

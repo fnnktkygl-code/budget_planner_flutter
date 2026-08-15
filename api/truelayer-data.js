@@ -14,7 +14,14 @@ export default async function handler(req, res) {
   }
 
   // Extract params from body (POST) or query (GET)
-  const body = req.body || {};
+  let body = req.body || {};
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch (_) {
+      body = {};
+    }
+  }
   const query = req.query || {};
 
   const authHeader = req.headers['authorization'] || req.headers['Authorization'] || '';

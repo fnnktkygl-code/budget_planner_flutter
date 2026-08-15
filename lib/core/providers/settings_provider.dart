@@ -248,13 +248,16 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         state = state.copyWith(truelayerAccessToken: accessToken);
 
         // Fetch Accounts & Live Balance immediately
-        await _fetchAndApplyLiveBankData(accessToken);
+        final success = await _fetchAndApplyLiveBankData(accessToken);
 
         state = state.copyWith(isSyncing: false);
+        if (!success) {
+          return 'Token obtenu mais aucun compte BoursoBank n\'a pu être synchronisé.';
+        }
         return null; // Success (no error)
       } else {
         state = state.copyWith(isSyncing: false);
-        return 'Erreur inconnue lors de la récupération du token.';
+        return 'Erreur lors de la récupération du token TrueLayer.';
       }
     } catch (e) {
       state = state.copyWith(isSyncing: false);
@@ -361,7 +364,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       );
 
       if (accounts.isEmpty) {
-        await setBankConnected(true, 'Compte Connecté');
+        debugPrint('[SettingsNotifier] No accounts found from TrueLayer Data API.');
         return false;
       }
 

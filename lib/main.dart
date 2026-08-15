@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'constants/colors.dart';
 import 'core/providers/auth_provider.dart';
+import 'core/providers/salary_provider.dart';
 import 'core/providers/settings_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -144,23 +145,47 @@ class _ResponsiveMainLayoutState extends ConsumerState<ResponsiveMainLayout> {
       }
 
       try {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Synchronisation de vos comptes BoursoBank en direct...'),
+                ],
+              ),
+              backgroundColor: AppColors.accentCyan,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+
         // Process code with TrueLayer
         final settingsNotifier = ref.read(settingsProvider.notifier);
         final errorMessage = await settingsNotifier.processTrueLayerCode(code, ref: ref);
         
         if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
           if (errorMessage == null) {
+            final salary = ref.read(salaryProvider);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Connexion bancaire TrueLayer réussie !'),
+              SnackBar(
+                content: Text('Connexion BoursoBank réussie ! Solde synchronisé : ${salary.accountBalance.toStringAsFixed(2)} €'),
                 backgroundColor: AppColors.accentEmerald,
                 behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 5),
               ),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Erreur TrueLayer : $errorMessage'),
+                content: Text('Erreur BoursoBank : $errorMessage'),
                 backgroundColor: AppColors.danger,
                 behavior: SnackBarBehavior.floating,
                 duration: const Duration(seconds: 10),
