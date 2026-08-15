@@ -129,8 +129,8 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
             const SizedBox(height: 16),
           ],
 
-          if (settings.bankConnected) ...[
-            // Connected Card
+          if (settings.bankConnected && settings.connectedAccounts.isNotEmpty) ...[
+            // Connected Card with detected accounts
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -170,142 +170,139 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
                     ],
                   ),
                   
-                  // If multiple accounts are detected, display the list
-                  if (settings.connectedAccounts.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    const Divider(color: AppColors.borderSubtle, height: 1),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'COMPTES BOURSOBANK DÉTECTÉS',
-                      style: TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
+                  const SizedBox(height: 16),
+                  const Divider(color: AppColors.borderSubtle, height: 1),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'COMPTES BOURSOBANK DÉTECTÉS',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
                     ),
-                    const SizedBox(height: 8),
-                    ...settings.connectedAccounts.map((acc) {
-                      final accId = acc['account_id'] as String? ?? '';
-                      final isSelected = (accId == settings.primaryAccountId) ||
-                          (settings.primaryAccountId == null && acc == settings.connectedAccounts.first);
-                      final displayName = acc['display_name'] as String? ?? 'Compte';
-                      final ibanMasked = acc['iban_masked'] as String? ?? '';
-                      final bal = ((acc['current_balance'] ?? acc['balance']) as num?)?.toDouble() ?? 0.0;
-                      final cat = acc['category'] as String? ?? 'checking';
+                  ),
+                  const SizedBox(height: 8),
+                  ...settings.connectedAccounts.map((acc) {
+                    final accId = acc['account_id'] as String? ?? '';
+                    final isSelected = (accId == settings.primaryAccountId) ||
+                        (settings.primaryAccountId == null && acc == settings.connectedAccounts.first);
+                    final displayName = acc['display_name'] as String? ?? 'Compte';
+                    final ibanMasked = acc['iban_masked'] as String? ?? '';
+                    final bal = ((acc['current_balance'] ?? acc['balance']) as num?)?.toDouble() ?? 0.0;
+                    final cat = acc['category'] as String? ?? 'checking';
 
-                      String catBadge = 'Compte';
-                      Color catColor = AppColors.accentCyan;
-                      IconData catIcon = Icons.account_balance_wallet_outlined;
+                    String catBadge = 'Compte';
+                    Color catColor = AppColors.accentCyan;
+                    IconData catIcon = Icons.account_balance_wallet_outlined;
 
-                      if (cat == 'tampon' || displayName.toLowerCase().contains('tampon') || ibanMasked.contains('4455')) {
-                        catBadge = 'Tampon';
-                        catColor = AppColors.accentPurple;
-                        catIcon = Icons.archive_outlined;
-                      } else if (cat == 'tontine' || displayName.toLowerCase().contains('tontine') || ibanMasked.contains('4424')) {
-                        catBadge = 'Tontine';
-                        catColor = AppColors.accentGold;
-                        catIcon = Icons.handshake_outlined;
-                      } else if (cat == 'savings' || displayName.toLowerCase().contains('livret')) {
-                        catBadge = 'Épargne';
-                        catColor = AppColors.accentEmerald;
-                        catIcon = Icons.savings_outlined;
-                      } else if (cat == 'checking' || ibanMasked.contains('0429')) {
-                        catBadge = 'Courant';
-                        catColor = AppColors.accentCyan;
-                        catIcon = Icons.credit_card_rounded;
-                      }
+                    if (cat == 'tampon' || displayName.toLowerCase().contains('tampon') || ibanMasked.contains('4455')) {
+                      catBadge = 'Tampon';
+                      catColor = AppColors.accentPurple;
+                      catIcon = Icons.archive_outlined;
+                    } else if (cat == 'tontine' || displayName.toLowerCase().contains('tontine') || ibanMasked.contains('4424')) {
+                      catBadge = 'Tontine';
+                      catColor = AppColors.accentGold;
+                      catIcon = Icons.handshake_outlined;
+                    } else if (cat == 'savings' || displayName.toLowerCase().contains('livret')) {
+                      catBadge = 'Épargne';
+                      catColor = AppColors.accentEmerald;
+                      catIcon = Icons.savings_outlined;
+                    } else if (cat == 'checking' || ibanMasked.contains('0429')) {
+                      catBadge = 'Courant';
+                      catColor = AppColors.accentCyan;
+                      catIcon = Icons.credit_card_rounded;
+                    }
 
-                      return InkWell(
-                        onTap: () {
-                          if (accId.isNotEmpty) {
-                            ref.read(settingsProvider.notifier).selectPrimaryAccount(accId);
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? AppColors.accentCyan.withValues(alpha: 0.12)
-                                : AppColors.surfaceVariant.withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle.withValues(alpha: 0.5),
-                              width: isSelected ? 1.5 : 1.0,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(catIcon, size: 18, color: catColor),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            displayName,
-                                            style: TextStyle(
-                                              color: AppColors.textPrimary,
-                                              fontSize: 13,
-                                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        if (ibanMasked.isNotEmpty) ...[
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            ibanMasked,
-                                            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: catColor.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        catBadge,
-                                        style: TextStyle(color: catColor, fontSize: 9, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    '${bal.toStringAsFixed(2)} €',
-                                    style: TextStyle(
-                                      color: isSelected ? AppColors.accentCyan : AppColors.textPrimary,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  if (isSelected)
-                                    const Text(
-                                      'Actif (Dashboard)',
-                                      style: TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold),
-                                    ),
-                                ],
-                              ),
-                            ],
+                    return InkWell(
+                      onTap: () {
+                        if (accId.isNotEmpty) {
+                          ref.read(settingsProvider.notifier).selectPrimaryAccount(accId);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppColors.accentCyan.withValues(alpha: 0.12)
+                              : AppColors.surfaceVariant.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle.withValues(alpha: 0.5),
+                            width: isSelected ? 1.5 : 1.0,
                           ),
                         ),
-                      );
-                    }),
-                  ],
+                        child: Row(
+                          children: [
+                            Icon(catIcon, size: 18, color: catColor),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          displayName,
+                                          style: TextStyle(
+                                            color: AppColors.textPrimary,
+                                            fontSize: 13,
+                                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (ibanMasked.isNotEmpty) ...[
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          ibanMasked,
+                                          style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: catColor.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      catBadge,
+                                      style: TextStyle(color: catColor, fontSize: 9, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${bal.toStringAsFixed(2)} €',
+                                  style: TextStyle(
+                                    color: isSelected ? AppColors.accentCyan : AppColors.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                if (isSelected)
+                                  const Text(
+                                    'Actif (Dashboard)',
+                                    style: TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
 
                   const SizedBox(height: 16),
                   Row(
@@ -321,8 +318,12 @@ class _BankingModalContentState extends ConsumerState<BankingModalContent> {
                           icon: const Icon(Icons.sync_rounded, size: 16),
                           label: const Text('Actualiser le solde', style: TextStyle(fontWeight: FontWeight.bold)),
                           onPressed: () async {
-                            Navigator.pop(context);
-                            await ref.read(settingsProvider.notifier).syncTrueLayerData(ref);
+                            if (settings.truelayerAccessToken.isEmpty) {
+                              _connectBoursoBank();
+                            } else {
+                              Navigator.pop(context);
+                              await ref.read(settingsProvider.notifier).syncTrueLayerData(ref);
+                            }
                           },
                         ),
                       ),

@@ -263,10 +263,19 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   Future<bool> syncTrueLayerData([WidgetRef? ref]) async {
-    if (state.truelayerAccessToken.isEmpty) return false;
+    String token = state.truelayerAccessToken;
+    if (token.isEmpty) {
+      token = await SecureStorageService.getTrueLayerAccessToken(userId) ??
+              await SecureStorageService.getTrueLayerAccessToken('') ?? '';
+      if (token.isNotEmpty) {
+        state = state.copyWith(truelayerAccessToken: token);
+      }
+    }
+    if (token.isEmpty) return false;
+
     state = state.copyWith(isSyncing: true);
     try {
-      final success = await _fetchAndApplyLiveBankData(state.truelayerAccessToken);
+      final success = await _fetchAndApplyLiveBankData(token);
       state = state.copyWith(isSyncing: false);
       return success;
     } catch (e) {
