@@ -34,32 +34,46 @@ class SalaryState {
 
   SalaryAnalytics get analytics => computeSalaryAnalytics(records);
 
-  double get activeTaxAdjustmentMonthlyInstallment {
+  double taxAdjustmentMonthlyForPeriod(String period) {
     double total = 0;
-    final now = DateTime.now();
-    final mStr = now.month < 10 ? '0${now.month}' : '${now.month}';
-    final currentPeriod = '${now.year}-$mStr';
-
     for (var adj in taxAdjustments) {
-      if (adj.isActiveForPeriod(currentPeriod)) {
+      if (adj.isActiveForPeriod(period)) {
         total += adj.monthlyInstallment;
       }
     }
     return total;
   }
 
-  double get activeTemporaryExpensesMonthlyTotal {
+  double temporaryExpensesMonthlyForPeriod(String period) {
     double total = 0;
-    final now = DateTime.now();
-    final mStr = now.month < 10 ? '0${now.month}' : '${now.month}';
-    final currentPeriod = '${now.year}-$mStr';
-
     for (var exp in temporaryExpenses) {
-      if (exp.isActiveForPeriod(currentPeriod)) {
+      if (exp.isActiveForPeriod(period)) {
         total += exp.monthlyAmount;
       }
     }
     return total;
+  }
+
+  List<TemporaryExpense> getActiveTemporaryExpensesForPeriod(String period) {
+    return temporaryExpenses.where((exp) => exp.isActiveForPeriod(period)).toList();
+  }
+
+  List<TaxAdjustment> getActiveTaxAdjustmentsForPeriod(String period) {
+    return taxAdjustments.where((adj) => adj.isActiveForPeriod(period)).toList();
+  }
+
+  double get activeTaxAdjustmentMonthlyInstallment {
+    final now = DateTime.now();
+    final mStr = now.month < 10 ? '0${now.month}' : '${now.month}';
+    final currentPeriod = '${now.year}-$mStr';
+    return taxAdjustmentMonthlyForPeriod(currentPeriod);
+  }
+
+  double get activeTemporaryExpensesMonthlyTotal {
+    final now = DateTime.now();
+    final mStr = now.month < 10 ? '0${now.month}' : '${now.month}';
+    final currentPeriod = '${now.year}-$mStr';
+    return temporaryExpensesMonthlyForPeriod(currentPeriod);
   }
 
   double get initialDeficit => accountBalance < 0 ? -accountBalance : 0.0;

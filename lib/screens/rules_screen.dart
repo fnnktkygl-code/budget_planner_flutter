@@ -86,16 +86,72 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
 
   List<RuleCategoryItem> _dailyCategories = [
     RuleCategoryItem(id: 'day-1', name: 'Revolut (Reste à vivre)', amount: 7.0, isPercentage: true, iconType: 'card', iconBgColor: AppColors.accentCyan),
-    RuleCategoryItem(id: 'day-2', name: 'Tampon / Marge €', amount: 0, isPercentage: false, iconType: 'basket', iconBgColor: Colors.amber),
   ];
 
   Set<String> _ignoredDetectedTxIds = {};
+  int _selectedForecastOffset = 0; // 0 = Mois en cours (M), 1 = M+1, 2 = M+2, 3 = M+3, 4 = M+4, 5 = M+5
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
     _loadIgnoredSuggestions();
+  }
+
+  DateTime _getDateForOffset(int offset) {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month + offset, 1);
+  }
+
+  String _getPeriodForOffset(int offset) {
+    final d = _getDateForOffset(offset);
+    final mStr = d.month < 10 ? '0${d.month}' : '${d.month}';
+    return '${d.year}-$mStr';
+  }
+
+  String _getMonthName(int month) {
+    const names = [
+      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    ];
+    return names[(month - 1) % 12];
+  }
+
+  String _getMonthShortName(int month) {
+    const names = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
+    return names[(month - 1) % 12];
+  }
+
+  String _getPeriodLabel(int offset) {
+    final d = _getDateForOffset(offset);
+    final name = _getMonthName(d.month);
+    if (offset == 0) return '$name ${d.year} (Mois en cours)';
+    return '$name ${d.year} (M+$offset)';
+  }
+
+  RuleCategoryItem? _findMatchingCategory(DetectedRecurringExpense sugg) {
+    final m = sugg.merchant.toLowerCase();
+    final all = [..._fixedChargesCategories, ..._savingsCategories, ..._dailyCategories];
+    for (var c in all) {
+      final cn = c.name.toLowerCase();
+      if (m.contains('cdc') || m.contains('habitat') || m.contains('loyer')) {
+        if (cn.contains('loyer') || cn.contains('habitat')) return c;
+      }
+      if (m.contains('bpce') || m.contains('assurance') || m.contains('macif') || m.contains('axa') || m.contains('allianz')) {
+        if (cn.contains('assurance') || cn.contains('bpce')) return c;
+      }
+      if (m.contains('sendwave') || m.contains('transfer') || m.contains('remit')) {
+        if (cn.contains('soutien') || cn.contains('sendwave') || cn.contains('famille')) return c;
+      }
+      if (m.contains('tontine')) {
+        if (cn.contains('tontine')) return c;
+      }
+      if (m.contains('netflix') || m.contains('spotify') || m.contains('free') || m.contains('orange') || m.contains('sfr') || m.contains('bouygues')) {
+        if (cn.contains('abonnement') || cn.contains('telecom') || cn.contains('internet')) return c;
+      }
+      if (cn.contains(m) || m.contains(cn)) return c;
+    }
+    return null;
   }
 
   Future<void> _loadIgnoredSuggestions() async {
@@ -150,6 +206,637 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
         ),
       );
     }
+  }
+
+  void _showAssignSuggestionModal(BuildContext parentContext, DetectedRecurringExpense sugg) {
+    showModalBottomSheet(
+      context: parentContext,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        int activeTab = 0; // 0 = Écraser existant, 1 = Nouveau poste dans pilier, 2 = Échéancier temporaire
+        int selectedPillar = 0; // 0 = Charges Fixes, 1 = Épargne, 2 = Quotidien
+        bool isPercentMode = false;
+        bool renameOnOverwrite = false;
+
+        final matched = _findMatchingCategory(sugg);
+        String selectedCategoryPillar = 'Charges Fixes';
+        RuleCategoryItem? targetCategoryToOverwrite = matched ?? (_fixedChargesCategories.isNotEmpty ? _fixedChargesCategories.first : null);
+
+        final nameCtrl = TextEditingController(text: sugg.merchant);
+        final amountCtrl = TextEditingController(text: sugg.amount.toStringAsFixed(2));
+        final durationCtrl = TextEditingController(text: sugg.suggestedDurationMonths.toString());
+        final now = DateTime.now();
+        final mStr = now.month < 10 ? '0${now.month}' : '${now.month}';
+        final startPeriodCtrl = TextEditingController(text: '${now.year}-$mStr');
+
+        return StatefulBuilder(
+          builder: (modalContext, setSheetState) {
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(parentContext).size.height * 0.90,
+              ),
+              decoration: const BoxDecoration(
+                color: AppColors.cardBackground,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border(
+                  top: BorderSide(color: AppColors.accentCyan, width: 1.5),
+                  left: BorderSide(color: AppColors.borderSubtle),
+                  right: BorderSide(color: AppColors.borderSubtle),
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.borderSubtle,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Header with Merchant & Detected Amount
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentCyan.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.hub_rounded, color: AppColors.accentCyan, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              sugg.merchant,
+                              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Flux bancaire identifié : ${sugg.amount.toStringAsFixed(2)} €/mois',
+                              style: const TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
+                        onPressed: () => Navigator.pop(sheetCtx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Tab Selector: 1) Écraser existant | 2) Nouveau Pilier | 3) Échéancier
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setSheetState(() => activeTab = 0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: activeTab == 0 ? AppColors.accentCyan : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '⚡ Écraser / Lier',
+                                style: TextStyle(
+                                  color: activeTab == 0 ? Colors.black : AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setSheetState(() => activeTab = 1),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: activeTab == 1 ? AppColors.accentCyan : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '+ Nouveau Poste',
+                                style: TextStyle(
+                                  color: activeTab == 1 ? Colors.black : AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setSheetState(() => activeTab = 2),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: activeTab == 2 ? AppColors.accentCyan : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '📅 Échéancier',
+                                style: TextStyle(
+                                  color: activeTab == 2 ? Colors.black : AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // TAB CONTENT
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: activeTab == 0
+                          ? _buildOverwriteTab(
+                              sheetCtx,
+                              setSheetState,
+                              sugg,
+                              targetCategoryToOverwrite,
+                              renameOnOverwrite,
+                              (newCat) => setSheetState(() => targetCategoryToOverwrite = newCat),
+                              (val) => setSheetState(() => renameOnOverwrite = val),
+                            )
+                          : activeTab == 1
+                              ? _buildNewPillarTab(
+                                  sheetCtx,
+                                  setSheetState,
+                                  sugg,
+                                  selectedPillar,
+                                  isPercentMode,
+                                  nameCtrl,
+                                  amountCtrl,
+                                  (p) => setSheetState(() => selectedPillar = p),
+                                  (pct) => setSheetState(() => isPercentMode = pct),
+                                )
+                              : _buildTemporaryTab(
+                                  sheetCtx,
+                                  setSheetState,
+                                  sugg,
+                                  nameCtrl,
+                                  amountCtrl,
+                                  durationCtrl,
+                                  startPeriodCtrl,
+                                ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildOverwriteTab(
+    BuildContext sheetCtx,
+    StateSetter setSheetState,
+    DetectedRecurringExpense sugg,
+    RuleCategoryItem? targetCategory,
+    bool renameOnOverwrite,
+    Function(RuleCategoryItem?) onSelectCategory,
+    Function(bool) onToggleRename,
+  ) {
+    final allPillars = [
+      {'title': 'Charges Fixes Incompressibles', 'list': _fixedChargesCategories, 'icon': Icons.lock_clock_rounded, 'color': AppColors.accentRose},
+      {'title': 'Allocations Mensuelles d\'Épargne', 'list': _savingsCategories, 'icon': Icons.shield_rounded, 'color': Colors.blue},
+      {'title': 'Dépenses Quotidiennes', 'list': _dailyCategories, 'icon': Icons.credit_card_rounded, 'color': AppColors.accentCyan},
+    ];
+
+    final salary = ref.read(salaryProvider);
+    final netSalary = salary.activeBaseline?.regularNetSalary ?? 2713.74;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Sélectionnez une catégorie existante à mettre à jour / écraser avec le montant réel débité par votre banque :',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+        ),
+        const SizedBox(height: 14),
+
+        for (var p in allPillars) ...[
+          Text(
+            (p['title'] as String).toUpperCase(),
+            style: TextStyle(color: p['color'] as Color, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderSubtle),
+            ),
+            child: Column(
+              children: (p['list'] as List<RuleCategoryItem>).map((cat) {
+                final isSelected = targetCategory?.id == cat.id;
+                final curAmt = cat.getEffectiveAmount(netSalary);
+                final delta = sugg.amount - curAmt;
+
+                return InkWell(
+                  onTap: () => onSelectCategory(cat),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.15) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: isSelected ? Border.all(color: AppColors.accentCyan) : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                          color: isSelected ? AppColors.accentCyan : AppColors.textMuted,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                cat.name,
+                                style: TextStyle(
+                                  color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Text(
+                                'Actuel : ${curAmt.toStringAsFixed(2)} €/mois (${cat.isPercentage ? "${cat.amount}%" : "Nominal"})',
+                                style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '➔ ${sugg.amount.toStringAsFixed(2)} €',
+                              style: const TextStyle(color: AppColors.accentEmerald, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            Text(
+                              delta == 0 ? 'Identique' : (delta > 0 ? '+${delta.toStringAsFixed(2)} €' : '${delta.toStringAsFixed(2)} €'),
+                              style: TextStyle(
+                                color: delta == 0 ? AppColors.textMuted : (delta > 0 ? AppColors.accentRose : AppColors.accentEmerald),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+
+        if (targetCategory != null) ...[
+          CheckboxListTile(
+            value: renameOnOverwrite,
+            onChanged: (val) => onToggleRename(val ?? false),
+            contentPadding: EdgeInsets.zero,
+            activeColor: AppColors.accentCyan,
+            title: Text(
+              'Renommer également "${targetCategory.name}" en "${sugg.merchant}"',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: Text(
+                'Écraser "${targetCategory.name}" avec ${sugg.amount.toStringAsFixed(2)} €',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              onPressed: () async {
+                setState(() {
+                  targetCategory.amount = sugg.amount;
+                  targetCategory.isPercentage = false;
+                  if (renameOnOverwrite) {
+                    targetCategory.name = sugg.merchant;
+                  }
+                  _ignoredDetectedTxIds.add(sugg.id);
+                });
+                await _saveCategories();
+                await _saveIgnoredSuggestions();
+                if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Catégorie "${targetCategory.name}" mise à jour à ${sugg.amount.toStringAsFixed(2)} €/mois.'),
+                      backgroundColor: AppColors.accentEmerald,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildNewPillarTab(
+    BuildContext sheetCtx,
+    StateSetter setSheetState,
+    DetectedRecurringExpense sugg,
+    int selectedPillar,
+    bool isPercentMode,
+    TextEditingController nameCtrl,
+    TextEditingController amountCtrl,
+    Function(int) onSelectPillar,
+    Function(bool) onTogglePercent,
+  ) {
+    final pillars = [
+      {'name': 'Charges Fixes', 'icon': Icons.lock_clock_rounded, 'color': AppColors.accentRose, 'prefix': 'fix'},
+      {'name': 'Épargne & Invest.', 'icon': Icons.shield_rounded, 'color': Colors.blue, 'prefix': 'sav'},
+      {'name': 'Dépenses Quotidiennes', 'icon': Icons.credit_card_rounded, 'color': AppColors.accentCyan, 'prefix': 'day'},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Choisissez le pilier de destination :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        const SizedBox(height: 10),
+        Row(
+          children: List.generate(pillars.length, (i) {
+            final p = pillars[i];
+            final isSel = selectedPillar == i;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => onSelectPillar(i),
+                child: Container(
+                  margin: EdgeInsets.only(right: i < pillars.length - 1 ? 6 : 0),
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: isSel ? (p['color'] as Color).withValues(alpha: 0.2) : AppColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: isSel ? (p['color'] as Color) : AppColors.borderSubtle),
+                  ),
+                  alignment: Alignment.center,
+                  child: Column(
+                    children: [
+                      Icon(p['icon'] as IconData, color: isSel ? (p['color'] as Color) : AppColors.textMuted, size: 16),
+                      const SizedBox(height: 4),
+                      Text(
+                        p['name'] as String,
+                        style: TextStyle(
+                          color: isSel ? AppColors.textPrimary : AppColors.textMuted,
+                          fontSize: 10,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 16),
+
+        TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(labelText: 'Intitulé de la catégorie', border: OutlineInputBorder()),
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: amountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: isPercentMode ? 'Pourcentage (%)' : 'Montant Mensuel (€)',
+                  suffixText: isPercentMode ? '%' : '€',
+                  border: const OutlineInputBorder(),
+                ),
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 10),
+            IconButton(
+              icon: Icon(isPercentMode ? Icons.percent_rounded : Icons.euro_rounded, color: AppColors.accentCyan),
+              tooltip: 'Basculer % / €',
+              onPressed: () => onTogglePercent(!isPercentMode),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentCyan,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: Text(
+              'Ajouter à ${pillars[selectedPillar]["name"]}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            onPressed: () async {
+              final amt = double.tryParse(amountCtrl.text.trim()) ?? sugg.amount;
+              final name = nameCtrl.text.trim().isEmpty ? sugg.merchant : nameCtrl.text.trim();
+              final p = pillars[selectedPillar];
+
+              final newItem = RuleCategoryItem(
+                id: '${p["prefix"]}-${DateTime.now().millisecondsSinceEpoch}',
+                name: name,
+                amount: amt,
+                isPercentage: isPercentMode,
+                iconType: 'card',
+                iconBgColor: p['color'] as Color,
+              );
+
+              setState(() {
+                if (selectedPillar == 0) {
+                  _fixedChargesCategories.add(newItem);
+                } else if (selectedPillar == 1) {
+                  _savingsCategories.add(newItem);
+                } else {
+                  _dailyCategories.add(newItem);
+                }
+                _ignoredDetectedTxIds.add(sugg.id);
+              });
+
+              await _saveCategories();
+              await _saveIgnoredSuggestions();
+              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('"$name" (${amt.toStringAsFixed(2)} ${isPercentMode ? "%" : "€"}) ajouté avec succès !'),
+                    backgroundColor: AppColors.accentEmerald,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTemporaryTab(
+    BuildContext sheetCtx,
+    StateSetter setSheetState,
+    DetectedRecurringExpense sugg,
+    TextEditingController nameCtrl,
+    TextEditingController amountCtrl,
+    TextEditingController durationCtrl,
+    TextEditingController startPeriodCtrl,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Enregistrez ce flux comme dépense temporaire / échéancier à durée limitée (ex: régularisation Fisc, soins étalés) :',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+        ),
+        const SizedBox(height: 14),
+
+        TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(labelText: 'Intitulé', border: OutlineInputBorder()),
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: amountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Montant Mensuel (€)', suffixText: '€', border: OutlineInputBorder()),
+                style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: durationCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Durée (Mois)', border: OutlineInputBorder()),
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        TextField(
+          controller: startPeriodCtrl,
+          decoration: const InputDecoration(labelText: 'Mois Début (AAAA-MM)', border: OutlineInputBorder(), hintText: 'ex: 2026-09'),
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+        ),
+        const SizedBox(height: 18),
+
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentCyan,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.calendar_month_rounded, size: 18),
+            label: const Text('Créer l\'échéancier temporaire', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            onPressed: () async {
+              final amt = double.tryParse(amountCtrl.text.trim()) ?? sugg.amount;
+              final dur = int.tryParse(durationCtrl.text.trim()) ?? sugg.suggestedDurationMonths;
+              final name = nameCtrl.text.trim().isEmpty ? sugg.merchant : nameCtrl.text.trim();
+              final start = startPeriodCtrl.text.trim().isEmpty ? _getPeriodForOffset(0) : startPeriodCtrl.text.trim();
+
+              final exp = TemporaryExpense(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                label: name,
+                monthlyAmount: amt,
+                startPeriod: start,
+                durationMonths: dur,
+              );
+
+              ref.read(salaryProvider.notifier).addTemporaryExpense(exp);
+              setState(() {
+                _ignoredDetectedTxIds.add(sugg.id);
+              });
+              await _saveIgnoredSuggestions();
+
+              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Échéancier "$name" (${amt.toStringAsFixed(2)} €/mois sur $dur mois) créé.'),
+                    backgroundColor: AppColors.accentEmerald,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   void _showRadarModal(BuildContext context, List<DetectedRecurringExpense> initialSuggestions) {
@@ -289,7 +976,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Aura utilise l\'intelligence artificielle pour nettoyer les libellés bancaires bruts et regrouper vos prélèvements récurrents ou échéances temporaires.',
+                    'Aura analyse vos relevés bancaires pour détecter les flux récurrents. Vous pouvez les écraser sur une catégorie existante (ex: Loyer), les ajouter à un pilier de budget ou créer un échéancier.',
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
                   ),
                   const SizedBox(height: 16),
@@ -322,6 +1009,8 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (c, idx) {
                           final sugg = activeSuggestions[idx];
+                          final matchedCat = _findMatchingCategory(sugg);
+
                           return Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -427,10 +1116,50 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 12),
+
+                                // ACTION BUTTONS
                                 Wrap(
                                   spacing: 8,
                                   runSpacing: 8,
                                   children: [
+                                    // 1-Tap Overwrite shortcut if matching category exists
+                                    if (matchedCat != null)
+                                      ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.accentEmerald.withValues(alpha: 0.15),
+                                          foregroundColor: AppColors.accentEmerald,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            side: BorderSide(color: AppColors.accentEmerald.withValues(alpha: 0.4)),
+                                          ),
+                                        ),
+                                        icon: const Icon(Icons.bolt_rounded, size: 15),
+                                        label: Text(
+                                          'Écraser "${matchedCat.name}" (${matchedCat.amount.toStringAsFixed(0)}€ ➔ ${sugg.amount.toStringAsFixed(2)}€)',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            matchedCat.amount = sugg.amount;
+                                            matchedCat.isPercentage = false;
+                                            _ignoredDetectedTxIds.add(sugg.id);
+                                          });
+                                          _saveCategories();
+                                          _saveIgnoredSuggestions();
+                                          setModalState(() {});
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Catégorie "${matchedCat.name}" mise à jour avec succès : ${sugg.amount.toStringAsFixed(2)} €/mois.'),
+                                              backgroundColor: AppColors.accentEmerald,
+                                              behavior: SnackBarBehavior.floating,
+                                            ),
+                                          );
+                                        },
+                                      ),
+
+                                    // Flexible Assignment Modal button
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: AppColors.accentCyan.withValues(alpha: 0.15),
@@ -442,11 +1171,27 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                           side: BorderSide(color: AppColors.accentCyan.withValues(alpha: 0.4)),
                                         ),
                                       ),
-                                      icon: const Icon(Icons.calendar_month_rounded, size: 14),
-                                      label: Text(
-                                        '+ Échéancier (${sugg.suggestedDurationMonths} mois)',
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      icon: const Icon(Icons.tune_rounded, size: 14),
+                                      label: const Text('Affecter / Personnaliser', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                      onPressed: () {
+                                        _showAssignSuggestionModal(context, sugg);
+                                      },
+                                    ),
+
+                                    // Staggered Schedule quick button
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.cardBackground,
+                                        foregroundColor: AppColors.textPrimary,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          side: const BorderSide(color: AppColors.borderSubtle),
+                                        ),
                                       ),
+                                      icon: const Icon(Icons.calendar_month_rounded, size: 14),
+                                      label: Text('+ Échéancier (${sugg.suggestedDurationMonths}m)', style: const TextStyle(fontSize: 11)),
                                       onPressed: () {
                                         Navigator.pop(ctx);
                                         _showTemporaryExpenseDialog(
@@ -458,24 +1203,8 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                         );
                                       },
                                     ),
-                                    ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.cardBackground,
-                                        foregroundColor: AppColors.textPrimary,
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                          side: const BorderSide(color: AppColors.borderSubtle),
-                                        ),
-                                      ),
-                                      icon: const Icon(Icons.lock_clock_rounded, size: 14),
-                                      label: const Text('+ Charge Fixe', style: TextStyle(fontSize: 11)),
-                                      onPressed: () {
-                                        _addFixedChargeFromSuggestion(sugg);
-                                        setModalState(() {});
-                                      },
-                                    ),
+
+                                    // Ignore button
                                     TextButton.icon(
                                       style: TextButton.styleFrom(
                                         foregroundColor: AppColors.textMuted,
@@ -505,7 +1234,252 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
-  void _showArbitrageDialog(BuildContext context, double deficitAmount, double netSalary) {
+  void _showForecastMatrixModal(BuildContext context, SalaryState salary, double netSalary) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final totalSavings = _savingsCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
+        final baseFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
+        final totalDaily = _dailyCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
+
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.90,
+          ),
+          decoration: const BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border(
+              top: BorderSide(color: AppColors.accentCyan, width: 1.5),
+              left: BorderSide(color: AppColors.borderSubtle),
+              right: BorderSide(color: AppColors.borderSubtle),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.borderSubtle,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentCyan.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.table_chart_rounded, color: AppColors.accentCyan, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'Matrice Prévisionnelle (Horizon 6 Mois)',
+                          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Anticipez l\'impact des échéances futures et ajustez votre épargne.',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: 6,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (c, offset) {
+                    final d = _getDateForOffset(offset);
+                    final period = _getPeriodForOffset(offset);
+                    final periodLabel = _getPeriodLabel(offset);
+                    final isCurrentSelected = _selectedForecastOffset == offset;
+
+                    final monthTax = salary.taxAdjustmentMonthlyForPeriod(period);
+                    final monthTemp = salary.temporaryExpensesMonthlyForPeriod(period);
+                    final activeTempList = salary.getActiveTemporaryExpensesForPeriod(period);
+                    final activeTaxList = salary.getActiveTaxAdjustmentsForPeriod(period);
+
+                    final monthTotalFixed = baseFixed + monthTax + monthTemp;
+                    final monthReste = netSalary - totalSavings - monthTotalFixed - totalDaily;
+                    final isDeficit = monthReste < 0;
+
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isCurrentSelected ? AppColors.accentCyan.withValues(alpha: 0.08) : AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isCurrentSelected ? AppColors.accentCyan : AppColors.borderSubtle,
+                          width: isCurrentSelected ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    periodLabel,
+                                    style: TextStyle(
+                                      color: isCurrentSelected ? AppColors.accentCyan : AppColors.textPrimary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  if (offset == 0) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.accentEmerald.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text('En cours', style: TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isDeficit
+                                      ? AppColors.accentRose.withValues(alpha: 0.15)
+                                      : (monthReste < 150 ? Colors.amber.withValues(alpha: 0.15) : AppColors.accentEmerald.withValues(alpha: 0.15)),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Reste : ${monthReste.toStringAsFixed(2)} €',
+                                  style: TextStyle(
+                                    color: isDeficit ? AppColors.accentRose : (monthReste < 150 ? Colors.amber : AppColors.accentEmerald),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+
+                          // Breakdown rows
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Salaire net :', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                              Text('${netSalary.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Charges fixes socle :', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                              Text('-${baseFixed.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                            ],
+                          ),
+                          if (monthTax > 0 || monthTemp > 0) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text('Échéances actives : ', style: TextStyle(color: AppColors.accentRose, fontSize: 11, fontWeight: FontWeight.w600)),
+                                    Text(
+                                      activeTempList.map((e) => e.label).join(', '),
+                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                                    ),
+                                  ],
+                                ),
+                                Text('-${(monthTax + monthTemp).toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 11)),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Épargne & Quotidien :', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                              Text('-${(totalSavings + totalDaily).toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              if (isDeficit)
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.accentRose.withValues(alpha: 0.15),
+                                    foregroundColor: AppColors.accentRose,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  icon: const Icon(Icons.auto_fix_high_rounded, size: 14),
+                                  label: const Text('Arbitrer ce déficit', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  onPressed: () {
+                                    Navigator.pop(ctx);
+                                    _showArbitrageDialog(context, monthReste.abs(), netSalary, periodLabel: periodLabel);
+                                  },
+                                )
+                              else
+                                const SizedBox.shrink(),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.accentCyan,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                ),
+                                child: Text(isCurrentSelected ? 'Sélectionné' : 'Voir ce mois ➔', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                onPressed: () {
+                                  setState(() => _selectedForecastOffset = offset);
+                                  Navigator.pop(ctx);
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showArbitrageDialog(BuildContext context, double deficitAmount, double netSalary, {String? periodLabel}) {
     final peaIndex = _savingsCategories.indexWhere((c) => c.name.toLowerCase().contains('pea'));
     final peaItem = peaIndex != -1 ? _savingsCategories[peaIndex] : null;
     final currentPeaAmount = peaItem?.getEffectiveAmount(netSalary) ?? 0.0;
@@ -519,10 +1493,10 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
           backgroundColor: AppColors.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
-            children: const [
-              Icon(Icons.auto_fix_high_rounded, color: AppColors.accentCyan, size: 22),
-              SizedBox(width: 10),
-              Text('Arbitrage Anti-Découvert', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+            children: [
+              const Icon(Icons.auto_fix_high_rounded, color: AppColors.accentCyan, size: 22),
+              const SizedBox(width: 10),
+              Text(periodLabel != null ? 'Arbitrage $periodLabel' : 'Arbitrage Anti-Découvert', style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
             ],
           ),
           content: Column(
@@ -530,7 +1504,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Votre compte présente un solde de -${deficitAmount.toStringAsFixed(2)} €.\n\nPour éviter de réduire votre train de vie quotidien, vous pouvez réallouer temporairement une part de votre épargne PEA ce mois-ci afin de résorber ce découvert.',
+                'Un déficit de -${deficitAmount.toStringAsFixed(2)} € est calculé${periodLabel != null ? " pour $periodLabel" : ""}.\n\nPour préserver votre reste à vivre et éviter tout découvert, vous pouvez ajuster temporairement votre épargne PEA :',
                 style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
               ),
               const SizedBox(height: 16),
@@ -554,7 +1528,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Absorption Découvert :', style: TextStyle(color: AppColors.accentRose, fontSize: 12)),
+                        const Text('Absorption Déficit :', style: TextStyle(color: AppColors.accentRose, fontSize: 12)),
                         Text('-${deficitAmount.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 12)),
                       ],
                     ),
@@ -592,7 +1566,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Modulation appliquée : Cible PEA ajustée à ${peaItem.isPercentage ? "${peaItem.amount}%" : "${peaItem.amount}€"} pour résorber le découvert.'),
+                      content: Text('Modulation appliquée : Cible PEA ajustée à ${peaItem.isPercentage ? "${peaItem.amount}%" : "${peaItem.amount}€"}.'),
                       backgroundColor: AppColors.accentEmerald,
                       behavior: SnackBarBehavior.floating,
                     ),
@@ -623,6 +1597,17 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
         if (data.containsKey('daily')) {
           _dailyCategories = (data['daily'] as List).map((i) => RuleCategoryItem.fromJson(i)).toList();
         }
+        
+        // Permanent clean up of any legacy 'Tampon' / 'Marge' from daily categories
+        final initialDailyCount = _dailyCategories.length;
+        _dailyCategories = _dailyCategories.where((c) {
+          final l = c.name.toLowerCase();
+          return !l.contains('tampon') && !l.contains('marge');
+        }).toList();
+        if (_dailyCategories.length != initialDailyCount) {
+          _saveCategories();
+        }
+
         setState(() {});
       } catch (_) {}
     }
@@ -1383,6 +2368,217 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
+  Widget _buildForecastHorizonSelector(SalaryState salary, double netSalary) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.timeline_rounded, color: AppColors.accentCyan, size: 18),
+                  SizedBox(width: 8),
+                  Text(
+                    'HORIZON PRÉVISIONNEL & SIMULATION',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              InkWell(
+                onTap: () => _showForecastMatrixModal(context, salary, netSalary),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentCyan.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.table_chart_rounded, size: 13, color: AppColors.accentCyan),
+                      SizedBox(width: 4),
+                      Text(
+                        'Matrice 6 Mois',
+                        style: TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(6, (offset) {
+                final d = _getDateForOffset(offset);
+                final period = _getPeriodForOffset(offset);
+                final isSelected = _selectedForecastOffset == offset;
+                final monthShort = _getMonthShortName(d.month);
+
+                final extraTax = salary.taxAdjustmentMonthlyForPeriod(period);
+                final extraTemp = salary.temporaryExpensesMonthlyForPeriod(period);
+                final totalExtra = extraTax + extraTemp;
+
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedForecastOffset = offset),
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.accentCyan.withValues(alpha: 0.18)
+                          : AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? AppColors.accentCyan : AppColors.borderSubtle,
+                        width: isSelected ? 1.5 : 1.0,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              offset == 0 ? '$monthShort (En cours)' : '$monthShort (M+$offset)',
+                              style: TextStyle(
+                                color: isSelected ? AppColors.accentCyan : AppColors.textPrimary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                            if (offset == 0) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.accentEmerald,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        if (totalExtra > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentRose.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '+${totalExtra.toStringAsFixed(0)} € échéances',
+                              style: const TextStyle(color: AppColors.accentRose, fontSize: 9, fontWeight: FontWeight.bold),
+                            ),
+                          )
+                        else
+                          const Text(
+                            'Socle standard',
+                            style: TextStyle(color: AppColors.textMuted, fontSize: 10),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPredictiveArbitrageBanner(SalaryState salary, double netSalary, double resteAVivre, List<TemporaryExpense> activeTempList, String selectedPeriodLabel) {
+    if (resteAVivre >= 0 && _selectedForecastOffset == 0) {
+      return const SizedBox.shrink();
+    }
+
+    final isDeficit = resteAVivre < 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDeficit ? AppColors.accentRose.withValues(alpha: 0.1) : AppColors.accentCyan.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDeficit ? AppColors.accentRose.withValues(alpha: 0.4) : AppColors.accentCyan.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isDeficit ? Icons.warning_amber_rounded : Icons.auto_awesome_rounded,
+            color: isDeficit ? AppColors.accentRose : AppColors.accentCyan,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isDeficit ? 'Alerte Tension Prévisionnelle • $selectedPeriodLabel' : 'Anticipation Budgétaire • $selectedPeriodLabel',
+                      style: TextStyle(
+                        color: isDeficit ? AppColors.accentRose : AppColors.accentCyan,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (isDeficit)
+                      InkWell(
+                        onTap: () => _showArbitrageDialog(context, resteAVivre.abs(), netSalary, periodLabel: selectedPeriodLabel),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentCyan,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text('Arbitrer PEA', style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isDeficit
+                      ? 'Avec les charges et échéances actives (${activeTempList.map((e) => "${e.label} ${e.monthlyAmount.toStringAsFixed(0)}€").join(", ")}), votre reste à vivre est en déficit de -${resteAVivre.abs().toStringAsFixed(2)} €. Nous vous conseillons de réallouer temporairement votre épargne PEA.'
+                      : 'Vue simulée pour $selectedPeriodLabel : Vos flux et échéances actives (${activeTempList.isNotEmpty ? activeTempList.map((e) => e.label).join(", ") : "Socle fixe"}) sont pris en compte.',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final salary = ref.watch(salaryProvider);
@@ -1391,10 +2587,18 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     final extraAmount = baseRecord?.calculatedExtraAmount ?? 0.0;
     final hasBonus = extraAmount > 0;
 
-    final taxMonthly = salary.activeTaxAdjustmentMonthlyInstallment;
-    final tempMonthly = salary.activeTemporaryExpensesMonthlyTotal;
+    final selectedPeriod = _getPeriodForOffset(_selectedForecastOffset);
+    final selectedDate = _getDateForOffset(_selectedForecastOffset);
+    final selectedPeriodLabel = _getPeriodLabel(_selectedForecastOffset);
+
+    final taxMonthly = salary.taxAdjustmentMonthlyForPeriod(selectedPeriod);
+    final tempMonthly = salary.temporaryExpensesMonthlyForPeriod(selectedPeriod);
+    final activeTempList = salary.getActiveTemporaryExpensesForPeriod(selectedPeriod);
+    final activeTaxList = salary.getActiveTaxAdjustmentsForPeriod(selectedPeriod);
+
     final totalSavings = _savingsCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
-    final totalFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary)) + taxMonthly + tempMonthly;
+    final baseFixed = _fixedChargesCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
+    final totalFixed = baseFixed + taxMonthly + tempMonthly;
     final totalDaily = _dailyCategories.fold(0.0, (sum, c) => sum + c.getEffectiveAmount(netSalary));
 
     final resteAVivre = netSalary - totalSavings - totalFixed - totalDaily;
@@ -1474,7 +2678,13 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                 ),
               ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            // FORECAST HORIZON SELECTOR
+            _buildForecastHorizonSelector(salary, netSalary),
+
+            // PREDICTIVE ARBITRAGE ADVISOR BANNER (if deficit or future period)
+            _buildPredictiveArbitrageBanner(salary, netSalary, resteAVivre, activeTempList, selectedPeriodLabel),
 
             // Sleek Dark Theme Card — RESTE À VIVRE & ALLOCATION GAUGE
             LayoutBuilder(builder: (context, constraints) {
@@ -1500,9 +2710,11 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'RESTE À VIVRE THÉORIQUE — MODÈLE MENSUEL',
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                        Text(
+                          _selectedForecastOffset == 0
+                              ? 'RESTE À VIVRE THÉORIQUE — MODÈLE MENSUEL'
+                              : 'RESTE À VIVRE PRÉVISIONNEL — ${selectedPeriodLabel.toUpperCase()}',
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1548,7 +2760,9 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Marge mensuelle non allouée issue de votre salaire net (${netSalary.toStringAsFixed(2)} €), après déduction des charges fixes (${totalFixed.toStringAsFixed(2)} €), de l\'épargne (${totalSavings.toStringAsFixed(2)} €) et du quotidien (${totalDaily.toStringAsFixed(2)} €).',
+                      _selectedForecastOffset == 0
+                          ? 'Marge mensuelle non allouée issue de votre salaire net (${netSalary.toStringAsFixed(2)} €), après déduction des charges fixes (${totalFixed.toStringAsFixed(2)} €), de l\'épargne (${totalSavings.toStringAsFixed(2)} €) et du quotidien (${totalDaily.toStringAsFixed(2)} €).'
+                          : 'Simulation prévisionnelle pour ${_getMonthName(selectedDate.month)} ${selectedDate.year} : Salaire net (${netSalary.toStringAsFixed(2)} €) - Charges fixes (${baseFixed.toStringAsFixed(2)} €) - Échéances actives (${(taxMonthly + tempMonthly).toStringAsFixed(2)} €) - Épargne (${totalSavings.toStringAsFixed(2)} €) - Quotidien (${totalDaily.toStringAsFixed(2)} €).',
                       style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
                     ),
                     const SizedBox(height: 14),
@@ -1954,13 +3168,16 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   else
                     Column(
                       children: salary.temporaryExpenses.map((exp) {
+                        final isActiveOnSelected = exp.isActiveForPeriod(selectedPeriod);
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: AppColors.surface,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.borderSubtle),
+                            border: Border.all(
+                              color: isActiveOnSelected ? AppColors.accentCyan.withValues(alpha: 0.4) : AppColors.borderSubtle,
+                            ),
                           ),
                           child: Row(
                             children: [
@@ -1975,14 +3192,14 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: exp.isActiveForPeriod('${DateTime.now().year}-${DateTime.now().month < 10 ? '0${DateTime.now().month}' : DateTime.now().month}') ? AppColors.accentEmerald.withValues(alpha: 0.15) : AppColors.surface,
+                                            color: isActiveOnSelected ? AppColors.accentEmerald.withValues(alpha: 0.15) : AppColors.surface,
                                             borderRadius: BorderRadius.circular(4),
-                                            border: Border.all(color: exp.isActiveForPeriod('${DateTime.now().year}-${DateTime.now().month < 10 ? '0${DateTime.now().month}' : DateTime.now().month}') ? AppColors.accentEmerald.withValues(alpha: 0.3) : AppColors.borderSubtle),
+                                            border: Border.all(color: isActiveOnSelected ? AppColors.accentEmerald.withValues(alpha: 0.3) : AppColors.borderSubtle),
                                           ),
                                           child: Text(
-                                            exp.isActiveForPeriod('${DateTime.now().year}-${DateTime.now().month < 10 ? '0${DateTime.now().month}' : DateTime.now().month}') ? 'Actif ce mois' : 'À venir / Terminé',
+                                            isActiveOnSelected ? 'Actif sur $selectedPeriod' : 'Inactif sur $selectedPeriod',
                                             style: TextStyle(
-                                              color: exp.isActiveForPeriod('${DateTime.now().year}-${DateTime.now().month < 10 ? '0${DateTime.now().month}' : DateTime.now().month}') ? AppColors.accentEmerald : AppColors.textSecondary,
+                                              color: isActiveOnSelected ? AppColors.accentEmerald : AppColors.textSecondary,
                                               fontSize: 9,
                                               fontWeight: FontWeight.bold,
                                             ),
@@ -2039,24 +3256,44 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               netSalary,
               allowDelete: true,
               onAdd: () => _showAddCategoryDialog(_fixedChargesCategories, 'Charge', AppColors.accentRose),
-              extraWidget: taxMonthly > 0
+              extraWidget: (taxMonthly > 0 || tempMonthly > 0)
                   ? Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: AppColors.accentRose.withValues(alpha: 0.1),
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
                         children: [
-                          Row(
-                            children: const [
-                              Icon(Icons.account_balance_rounded, color: AppColors.accentRose, size: 18),
-                              SizedBox(width: 10),
-                              Text('Impôts DGFiP (Régularisation Étalée)', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
-                            ],
-                          ),
-                          Text('-${taxMonthly.toStringAsFixed(2)} €/mois', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
+                          if (taxMonthly > 0)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: const [
+                                    Icon(Icons.account_balance_rounded, color: AppColors.accentRose, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('Impôts DGFiP (Régularisation Étalée)', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                                  ],
+                                ),
+                                Text('-${taxMonthly.toStringAsFixed(2)} €/mois', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
+                              ],
+                            ),
+                          if (taxMonthly > 0 && tempMonthly > 0) const SizedBox(height: 8),
+                          if (tempMonthly > 0)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.calendar_month_rounded, color: AppColors.accentRose, size: 18),
+                                    const SizedBox(width: 10),
+                                    Text('Échéances actives (${activeTempList.length})', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                                  ],
+                                ),
+                                Text('-${tempMonthly.toStringAsFixed(2)} €/mois', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 13)),
+                              ],
+                            ),
                         ],
                       ),
                     )
