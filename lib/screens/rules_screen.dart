@@ -6,6 +6,8 @@ import '../constants/colors.dart';
 import '../core/providers/salary_provider.dart';
 import '../core/providers/settings_provider.dart';
 import '../core/providers/auth_provider.dart';
+import '../core/providers/budget_provider.dart';
+import '../services/banking_analyzer_service.dart';
 import '../models/temporary_expense.dart';
 import '../widgets/notification_header.dart';
 
@@ -87,10 +89,167 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     RuleCategoryItem(id: 'day-2', name: 'Tampon / Marge €', amount: 0, isPercentage: false, iconType: 'basket', iconBgColor: Colors.amber),
   ];
 
+  Set<String> _ignoredDetectedTxIds = {};
+
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    _loadIgnoredSuggestions();
+  }
+
+  Future<void> _loadIgnoredSuggestions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = ref.read(authProvider).user?.id ?? '';
+    final key = userId.isEmpty ? 'aura_ignored_detected_txs' : '${userId}_aura_ignored_detected_txs';
+    final rawList = prefs.getStringList(key);
+    if (rawList != null) {
+      setState(() {
+        _ignoredDetectedTxIds = rawList.toSet();
+      });
+    }
+  }
+
+  Future<void> _saveIgnoredSuggestions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = ref.read(authProvider).user?.id ?? '';
+    final key = userId.isEmpty ? 'aura_ignored_detected_txs' : '${userId}_aura_ignored_detected_txs';
+    await prefs.setStringList(key, _ignoredDetectedTxIds.toList());
+  }
+
+  Future<void> _ignoreSuggestion(String id) async {
+    setState(() {
+      _ignoredDetectedTxIds.add(id);
+    });
+    await _saveIgnoredSuggestions();
+  }
+
+  Future<void> _addFixedChargeFromSuggestion(DetectedRecurringExpense sugg) async {
+    setState(() {
+      _fixedChargesCategories.add(
+        RuleCategoryItem(
+          id: 'fix-${DateTime.now().millisecondsSinceEpoch}',
+          name: sugg.merchant,
+          amount: sugg.amount,
+          isPercentage: false,
+          isLocked: false,
+          iconType: 'card',
+          iconBgColor: AppColors.accentRose,
+        ),
+      );
+      _ignoredDetectedTxIds.add(sugg.id);
+    });
+    await _saveCategories();
+    await _saveIgnoredSuggestions();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${sugg.merchant} (${sugg.amount.toStringAsFixed(2)} €/mois) ajouté aux Charges Fixes.'),
+          backgroundColor: AppColors.accentEmerald,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _showArbitrageDialog(BuildContext context, double deficitAmount, double netSalary) {
+    final peaIndex = _savingsCategories.indexWhere((c) => c.name.toLowerCase().contains('pea'));
+    final peaItem = peaIndex != -1 ? _savingsCategories[peaIndex] : null;
+    final currentPeaAmount = peaItem?.getEffectiveAmount(netSalary) ?? 0.0;
+    final recommendedPeaAmount = (currentPeaAmount - deficitAmount).clamp(0.0, currentPeaAmount);
+    final recommendedPeaPercent = netSalary > 0 ? (recommendedPeaAmount / netSalary * 100) : 0.0;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.auto_fix_high_rounded, color: AppColors.accentCyan, size: 22),
+              SizedBox(width: 10),
+              Text('Arbitrage Anti-Découvert', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Votre compte présente un solde de -${deficitAmount.toStringAsFixed(2)} €.\n\nPour éviter de réduire votre train de vie quotidien, vous pouvez réallouer temporairement une part de votre épargne PEA ce mois-ci afin de résorber ce découvert.',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Épargne PEA Actuelle :', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        Text('${currentPeaAmount.toStringAsFixed(2)} € (${peaItem?.amount.toStringAsFixed(1)}%)', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Absorption Découvert :', style: TextStyle(color: AppColors.accentRose, fontSize: 12)),
+                        Text('-${deficitAmount.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    ),
+                    const Divider(height: 16, color: AppColors.borderSubtle),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('PEA Modulé Recommandé :', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text('${recommendedPeaAmount.toStringAsFixed(2)} € (${recommendedPeaPercent.toStringAsFixed(1)}%)', style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 13)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Fermer', style: TextStyle(color: AppColors.textSecondary)),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            if (peaItem != null)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.black),
+                child: const Text('Appliquer l\'arbitrage', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  setState(() {
+                    if (peaItem.isPercentage) {
+                      peaItem.amount = double.parse(recommendedPeaPercent.toStringAsFixed(1));
+                    } else {
+                      peaItem.amount = double.parse(recommendedPeaAmount.toStringAsFixed(0));
+                    }
+                  });
+                  _saveCategories();
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Modulation appliquée : Cible PEA ajustée à ${peaItem.isPercentage ? "${peaItem.amount}%" : "${peaItem.amount}€"} pour résorber le découvert.'),
+                      backgroundColor: AppColors.accentEmerald,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _loadCategories() async {
@@ -636,16 +795,24 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
-  void _showTemporaryExpenseDialog(BuildContext context, {TemporaryExpense? expense}) {
+  void _showTemporaryExpenseDialog(
+    BuildContext context, {
+    TemporaryExpense? expense,
+    String? initialLabel,
+    double? initialAmount,
+    int? initialDurationMonths,
+    String? initialStartPeriod,
+    String? initialSuggestionId,
+  }) {
     final isEditing = expense != null;
     final now = DateTime.now();
     final mStr = now.month < 10 ? '0${now.month}' : '${now.month}';
-    final currentPeriodStr = '${now.year}-$mStr';
+    final currentPeriodStr = initialStartPeriod ?? '${now.year}-$mStr';
 
-    final labelCtrl = TextEditingController(text: isEditing ? expense.label : 'Dentiste Couronne');
-    final amountCtrl = TextEditingController(text: isEditing ? expense.monthlyAmount.toStringAsFixed(2) : '164.50');
+    final labelCtrl = TextEditingController(text: isEditing ? expense.label : (initialLabel ?? 'Dentiste Couronne'));
+    final amountCtrl = TextEditingController(text: isEditing ? expense.monthlyAmount.toStringAsFixed(2) : (initialAmount != null ? initialAmount.toStringAsFixed(2) : '164.50'));
     final startCtrl = TextEditingController(text: isEditing ? expense.startPeriod : currentPeriodStr);
-    final durationCtrl = TextEditingController(text: isEditing ? expense.durationMonths.toString() : '12');
+    final durationCtrl = TextEditingController(text: isEditing ? expense.durationMonths.toString() : (initialDurationMonths != null ? initialDurationMonths.toString() : '12'));
 
     showDialog(
       context: context,
@@ -746,6 +913,9 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                       durationMonths: int.tryParse(durationCtrl.text) ?? 12,
                     );
                     ref.read(salaryProvider.notifier).addTemporaryExpense(exp);
+                    if (initialSuggestionId != null) {
+                      _ignoreSuggestion(initialSuggestionId);
+                    }
                     Navigator.pop(ctx);
                   },
                 ),
@@ -876,6 +1046,18 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
 
     final resteAVivre = netSalary - totalSavings - totalFixed - totalDaily;
 
+    final allTransactions = ref.watch(budgetProvider).transactions;
+    final detectedSuggestions = BankingAnalyzerService.analyzeTransactions(
+      transactions: allTransactions,
+      existingExpenses: salary.temporaryExpenses,
+      existingLabels: [
+        ..._fixedChargesCategories.map((c) => c.name),
+        ..._savingsCategories.map((c) => c.name),
+        ..._dailyCategories.map((c) => c.name),
+      ],
+      ignoredIds: _ignoredDetectedTxIds,
+    );
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const NotificationHeaderWidget(title: 'Règles de Répartition'),
@@ -960,64 +1142,175 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                 return AppColors.accentEmerald;
               }
               
+              final realDiscretionary = bal < 0 ? resteAVivre + bal : resteAVivre;
+
               final heroA = Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: AppColors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.borderSubtle),
+                  border: Border.all(
+                    color: bal < 0 ? AppColors.accentRose.withValues(alpha: 0.4) : AppColors.borderSubtle,
+                    width: bal < 0 ? 1.5 : 1.0,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('RESTE À VIVRE — CE MOIS-CI', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          bal < 0 ? 'TRÉSORERIE RÉELLE RESTANTE (APRÈS DÉCOUVERT)' : 'RESTE À VIVRE — CE MOIS-CI',
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                        ),
+                        if (salary.syncBankName != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentEmerald.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('Solde Live', style: TextStyle(color: AppColors.accentEmerald, fontSize: 9, fontWeight: FontWeight.bold)),
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
-                        Text('${resteAVivre.toStringAsFixed(2)} €', style: TextStyle(color: resteAVivre < 0 ? AppColors.accentRose : AppColors.textPrimary, fontSize: 36, fontWeight: FontWeight.bold)),
+                        Text(
+                          '${realDiscretionary.toStringAsFixed(2)} €',
+                          style: TextStyle(
+                            color: realDiscretionary < 0
+                                ? AppColors.accentRose
+                                : (realDiscretionary < 100 ? Colors.amber : AppColors.textPrimary),
+                            fontSize: 36,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(width: 12),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.borderSubtle)),
-                          child: Text('${(netSalary > 0 ? (resteAVivre / netSalary * 100) : 0).toStringAsFixed(1)} % du net', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        InkWell(
-                          onTap: () {},
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(color: AppColors.surface, shape: BoxShape.circle, border: Border.all(color: AppColors.borderSubtle)),
-                            child: const Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 14),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(100),
+                            border: Border.all(color: AppColors.borderSubtle),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: RichText(
-                            text: TextSpan(
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4, fontFamily: 'Inter'),
-                              children: [
-                                TextSpan(text: bal < 0 ? 'Un déficit reporté ramène votre trésorerie projetée à ' : 'Votre solde bancaire actuel porte votre trésorerie projetée à '),
-                                TextSpan(
-                                  text: '${projBal.toStringAsFixed(2)} €',
-                                  style: TextStyle(
-                                    color: projBal < 0 ? AppColors.accentRose : AppColors.accentEmerald,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const TextSpan(text: ' fin de mois — détail dans « Trésorerie & sécurité ».'),
-                              ],
+                          child: Text(
+                            bal < 0
+                                ? 'Absorption du découvert'
+                                : '${(netSalary > 0 ? (resteAVivre / netSalary * 100) : 0).toStringAsFixed(1)} % du net',
+                            style: TextStyle(
+                              color: bal < 0 ? AppColors.accentRose : AppColors.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                    if (bal < 0) ...[
+                      // Interactive Formula Breakdown Pill
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.borderSubtle),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${resteAVivre.toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 11)),
+                            const Text(' théoriq. ', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                            const Text('— ', style: TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold)),
+                            Text('${bal.abs().toStringAsFixed(2)} €', style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 11)),
+                            const Text(' découv. ', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                            const Text('= ', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold)),
+                            Text(
+                              '${realDiscretionary.toStringAsFixed(2)} €',
+                              style: TextStyle(
+                                color: realDiscretionary < 0 ? AppColors.accentRose : AppColors.accentEmerald,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                            ),
+                            const Text(' dispo', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Smart Arbitrage Recommendation Banner
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentCyan.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.25)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.auto_fix_high_rounded, color: AppColors.accentCyan, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Conseil Trésorerie : Réduire temporairement le versement PEA de ${bal.abs().toStringAsFixed(0)} € restaure instantanément votre sécurité.',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: () => _showArbitrageDialog(context, bal.abs(), netSalary),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentCyan,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text('Arbitrer', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      Row(
+                        children: [
+                          InkWell(
+                            onTap: () {},
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(color: AppColors.surface, shape: BoxShape.circle, border: Border.all(color: AppColors.borderSubtle)),
+                              child: const Icon(Icons.info_outline_rounded, color: AppColors.textMuted, size: 14),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: RichText(
+                              text: TextSpan(
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4, fontFamily: 'Inter'),
+                                children: [
+                                  const TextSpan(text: 'Votre solde bancaire actuel porte votre trésorerie projetée à '),
+                                  TextSpan(
+                                    text: '${projBal.toStringAsFixed(2)} €',
+                                    style: TextStyle(
+                                      color: projBal < 0 ? AppColors.accentRose : AppColors.accentEmerald,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const TextSpan(text: ' fin de mois.'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: SizedBox(
@@ -1028,7 +1321,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                               Expanded(flex: ((totalFixed / netSalary) * 100).round().clamp(1, 100), child: Container(color: AppColors.accentRose)),
                               Expanded(flex: ((totalSavings / netSalary) * 100).round().clamp(1, 100), child: Container(color: Colors.blue)),
                               Expanded(flex: ((totalDaily / netSalary) * 100).round().clamp(1, 100), child: Container(color: Colors.amber)),
-                              Expanded(flex: ((resteAVivre / netSalary) * 100).round().clamp(0, 100), child: Container(color: AppColors.accentEmerald)),
+                              Expanded(flex: ((resteAVivre.clamp(0.0, netSalary) / netSalary) * 100).round().clamp(0, 100), child: Container(color: AppColors.accentEmerald)),
                             ],
                           ],
                         ),
@@ -1269,6 +1562,184 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
               );
             }),
             const SizedBox(height: 24),
+            if (detectedSuggestions.isNotEmpty) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBackground,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.5), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.accentCyan.withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentCyan.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.radar_rounded, color: AppColors.accentCyan, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text('Radar Open Banking', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accentCyan,
+                                      borderRadius: BorderRadius.circular(100),
+                                    ),
+                                    child: Text(
+                                      '${detectedSuggestions.length} flux détecté${detectedSuggestions.length > 1 ? "s" : ""}',
+                                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              const Text('Dépenses récurrentes ou échéances identifiées sur votre compte BoursoBank', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Column(
+                      children: detectedSuggestions.map((sugg) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.borderSubtle),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(sugg.merchant, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.accentCyan.withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(sugg.suggestedCategory, style: const TextStyle(color: AppColors.accentCyan, fontSize: 9, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          sugg.reason,
+                                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Libellé brut : ${sugg.rawTitle}',
+                                          style: const TextStyle(color: AppColors.textMuted, fontSize: 10, fontStyle: FontStyle.italic),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '-${sugg.amount.toStringAsFixed(2)} €',
+                                    style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.accentCyan.withValues(alpha: 0.15),
+                                      foregroundColor: AppColors.accentCyan,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        side: BorderSide(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.add_rounded, size: 14),
+                                    label: Text('+ Échéance (${sugg.suggestedDurationMonths} mois)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                    onPressed: () {
+                                      _showTemporaryExpenseDialog(
+                                        context,
+                                        initialLabel: sugg.merchant,
+                                        initialAmount: sugg.amount,
+                                        initialDurationMonths: sugg.suggestedDurationMonths,
+                                        initialSuggestionId: sugg.id,
+                                      );
+                                    },
+                                  ),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.surface,
+                                      foregroundColor: AppColors.textPrimary,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        side: const BorderSide(color: AppColors.borderSubtle),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.lock_clock_rounded, size: 14),
+                                    label: const Text('+ Charge Fixe', style: TextStyle(fontSize: 11)),
+                                    onPressed: () => _addFixedChargeFromSuggestion(sugg),
+                                  ),
+                                  TextButton.icon(
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: AppColors.textMuted,
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                    ),
+                                    icon: const Icon(Icons.close_rounded, size: 14),
+                                    label: const Text('Ignorer', style: TextStyle(fontSize: 11)),
+                                    onPressed: () => _ignoreSuggestion(sugg.id),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             // SECTION DÉPENSES TEMPORAIRES ÉCHÉANCÉES (Dentiste 12 mois, Crédits N fois...)
             Container(

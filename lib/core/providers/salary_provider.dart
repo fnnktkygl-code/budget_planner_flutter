@@ -62,6 +62,16 @@ class SalaryState {
     return total;
   }
 
+  double get initialDeficit => accountBalance < 0 ? -accountBalance : 0.0;
+
+  /// Real discretionary cashflow accounting for current bank deficit
+  double computeRealDiscretionary(double theoreticalDiscretionary) {
+    if (accountBalance < 0) {
+      return theoreticalDiscretionary + accountBalance;
+    }
+    return theoreticalDiscretionary;
+  }
+
   SalaryState copyWith({
     List<SalaryRecord>? records,
     List<TaxAdjustment>? taxAdjustments,
