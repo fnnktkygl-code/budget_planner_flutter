@@ -152,19 +152,42 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     }
   }
 
-  void _showRadarModal(BuildContext context, List<DetectedRecurringExpense> suggestions) {
+  void _showRadarModal(BuildContext context, List<DetectedRecurringExpense> initialSuggestions) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
+        bool isAiEnhancing = false;
+        List<DetectedRecurringExpense> suggestions = List.from(initialSuggestions);
+
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
             final activeSuggestions = suggestions.where((s) => !_ignoredDetectedTxIds.contains(s.id)).toList();
 
+            void runAiEnhancement() async {
+              if (isAiEnhancing) return;
+              setModalState(() => isAiEnhancing = true);
+              try {
+                final enhanced = await BankingAnalyzerService.enhanceWithGeminiAi(
+                  currentSuggestions: suggestions,
+                );
+                if (modalCtx.mounted) {
+                  setModalState(() {
+                    suggestions = enhanced;
+                    isAiEnhancing = false;
+                  });
+                }
+              } catch (_) {
+                if (modalCtx.mounted) {
+                  setModalState(() => isAiEnhancing = false);
+                }
+              }
+            }
+
             return Container(
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.85,
+                maxHeight: MediaQuery.of(context).size.height * 0.88,
               ),
               decoration: const BoxDecoration(
                 color: AppColors.cardBackground,
@@ -206,20 +229,58 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Radar Open Banking',
-                              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                            Row(
+                              children: [
+                                const Text(
+                                  'Radar Open Banking',
+                                  style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accentCyan.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(100),
+                                    border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.auto_awesome, size: 10, color: AppColors.accentCyan),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'IA Propre',
+                                        style: TextStyle(color: AppColors.accentCyan, fontSize: 9, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 2),
                             Text(
                               activeSuggestions.isEmpty
                                   ? 'Toutes les suggestions sont traitées'
-                                  : '${activeSuggestions.length} flux identifié${activeSuggestions.length > 1 ? "s" : ""}',
+                                  : '${activeSuggestions.length} flux identifié${activeSuggestions.length > 1 ? "s" : ""} (doublons regroupés)',
                               style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                             ),
                           ],
                         ),
                       ),
+                      if (activeSuggestions.isNotEmpty && activeSuggestions.any((s) => !s.isAiCleaned))
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            backgroundColor: AppColors.accentCyan.withValues(alpha: 0.1),
+                            foregroundColor: AppColors.accentCyan,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: isAiEnhancing
+                              ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentCyan))
+                              : const Icon(Icons.auto_awesome, size: 13),
+                          label: Text(isAiEnhancing ? 'IA...' : 'Affiner IA', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          onPressed: isAiEnhancing ? null : runAiEnhancement,
+                        ),
                       IconButton(
                         icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
                         onPressed: () => Navigator.pop(ctx),
@@ -228,7 +289,7 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Aura a analysé les transactions de votre compte BoursoBank pour détecter vos prélèvements récurrents ou échéances temporaires non encore déclarés.',
+                    'Aura utilise l\'intelligence artificielle pour nettoyer les libellés bancaires bruts et regrouper vos prélèvements récurrents ou échéances temporaires.',
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
                   ),
                   const SizedBox(height: 16),
@@ -278,37 +339,90 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Row(
+                                          Text(
+                                            sugg.merchant,
+                                            style: const TextStyle(
+                                              color: AppColors.textPrimary,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            crossAxisAlignment: WrapCrossAlignment.center,
                                             children: [
-                                              Text(
-                                                sugg.merchant,
-                                                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
-                                              ),
-                                              const SizedBox(width: 8),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                                                 decoration: BoxDecoration(
                                                   color: AppColors.accentCyan.withValues(alpha: 0.12),
-                                                  borderRadius: BorderRadius.circular(4),
+                                                  borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
                                                   sugg.suggestedCategory,
                                                   style: const TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
                                                 ),
                                               ),
+                                              if (sugg.occurrenceCount > 1)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.cardBackground,
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: AppColors.borderSubtle),
+                                                  ),
+                                                  child: Text(
+                                                    '${sugg.occurrenceCount}x identifié',
+                                                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                                                  ),
+                                                ),
+                                              if (sugg.isAiCleaned)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.accentPurple.withValues(alpha: 0.15),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: const [
+                                                      Icon(Icons.auto_awesome, size: 10, color: AppColors.accentPurple),
+                                                      SizedBox(width: 3),
+                                                      Text('IA Certifiée', style: TextStyle(color: AppColors.accentPurple, fontSize: 9, fontWeight: FontWeight.bold)),
+                                                    ],
+                                                  ),
+                                                ),
                                             ],
                                           ),
-                                          const SizedBox(height: 4),
+                                          const SizedBox(height: 6),
                                           Text(
                                             sugg.reason,
-                                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    Text(
-                                      '-${sugg.amount.toStringAsFixed(2)} €',
-                                      style: const TextStyle(color: AppColors.accentRose, fontWeight: FontWeight.bold, fontSize: 15),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          '-${sugg.amount.toStringAsFixed(2)} €',
+                                          style: const TextStyle(
+                                            color: AppColors.accentRose,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        const Text(
+                                          '/ mois',
+                                          style: TextStyle(color: AppColors.textMuted, fontSize: 10),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
